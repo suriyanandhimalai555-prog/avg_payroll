@@ -141,14 +141,50 @@ const SuperAdminEmployeeManagementCom = () => {
                         <Input label="Employee ID" name="employeeId" value={formData.employeeId} disabled className="bg-slate-100 font-mono text-[#0437cc]" />
                         <FieldWrapper error={errors.joiningDate}><Input label="Joining Date" type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} required /></FieldWrapper>
                         <FieldWrapper error={errors.department}>
-                            <Select label="Department" name="department" value={formData.department} onChange={handleInputChange} options={[{ value: '', label: 'Select' }, { value: 'engineering', label: 'Engineering' }, { value: 'hr', label: 'Human Resources' }]} required />
+                            <Select
+                                label="Department"
+                                name="department"
+                                value={formData.department}
+                                onChange={handleInputChange}
+                                options={[
+                                    { value: '', label: 'Select' },
+                                    { value: 'Development', label: 'Development' },
+                                    { value: 'Tele-caller', label: 'Tele-caller' },
+                                    { value: 'Digital Marketing', label: 'Digital Marketing' },
+                                    { value: 'Data entry', label: 'Data entry' }
+                                ]}
+                                required
+                            />
                         </FieldWrapper>
                         <FieldWrapper error={errors.designation}><Input label="Designation" name="designation" value={formData.designation} onChange={handleInputChange} required /></FieldWrapper>
                         <FieldWrapper error={errors.manager}>
-                            <Select label="Reporting Manager" name="manager" value={formData.manager} onChange={handleInputChange} options={[{ value: '', label: 'Select' }, { value: 'm1', label: 'Sarah Chen' }]} required />
+                            <Select
+                                label="Reporting Manager"
+                                name="manager"
+                                value={formData.manager}
+                                onChange={handleInputChange}
+                                options={[
+                                    { value: '', label: 'Select' },
+                                    { value: 'Prabhu Mayakanan', label: 'Prabhu Mayakanan' },
+                                    { value: 'Pooja', label: 'Pooja' },
+                                    { value: 'Surya', label: 'Surya' }
+                                ]}
+                                required
+                            />
                         </FieldWrapper>
                         <FieldWrapper error={errors.empType}>
-                            <Select label="Employment Type" name="empType" value={formData.empType} onChange={handleInputChange} options={[{ value: '', label: 'Select' }, { value: 'fulltime', label: 'Full-Time' }]} required />
+                            <Select
+                                label="Employment Type"
+                                name="empType"
+                                value={formData.empType}
+                                onChange={handleInputChange}
+                                options={[
+                                    { value: '', label: 'Select' },
+                                    { value: 'Full Time', label: 'Full Time' },
+                                    { value: 'Contract', label: 'Contract' }
+                                ]}
+                                required
+                            />
                         </FieldWrapper>
                         <FieldWrapper error={errors.location}><Input label="Work Location" name="location" value={formData.location} onChange={handleInputChange} required /></FieldWrapper>
                         <FieldWrapper error={errors.shift}>
