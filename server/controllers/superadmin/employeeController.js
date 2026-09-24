@@ -65,27 +65,37 @@ export const createEmployee = async (req, res) => {
         const result = await pool.query(insertQuery, values);
         const newEmployee = result.rows[0];
 
-        // 3. Send Email Notification
-        const activationLink = `${process.env.FRONTEND_URL}/activate-account?email=${data.email}`;
+        // 3. Send Email Notification (Graceful Error Handling)
+        try {
+            const activationLink = `${process.env.FRONTEND_URL}/activate-account?email=${data.email}`;
 
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: data.email,
-            subject: 'Welcome to the Team! Set up your account',
-            html: `
-                <h3>Hello ${data.firstName},</h3>
-                <p>Welcome aboard! Your employee profile has been created.</p>
-                <p><strong>Employee ID:</strong> ${generatedEmployeeId}</p>
-                <p>Please click the link below to set your password and activate your dashboard:</p>
-                <a href="${activationLink}" style="padding: 10px 20px; background-color: #0437cc; color: white; text-decoration: none; border-radius: 5px;">Activate Account</a>
-                <br/><br/>
-                <p>Best Regards,<br/>Admin Team</p>
-            `
-        };
+            const mailOptions = {
+                from: process.env.EMAIL_USER,
+                to: data.email,
+                subject: 'Welcome to the Team! Set up your account',
+                html: `
+                    <h3>Hello ${data.firstName},</h3>
+                    <p>Welcome aboard! Your employee profile has been created.</p>
+                    <p><strong>Employee ID:</strong> ${generatedEmployeeId}</p>
+                    <p>Please click the link below to set your password and activate your dashboard:</p>
+                    <a href="${activationLink}" style="padding: 10px 20px; background-color: #0437cc; color: white; text-decoration: none; border-radius: 5px;">Activate Account</a>
+                    <br/><br/>
+                    <p>Best Regards,<br/>Admin Team</p>
+                `
+            };
 
-        await transporter.sendMail(mailOptions);
+            await transporter.sendMail(mailOptions);
+            res.status(201).json({ message: 'Employee created and email sent successfully.', employee: newEmployee });
 
-        res.status(201).json({ message: 'Employee created and email sent successfully.', employee: newEmployee });
+        } catch (emailError) {
+            console.error('SMTP Email Error:', emailError);
+            // FIX: Return 201 because the database insert succeeded, even if the email failed
+            res.status(201).json({
+                message: `Employee created successfully with ID: ${generatedEmployeeId}, but the activation email failed to send. Check SMTP settings.`,
+                employee: newEmployee
+            });
+        }
+
     } catch (error) {
         console.error('Creation Error:', error);
         if (error.code === '23505' && error.constraint === 'employees_email_key') {

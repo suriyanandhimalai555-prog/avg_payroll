@@ -21,7 +21,14 @@ import initializeReimbursementModels from './models/employee/Reimbursement.js';
 dotenv.config();
 
 const app = express();
-app.use(cors());
+
+// FIX: Relaxed CORS configuration to prevent 500 Origin errors
+app.use(cors({
+    origin: true, // Allows all origins dynamically (fixes the crash)
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
 
 // Increase the payload limit to allow Base64 image strings
 app.use(express.json({ limit: '10mb' }));
