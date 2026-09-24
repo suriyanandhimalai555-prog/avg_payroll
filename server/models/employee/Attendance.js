@@ -13,19 +13,28 @@ const initializeAttendanceModel = async () => {
         );
     `;
 
-    // Drop unique constraint to allow multiple sessions per day, and fix Timezone issues
-    const alterQueries = `
-        ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_employee_id_date_key;
-        ALTER TABLE attendance ALTER COLUMN clock_in TYPE TIMESTAMPTZ USING clock_in AT TIME ZONE 'UTC';
-        ALTER TABLE attendance ALTER COLUMN clock_out TYPE TIMESTAMPTZ USING clock_out AT TIME ZONE 'UTC';
-    `;
-
     try {
         await pool.query(createTableQuery);
-        await pool.query(alterQueries);
-        console.log('Attendance table checked/created successfully. Timezones optimized.');
+
+        // FIX: Dynamically find and drop ANY unique constraints on the attendance table 
+        // that are causing the 500 crashes during multi-sessions
+        const getConstraints = await pool.query(`
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'attendance'::regclass AND contype = 'u';
+        `);
+        
+        for (let row of getConstraints.rows) {
+            await pool.query(`ALTER TABLE attendance DROP CONSTRAINT IF EXISTS "${row.conname}" CASCADE;`);
+        }
+
+        // Ensure Timezone types
+        await pool.query(`ALTER TABLE attendance ALTER COLUMN clock_in TYPE TIMESTAMPTZ USING clock_in AT TIME ZONE 'UTC';`);
+        await pool.query(`ALTER TABLE attendance ALTER COLUMN clock_out TYPE TIMESTAMPTZ USING clock_out AT TIME ZONE 'UTC';`);
+
+        console.log('Attendance table checked. Unique constraints wiped. Ready for multi-sessions.');
     } catch (error) {
-        console.error('Error creating Attendance table:', error);
+        console.error('Error updating Attendance table:', error);
     }
 };
 

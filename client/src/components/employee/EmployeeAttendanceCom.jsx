@@ -25,18 +25,21 @@ const EmployeeAttendanceCom = () => {
     // Shift Constants (Can be fetched from SuperAdmin API later)
     const STANDARD_SHIFT_HOURS = 9;
 
-    const tabs = [
-        { id: 'today', label: "Today's Attendance", icon: FaCalendarDay },
-        { id: 'history', label: 'Attendance History', icon: FaHistory },
-        { id: 'monthly', label: 'Monthly Attendance', icon: FaCalendarAlt },
-        { id: 'timesheet', label: 'Timesheet', icon: FaFileAlt },
-    ];
-
     const fetchAttendance = async () => {
         try {
             const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`);
-            setTodayLogs(response.data.todayLogs || []);
-            setFullHistory(response.data.history || []);
+            const fetchedHistory = response.data.history || [];
+            setFullHistory(fetchedHistory);
+
+            // FIX: Safely filter "Today's Logs" using local browser time, eliminating UTC timezone mismatches
+            const todayDateStr = new Date().toLocaleDateString('en-CA'); // Generates strict YYYY-MM-DD locally
+
+            const todays = fetchedHistory.filter(record => {
+                const recordDateStr = new Date(record.date).toLocaleDateString('en-CA');
+                return recordDateStr === todayDateStr;
+            });
+
+            setTodayLogs(todays);
         } catch (error) {
             console.error('Error fetching attendance', error);
         } finally {
@@ -61,7 +64,6 @@ const EmployeeAttendanceCom = () => {
         const calculateCompletedMs = () => {
             let ms = 0;
             todayLogs.forEach(log => {
-                // Ensure we only add sessions that have a clock_out time
                 if (log.clock_out && log.total_hours) {
                     const timePart = log.total_hours.replace(' Hrs', '').split(':');
                     ms += (parseInt(timePart[0], 10) * 3600000) + (parseInt(timePart[1], 10) * 60000);
@@ -86,15 +88,13 @@ const EmployeeAttendanceCom = () => {
                 let currentSessionMs = now - start;
                 if (currentSessionMs < 0) currentSessionMs = 0;
 
-                // Base Completed Time + Active Session Time
                 const totalMs = calculateCompletedMs() + currentSessionMs;
                 updateDisplay(totalMs);
             };
 
-            updateTimer(); // Initial call to prevent 1 second delay
-            interval = setInterval(updateTimer, 1000); // 1-second live tick
+            updateTimer();
+            interval = setInterval(updateTimer, 1000);
         } else {
-            // Static display of completed hours if clocked out
             updateDisplay(calculateCompletedMs());
         }
 
@@ -103,7 +103,11 @@ const EmployeeAttendanceCom = () => {
 
     const handleCheckIn = async () => {
         try {
-            await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, { employeeId: user.employee_id });
+            const todayDate = new Date().toLocaleDateString('en-CA');
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
+                employeeId: user.employee_id,
+                todayDate: todayDate
+            });
             fetchAttendance();
         } catch (error) {
             alert(error.response?.data?.message || 'Error clocking in');
@@ -112,7 +116,11 @@ const EmployeeAttendanceCom = () => {
 
     const handleCheckOut = async () => {
         try {
-            await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, { employeeId: user.employee_id });
+            const todayDate = new Date().toLocaleDateString('en-CA');
+            await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
+                employeeId: user.employee_id,
+                todayDate: todayDate
+            });
             fetchAttendance();
         } catch (error) {
             alert(error.response?.data?.message || 'Error clocking out');
@@ -158,8 +166,15 @@ const EmployeeAttendanceCom = () => {
                 return str === selectedMonthYear;
             });
         }
-        return fullHistory; // 'history' tab
+        return fullHistory;
     };
+
+    const tabsNav = [
+        { id: 'today', label: "Today's Attendance", icon: FaCalendarDay },
+        { id: 'history', label: 'Attendance History', icon: FaHistory },
+        { id: 'monthly', label: 'Monthly Attendance', icon: FaCalendarAlt },
+        { id: 'timesheet', label: 'Timesheet', icon: FaFileAlt },
+    ];
 
     return (
         <div className="space-y-8 pb-8">
@@ -206,7 +221,7 @@ const EmployeeAttendanceCom = () => {
 
             {/* Navigation Tabs */}
             <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100">
-                {tabs.map((tab) => (
+                {tabsNav.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
