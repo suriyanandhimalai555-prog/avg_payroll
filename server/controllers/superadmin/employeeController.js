@@ -10,13 +10,19 @@ const transporter = nodemailer.createTransport({
     secure: true,
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS, 
+        pass: process.env.EMAIL_PASS,
     },
 });
 
 export const createEmployee = async (req, res) => {
     try {
         const data = req.body;
+
+        // Backend Validation Safety Check
+        if (!data.email || !data.firstName || !data.lastName || !data.department) {
+            return res.status(400).json({ message: "Missing required employee details. Please complete all fields." });
+        }
+
         const currentYear = new Date().getFullYear();
 
         // 1. Generate Sequential Employee ID for the Current Year
@@ -30,11 +36,10 @@ export const createEmployee = async (req, res) => {
         let newSequence = 1;
         if (lastEmpResult.rows.length > 0) {
             const lastId = lastEmpResult.rows[0].employee_id;
-            const parts = lastId.split('-'); // e.g., ['AVG', '2026', '001']
+            const parts = lastId.split('-');
             newSequence = parseInt(parts[2], 10) + 1;
         }
-        
-        // Pad with zeros to always be 3 digits (e.g., 001, 012, 145)
+
         const generatedEmployeeId = `AVG-${currentYear}-${String(newSequence).padStart(3, '0')}`;
 
         // 2. Insert into PostgreSQL
@@ -62,7 +67,7 @@ export const createEmployee = async (req, res) => {
 
         // 3. Send Email Notification
         const activationLink = `${process.env.FRONTEND_URL}/activate-account?email=${data.email}`;
-        
+
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: data.email,

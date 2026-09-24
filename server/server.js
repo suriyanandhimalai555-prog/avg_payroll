@@ -9,12 +9,14 @@ import employeeProfileRoutes from './routes/employee/profileRoutes.js';
 import attendanceRoutes from './routes/employee/attendanceRoutes.js';
 import leaveRoutes from './routes/employee/leaveRoutes.js';
 import payrollRoutes from './routes/employee/payrollRoutes.js';
+import reimbursementRoutes from './routes/employee/reimbursementRoutes.js';
 
 // Super Admin
 import initializeEmployeeModel from './models/superadmin/Employee.js';
 // Employee
 import initializeAttendanceModel from './models/employee/Attendance.js';
 import initializeLeaveModels from './models/employee/Leave.js';
+import initializeReimbursementModels from './models/employee/Reimbursement.js';
 
 dotenv.config();
 
@@ -30,6 +32,7 @@ initializeEmployeeModel();
 // Employee 
 initializeAttendanceModel();
 initializeLeaveModels();
+initializeReimbursementModels();
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -40,6 +43,7 @@ app.use('/api/employee-profile', employeeProfileRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/reimbursements', reimbursementRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
