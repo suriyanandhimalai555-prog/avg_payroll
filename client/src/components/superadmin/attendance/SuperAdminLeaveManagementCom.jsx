@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-// import axios from 'axios'; // Uncomment when ready for real-time data
+import axios from 'axios';
 import {
     FaCalendarMinus, FaInfoCircle, FaCheck, FaTimes,
-    FaCogs, FaListUl, FaUserClock, FaCheckCircle, FaTimesCircle
+    FaCogs, FaListUl, FaUserClock, FaCheckCircle, FaTimesCircle,
+    FaEdit, FaTrash
 } from 'react-icons/fa';
-import Button from '../../common/Button';
-import Input from '../../common/Input';
-import Select from '../../common/Select';
+import Button from '../../../components/common/Button';
+import Input from '../../../components/common/Input';
+import Select from '../../../components/common/Select';
 
-// FieldWrapper defined OUTSIDE to prevent input focus loss while typing
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full">
         {children}
@@ -17,7 +17,6 @@ const FieldWrapper = ({ error, children }) => (
 );
 
 const SuperAdminLeaveManagementCom = () => {
-    // Reusable Initial State for resetting the policy form
     const INITIAL_FORM_STATE = {
         leaveName: '',
         allocatedDays: '',
@@ -33,72 +32,26 @@ const SuperAdminLeaveManagementCom = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Notification States
+    const [isEditing, setIsEditing] = useState(false);
+    const [editId, setEditId] = useState(null);
+
     const [successMsg, setSuccessMsg] = useState('');
     const [apiError, setApiError] = useState('');
 
-    // Simulated Fetch for UI Visualization
     const fetchLeaveData = async () => {
         setIsLoading(true);
         setApiError('');
         try {
-            // ==========================================
-            // FUTURE REAL-TIME DATA FETCH
-            // ==========================================
-            // const policyRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/leave/policies`);
-            // const requestRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests`);
-            // setLeavePolicies(policyRes.data || []);
-            // setLeaveRequests(requestRes.data || []);
-
-            // ==========================================
-            // TEMPORARY DUMMY DATA FOR VISUALIZATION
-            // ==========================================
-            setTimeout(() => {
-                setLeavePolicies([
-                    { id: 1, leaveName: 'Casual Leave', days: '12', paidStatus: 'Paid', status: 'Active' },
-                    { id: 2, leaveName: 'Sick Leave', days: '10', paidStatus: 'Paid', status: 'Active' },
-                    { id: 3, leaveName: 'Earned Leave', days: '15', paidStatus: 'Paid', status: 'Active' },
-                    { id: 4, leaveName: 'Unpaid Leave', days: 'Unlimited', paidStatus: 'Unpaid', status: 'Active' }
-                ]);
-
-                setLeaveRequests([
-                    {
-                        id: 101,
-                        employeeName: 'Ranjith Kumar',
-                        employeeId: 'AVG-2026-001',
-                        leaveType: 'Sick Leave',
-                        dates: '26 Sep 2026 - 27 Sep 2026',
-                        days: 2,
-                        reason: 'Viral Fever',
-                        status: 'Pending'
-                    },
-                    {
-                        id: 102,
-                        employeeName: 'Pooja Sharma',
-                        employeeId: 'AVG-2026-002',
-                        leaveType: 'Casual Leave',
-                        dates: '30 Sep 2026',
-                        days: 1,
-                        reason: 'Personal Errands',
-                        status: 'Approved'
-                    },
-                    {
-                        id: 103,
-                        employeeName: 'Divya Krishnan',
-                        employeeId: 'AVG-2026-004',
-                        leaveType: 'Unpaid Leave',
-                        dates: '01 Oct 2026 - 05 Oct 2026',
-                        days: 5,
-                        reason: 'Family Trip',
-                        status: 'Pending'
-                    }
-                ]);
-
-                setIsLoading(false);
-            }, 800);
+            const [policyRes, requestRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/all`)
+            ]);
+            setLeavePolicies(policyRes.data || []);
+            setLeaveRequests(requestRes.data || []);
         } catch (error) {
             console.error('Failed to load leave data', error);
             setApiError('Failed to load leave policies and requests. Please try again later.');
+        } finally {
             setIsLoading(false);
         }
     };
@@ -110,11 +63,7 @@ const SuperAdminLeaveManagementCom = () => {
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-
-        // Clear specific field error as user types
-        if (errors[name]) {
-            setErrors(prev => ({ ...prev, [name]: '' }));
-        }
+        if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
         if (apiError) setApiError('');
     };
 
@@ -133,6 +82,13 @@ const SuperAdminLeaveManagementCom = () => {
         return Object.keys(newErrors).length === 0;
     };
 
+    const handleCancelEdit = () => {
+        setIsEditing(false);
+        setEditId(null);
+        setFormData(INITIAL_FORM_STATE);
+        setErrors({});
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSuccessMsg('');
@@ -143,46 +99,79 @@ const SuperAdminLeaveManagementCom = () => {
 
         setIsSubmitting(true);
         try {
-            // NOTE: Uncomment and adjust when API is ready
-            // const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/leave/policies/create`, formData);
-
-            // Simulating successful creation
-            setTimeout(() => {
+            if (isEditing) {
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies/${editId}`, formData);
+                setSuccessMsg('Leave policy updated successfully.');
+                handleCancelEdit();
+            } else {
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies/create`, formData);
                 setSuccessMsg(`Leave Policy "${formData.leaveName}" configured successfully!`);
                 setFormData(INITIAL_FORM_STATE);
-                fetchLeaveData();
-                setTimeout(() => setSuccessMsg(''), 5000);
-                setIsSubmitting(false);
-            }, 1000);
-
+            }
+            fetchLeaveData();
+            setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
-            console.error('Error creating leave policy:', error);
-            const backendErrorMsg = error.response?.data?.message || 'Failed to create leave policy. Please try again.';
-            setApiError(backendErrorMsg);
+            console.error('Error saving leave policy:', error);
+            setApiError(error.response?.data?.message || 'Failed to save leave policy. Please try again.');
             setTimeout(() => setApiError(''), 5000);
+        } finally {
             setIsSubmitting(false);
         }
     };
 
-    // Simulated Actions for Requests
-    const handleAction = (id, actionType) => {
-        setSuccessMsg(`Leave Request #${id} has been ${actionType}. Notifications sent.`);
-        setTimeout(() => setSuccessMsg(''), 4000);
+    const handleEdit = (policy) => {
+        setFormData({
+            leaveName: policy.leave_name,
+            allocatedDays: policy.allocated_days,
+            paidStatus: policy.paid_status,
+            status: policy.status
+        });
+        setIsEditing(true);
+        setEditId(policy.id);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this leave policy? This may affect employee balances.")) return;
+        try {
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies/${id}`);
+            fetchLeaveData();
+            setSuccessMsg('Policy deleted successfully.');
+            setTimeout(() => setSuccessMsg(''), 3000);
+        } catch (error) {
+            alert('Failed to delete leave policy.');
+        }
+    };
+
+    const handleAction = async (id, actionType) => {
+        try {
+            await axios.put(`${import.meta.env.VITE_API_URL}/api/leave/status/${id}`, { status: actionType });
+            setSuccessMsg(`Leave Request #${id} has been ${actionType}.`);
+            fetchLeaveData();
+            setTimeout(() => setSuccessMsg(''), 4000);
+        } catch (error) {
+            alert('Failed to update leave status.');
+        }
     };
 
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-8 pb-8 relative">
             {/* Sticky Header */}
             <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
                     <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight flex items-center gap-2">
-                        <FaCalendarMinus className="text-[#0437cc]" /> Leave Management
+                        <FaCalendarMinus className={isEditing ? "text-[#f77704]" : "text-[#0437cc]"} />
+                        {isEditing ? 'Edit Leave Policy' : 'Leave Management'}
                     </h1>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="ghost" icon={FaTimes} onClick={() => setFormData(INITIAL_FORM_STATE)} className="text-slate-500 hover:bg-slate-100">Clear</Button>
+                    {isEditing ? (
+                        <Button variant="ghost" icon={FaTimes} onClick={handleCancelEdit} className="text-slate-500 hover:bg-slate-100">Cancel</Button>
+                    ) : (
+                        <Button variant="ghost" icon={FaTimes} onClick={() => setFormData(INITIAL_FORM_STATE)} className="text-slate-500 hover:bg-slate-100">Clear</Button>
+                    )}
                     <Button variant="primary" icon={FaCheck} className="shadow-md shadow-[#0437cc]/20" onClick={handleSubmit} disabled={isSubmitting}>
-                        {isSubmitting ? 'Saving...' : 'Save Leave Policy'}
+                        {isSubmitting ? 'Saving...' : (isEditing ? 'Update Policy' : 'Save Leave Policy')}
                     </Button>
                 </div>
             </div>
@@ -198,22 +187,12 @@ const SuperAdminLeaveManagementCom = () => {
                 </div>
             </div>
 
-            {/* Conditional Success/Error Banners */}
-            {successMsg && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl font-medium text-sm">
-                    {successMsg}
-                </div>
-            )}
-
-            {apiError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl font-medium text-sm">
-                    {apiError}
-                </div>
-            )}
+            {successMsg && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl font-medium text-sm">{successMsg}</div>}
+            {apiError && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl font-medium text-sm">{apiError}</div>}
 
             {/* Create Leave Policy Form */}
             <form className="space-y-6" onSubmit={handleSubmit}>
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
                     <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
                         <FaCogs className="text-[#0437cc] text-lg" />
                         <h2 className="text-base font-bold text-[#010a1f]">Configure Leave Policy</h2>
@@ -293,16 +272,22 @@ const SuperAdminLeaveManagementCom = () => {
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {leavePolicies.map((policy, i) => (
-                                        <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                                        <tr key={i} className={`hover:bg-slate-50/50 transition-colors group ${isEditing && editId === policy.id ? 'bg-[#f77704]/5' : ''}`}>
                                             <td className="px-5 py-3.5">
-                                                <p className="text-sm font-bold text-[#010a1f]">{policy.leaveName}</p>
-                                                <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded ${policy.paidStatus === 'Paid' ? 'bg-[#0437cc]/10 text-[#0437cc]' : 'bg-orange-100 text-orange-700'}`}>
-                                                    {policy.paidStatus}
-                                                </span>
+                                                <p className="text-sm font-bold text-[#010a1f]">{policy.leave_name}</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded ${policy.paid_status === 'Paid' ? 'bg-[#0437cc]/10 text-[#0437cc]' : 'bg-orange-100 text-orange-700'}`}>
+                                                        {policy.paid_status}
+                                                    </span>
+                                                    <span className={`text-[10px] font-bold ${policy.status === 'Active' ? 'text-teal-600' : 'text-red-500'}`}>{policy.status}</span>
+                                                </div>
                                             </td>
                                             <td className="px-5 py-3.5 text-right">
-                                                <p className="text-sm font-bold text-slate-700">{policy.days} {policy.days !== 'Unlimited' && 'Days'}</p>
-                                                <p className={`text-[10px] font-bold mt-1 ${policy.status === 'Active' ? 'text-teal-600' : 'text-red-500'}`}>{policy.status}</p>
+                                                <p className="text-sm font-bold text-slate-700">{policy.allocated_days} {policy.allocated_days !== 'Unlimited' && 'Days'}</p>
+                                                <div className="flex justify-end gap-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => handleEdit(policy)} className="text-slate-400 hover:text-[#f77704] transition-colors"><FaEdit className="text-xs" /></button>
+                                                    <button onClick={() => handleDelete(policy.id)} className="text-slate-400 hover:text-red-500 transition-colors"><FaTrash className="text-xs" /></button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -343,16 +328,18 @@ const SuperAdminLeaveManagementCom = () => {
                                     {leaveRequests.map((req, i) => (
                                         <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
                                             <td className="px-6 py-4">
-                                                <p className="text-sm font-bold text-[#010a1f]">{req.employeeName}</p>
-                                                <p className="text-xs font-mono font-semibold text-[#0437cc] mt-0.5">{req.employeeId}</p>
+                                                <p className="text-sm font-bold text-[#010a1f]">{req.first_name} {req.last_name}</p>
+                                                <p className="text-xs font-mono font-semibold text-[#0437cc] mt-0.5">{req.employee_id}</p>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className="text-sm font-bold text-slate-700">{req.leaveType}</p>
+                                                <p className="text-sm font-bold text-slate-700 capitalize">{req.leave_type}</p>
                                                 <p className="text-xs text-slate-500 mt-0.5 truncate max-w-[150px]">{req.reason}</p>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className="text-sm font-semibold text-[#0437cc]">{req.days} Day{req.days > 1 && 's'}</p>
-                                                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{req.dates}</p>
+                                                <p className="text-sm font-semibold text-[#0437cc]">{req.total_days} Day{req.total_days > 1 && 's'}</p>
+                                                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                                                    {new Date(req.from_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} <br />to<br /> {new Date(req.to_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                </p>
                                             </td>
                                             <td className="px-6 py-4 text-center">
                                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold ${req.status === 'Approved' ? 'text-teal-700 bg-[#eef8f8]' :

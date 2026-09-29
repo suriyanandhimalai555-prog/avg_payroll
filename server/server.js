@@ -12,10 +12,11 @@ import saDesignationRoutes from './routes/superadmin/saDesignationRoutes.js';
 import saLocationRoutes from './routes/superadmin/saLocationRoutes.js';
 import saShiftRoutes from './routes/superadmin/saShiftRoutes.js';
 import saHolidayRoutes from './routes/superadmin/saHolidayRoutes.js';
+import saLeavePolicyRoutes from './routes/superadmin/saLeavePolicyRoutes.js';
 // Employee Routes
 import employeeProfileRoutes from './routes/employee/empProfileRoutes.js';
-import attendanceRoutes from './routes/employee/empAttendanceRoutes.js';
-import leaveRoutes from './routes/employee/leaveRoutes.js';
+import empAttendanceRoutes from './routes/employee/empAttendanceRoutes.js';
+import empLeaveRoutes from './routes/employee/empLeaveRoutes.js';
 import payrollRoutes from './routes/employee/payrollRoutes.js';
 import reimbursementRoutes from './routes/employee/reimbursementRoutes.js';
 
@@ -28,9 +29,10 @@ import initializeSADesignationModel from './models/superadmin/SADesignation.js';
 import initializeSALocationModel from './models/superadmin/SALocation.js';
 import initializeSAShiftModel from './models/superadmin/SAShift.js';
 import initializeSAHolidayModel from './models/superadmin/SAHoliday.js';
+import initializeSALeavePolicyModel from './models/superadmin/SALeavePolicy.js';
 // Employee Models
 import initializeAttendanceModel from './models/employee/EmpAttendance.js';
-import initializeLeaveModels from './models/employee/Leave.js';
+import initializeLeaveModels from './models/employee/EmpLeave.js';
 import initializeReimbursementModels from './models/employee/Reimbursement.js';
 
 dotenv.config();
@@ -59,6 +61,7 @@ const initializeDatabase = async () => {
         await initializeSALocationModel();
         await initializeSAShiftModel();
         await initializeSAHolidayModel();
+        await initializeSALeavePolicyModel();
 
         // Employee
         await initializeAttendanceModel();
@@ -84,10 +87,11 @@ app.use('/api/sa-designations', saDesignationRoutes);
 app.use('/api/sa-locations', saLocationRoutes);
 app.use('/api/sa-shifts', saShiftRoutes);
 app.use('/api/sa-holidays', saHolidayRoutes);
+app.use('/api/sa-leave-policies', saLeavePolicyRoutes);
 // Employee Routes
 app.use('/api/employee-profile', employeeProfileRoutes);
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/leave', leaveRoutes);
+app.use('/api/attendance', empAttendanceRoutes);
+app.use('/api/leave', empLeaveRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/reimbursements', reimbursementRoutes);
 

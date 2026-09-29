@@ -18,7 +18,7 @@ export const getAttendanceHistory = async (req, res) => {
 
 export const clockIn = async (req, res) => {
     try {
-        const { employeeId, todayDate, locationData } = req.body;
+        const { employeeId, todayDate, locationData, deviceInfo } = req.body;
 
         // Fetch Employee's assigned shift rules to determine Late Status
         const shiftQuery = `
@@ -51,11 +51,11 @@ export const clockIn = async (req, res) => {
         }
 
         const insertQuery = `
-            INSERT INTO emp_attendance (employee_id, date, clock_in, clock_in_location, late_minutes, status)
-            VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, 'Present') RETURNING *;
+            INSERT INTO emp_attendance (employee_id, date, clock_in, clock_in_location, clock_in_device, late_minutes, status)
+            VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, 'Present') RETURNING *;
         `;
 
-        const result = await pool.query(insertQuery, [employeeId, todayDate, locationData, lateMinutes]);
+        const result = await pool.query(insertQuery, [employeeId, todayDate, locationData, deviceInfo, lateMinutes]);
         res.status(201).json({ message: 'Clocked in successfully', record: result.rows[0] });
     } catch (error) {
         console.error('Clock In Error:', error);
@@ -65,7 +65,7 @@ export const clockIn = async (req, res) => {
 
 export const clockOut = async (req, res) => {
     try {
-        const { employeeId, todayDate, locationData } = req.body;
+        const { employeeId, todayDate, locationData, deviceInfo } = req.body;
 
         const findQuery = `
             SELECT id, clock_in FROM emp_attendance 
@@ -89,11 +89,11 @@ export const clockOut = async (req, res) => {
 
         const updateQuery = `
             UPDATE emp_attendance 
-            SET clock_out = CURRENT_TIMESTAMP, clock_out_location = $1, total_hours = $2
-            WHERE id = $3 RETURNING *;
+            SET clock_out = CURRENT_TIMESTAMP, clock_out_location = $1, clock_out_device = $2, total_hours = $3
+            WHERE id = $4 RETURNING *;
         `;
 
-        const result = await pool.query(updateQuery, [locationData, totalHoursFormatted, recordId]);
+        const result = await pool.query(updateQuery, [locationData, deviceInfo, totalHoursFormatted, recordId]);
         res.status(200).json({ message: 'Clocked out successfully', record: result.rows[0] });
     } catch (error) {
         console.error('Clock Out Error:', error);

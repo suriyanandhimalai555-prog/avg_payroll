@@ -4,7 +4,7 @@ import {
     FaClock, FaCalendarDay, FaHistory, FaCalendarAlt,
     FaFileAlt, FaSignOutAlt, FaSignInAlt, FaTasks,
     FaFingerprint, FaBusinessTime, FaWalking, FaExclamationTriangle,
-    FaMapMarkerAlt, FaEye, FaTimes
+    FaMapMarkerAlt, FaEye, FaTimes, FaDesktop, FaMobileAlt
 } from 'react-icons/fa';
 import Button from '../common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -111,6 +111,39 @@ const EmployeeAttendanceCom = () => {
         return () => clearInterval(interval);
     }, [todayLogs, isClockedIn, latestRecord]);
 
+    // --- Time Completion Calculations ---
+    const [rHrs, rMins] = runningTime.split(':').map(Number);
+    const totalWorkedMinutes = (rHrs * 60) + (rMins || 0);
+    const targetMinutes = Math.round(targetHours * 60);
+    const remainingMinutes = Math.max(0, targetMinutes - totalWorkedMinutes);
+    
+    const remHrs = Math.floor(remainingMinutes / 60);
+    const remMins = remainingMinutes % 60;
+    const progressPercentage = Math.min((totalWorkedMinutes / targetMinutes) * 100, 100);
+
+    // --- Device Information Helper ---
+    const getDeviceInfo = () => {
+        const ua = navigator.userAgent;
+        let browserName = "Unknown Browser";
+        if (ua.match(/chrome|chromium|crios/i)) browserName = "Chrome";
+        else if (ua.match(/firefox|fxios/i)) browserName = "Firefox";
+        else if (ua.match(/safari/i)) browserName = "Safari";
+        else if (ua.match(/opr\//i)) browserName = "Opera";
+        else if (ua.match(/edg/i)) browserName = "Edge";
+
+        let osName = "Unknown OS";
+        if (ua.match(/windows nt 10/i)) osName = "Windows 10/11";
+        else if (ua.match(/windows nt 6.3/i)) osName = "Windows 8.1";
+        else if (ua.match(/windows nt 6.2/i)) osName = "Windows 8";
+        else if (ua.match(/windows nt 6.1/i)) osName = "Windows 7";
+        else if (ua.match(/macintosh|mac os x/i)) osName = "Mac OS";
+        else if (ua.match(/linux/i)) osName = "Linux";
+        else if (ua.match(/android/i)) osName = "Android";
+        else if (ua.match(/iphone|ipad|ipod/i)) osName = "iOS";
+
+        return `${osName} - ${browserName}`;
+    };
+
     // --- Geolocation Helper ---
     const fetchLocationData = () => {
         return new Promise((resolve) => {
@@ -139,11 +172,13 @@ const EmployeeAttendanceCom = () => {
     const handleCheckIn = async () => {
         try {
             const locationData = await fetchLocationData();
+            const deviceData = getDeviceInfo();
             const todayDate = new Date().toLocaleDateString('en-CA');
             await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
                 employeeId: user.employee_id,
                 todayDate: todayDate,
-                locationData: locationData
+                locationData: locationData,
+                deviceInfo: deviceData
             });
             fetchAttendanceData();
         } catch (error) {
@@ -154,11 +189,13 @@ const EmployeeAttendanceCom = () => {
     const handleCheckOut = async () => {
         try {
             const locationData = await fetchLocationData();
+            const deviceData = getDeviceInfo();
             const todayDate = new Date().toLocaleDateString('en-CA');
             await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
                 employeeId: user.employee_id,
                 todayDate: todayDate,
-                locationData: locationData
+                locationData: locationData,
+                deviceInfo: deviceData
             });
             fetchAttendanceData();
         } catch (error) {
@@ -236,7 +273,7 @@ const EmployeeAttendanceCom = () => {
             {/* View Detailed Record Modal */}
             {viewRecord && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                             <h2 className="text-lg font-bold text-[#010a1f] flex items-center gap-2">
                                 <FaHistory className="text-[#0437cc]" /> Log Details
@@ -245,7 +282,7 @@ const EmployeeAttendanceCom = () => {
                                 <FaTimes />
                             </button>
                         </div>
-                        <div className="p-6 space-y-6">
+                        <div className="p-6 space-y-6 overflow-y-auto">
                             <div className="border-b border-slate-100 pb-4">
                                 <h3 className="text-xl font-bold text-[#010a1f]">{formatDate(viewRecord.date)}</h3>
                                 {viewRecord.late_minutes > 0 ? (
@@ -259,19 +296,46 @@ const EmployeeAttendanceCom = () => {
                                 )}
                             </div>
 
-                            <div className="space-y-4">
-                                <div>
-                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1 flex items-center gap-1.5"><FaSignInAlt className="text-green-500" /> Clock In Location</p>
-                                    <p className="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed">
-                                        {viewRecord.clock_in_location || 'Location data not captured'}
-                                    </p>
-                                </div>
-                                {viewRecord.clock_out && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Clock In Section */}
+                                <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                    <h4 className="font-bold text-[#010a1f] border-b border-slate-200 pb-2">Check In Data</h4>
                                     <div>
-                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 flex items-center gap-1.5"><FaSignOutAlt className="text-red-400" /> Clock Out Location</p>
-                                        <p className="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed">
-                                            {viewRecord.clock_out_location || 'Location data not captured'}
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 flex items-center gap-1.5"><FaMapMarkerAlt className="text-green-500" /> Location</p>
+                                        <p className="text-sm font-medium text-slate-700 leading-relaxed">
+                                            {viewRecord.clock_in_location || 'Location data not captured'}
                                         </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 flex items-center gap-1.5">
+                                            {viewRecord.clock_in_device?.includes('iOS') || viewRecord.clock_in_device?.includes('Android') ? <FaMobileAlt className="text-blue-500" /> : <FaDesktop className="text-blue-500" />}
+                                            Device Info
+                                        </p>
+                                        <p className="text-sm font-medium text-slate-700 leading-relaxed">
+                                            {viewRecord.clock_in_device || 'Device data not captured'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Clock Out Section */}
+                                {viewRecord.clock_out && (
+                                    <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                        <h4 className="font-bold text-[#010a1f] border-b border-slate-200 pb-2">Check Out Data</h4>
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-400 uppercase mb-1 flex items-center gap-1.5"><FaMapMarkerAlt className="text-red-400" /> Location</p>
+                                            <p className="text-sm font-medium text-slate-700 leading-relaxed">
+                                                {viewRecord.clock_out_location || 'Location data not captured'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-400 uppercase mb-1 flex items-center gap-1.5">
+                                                {viewRecord.clock_out_device?.includes('iOS') || viewRecord.clock_out_device?.includes('Android') ? <FaMobileAlt className="text-blue-500" /> : <FaDesktop className="text-blue-500" />}
+                                                Device Info
+                                            </p>
+                                            <p className="text-sm font-medium text-slate-700 leading-relaxed">
+                                                {viewRecord.clock_out_device || 'Device data not captured'}
+                                            </p>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -385,14 +449,24 @@ const EmployeeAttendanceCom = () => {
                                 <h3 className={`text-3xl font-bold tracking-tight ${isClockedIn ? 'text-[#0437cc] animate-clock' : 'text-[#010a1f]'}`}>
                                     {runningTime} <span className="text-lg text-slate-400 font-medium">Hrs</span>
                                 </h3>
-                                <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+                                
+                                <div className="w-full bg-slate-100 h-2 rounded-full mt-4 overflow-hidden">
                                     <div
-                                        className="bg-[#0437cc] h-full transition-all duration-1000"
-                                        style={{ width: `${Math.min((parseInt(runningTime.split(':')[0]) / targetHours) * 100, 100)}%` }}
+                                        className={`h-full transition-all duration-1000 ${progressPercentage >= 100 ? 'bg-green-500' : 'bg-[#0437cc]'}`}
+                                        style={{ width: `${progressPercentage}%` }}
                                     ></div>
                                 </div>
+                                
+                                <div className="flex justify-between items-center mt-2 px-1 text-[11px] font-bold">
+                                    <span className="text-green-600">{rHrs}h {rMins}m Completed</span>
+                                    {remainingMinutes > 0 ? (
+                                        <span className="text-orange-500">{remHrs}h {remMins}m Remaining</span>
+                                    ) : (
+                                        <span className="text-green-600">Goal Reached</span>
+                                    )}
+                                </div>
 
-                                <div className="mt-4 flex items-center justify-center">
+                                <div className="mt-5 flex items-center justify-center">
                                     <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${isClockedIn ? 'text-green-700 bg-green-100' : (hasWorkedToday ? 'text-slate-600 bg-slate-100' : 'text-slate-500 bg-slate-50')}`}>
                                         {isClockedIn && <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-2 animate-pulse"></span>}
                                         {isClockedIn ? 'Currently Working' : (hasWorkedToday ? 'Shift Paused/Completed' : 'Not Checked In')}
