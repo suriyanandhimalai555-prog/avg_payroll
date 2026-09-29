@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FaCalendarCheck, FaInfoCircle, FaSearch, FaFilter,
-    FaUserCheck, FaUserTimes, FaUserClock, FaLaptopHouse,
-    FaBuilding, FaSitemap, FaClock, FaEye
+    FaUserCheck, FaUserTimes, FaUserClock, FaLaptopHouse, FaHistory,
+    FaBuilding, FaSitemap, FaClock, FaEye, FaTimes, FaDesktop, FaMobileAlt, FaMapMarkerAlt
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Select from '../../../components/common/Select';
@@ -14,6 +14,9 @@ const SuperAdminAttendanceOverviewCom = () => {
     const [metrics, setMetrics] = useState({ present: 0, absent: 0, onLeave: 0, wfh: 0, total: 0 });
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
+
+    // Modal State for Viewing Detailed Logs
+    const [viewLog, setViewLog] = useState(null);
 
     // Organization Data for Filters
     const [companies, setCompanies] = useState([]);
@@ -108,8 +111,137 @@ const SuperAdminAttendanceOverviewCom = () => {
         }
     };
 
+    // --- Excel / CSV Export Logic ---
+    const handleExport = () => {
+        if (filteredRecords.length === 0) return;
+
+        // Define headers
+        const headers = [
+            'Employee ID', 'First Name', 'Last Name', 'Company', 
+            'Branch', 'Department', 'Location', 'Check In', 
+            'Check Out', 'Total Hours', 'Status'
+        ];
+
+        // Map data to rows securely
+        const csvRows = filteredRecords.map(record => {
+            const checkIn = record.first_clock_in ? new Date(record.first_clock_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Not Clocked In';
+            const checkOut = record.is_working ? 'Working...' : (record.last_clock_out ? new Date(record.last_clock_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Not Clocked Out');
+            const totalHrs = record.is_working ? 'Working...' : (record.total_hours || '0.00 Hrs');
+
+            return [
+                record.employee_id,
+                record.first_name,
+                record.last_name,
+                record.company || '—',
+                record.branch || '—',
+                record.department || '—',
+                record.location || '—',
+                checkIn,
+                checkOut,
+                totalHrs,
+                record.status
+            ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(','); 
+        });
+
+        // Combine and generate Blob
+        const csvContent = [headers.join(','), ...csvRows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        
+        // Create download link
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `AVG_Attendance_Report_${filterDate}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-8 pb-8 relative">
+
+            {/* Detailed Log Modal */}
+            {viewLog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                            <div>
+                                <h2 className="text-lg font-bold text-[#010a1f] flex items-center gap-2">
+                                    <FaHistory className="text-[#0437cc]" /> Daily Log: {viewLog.first_name} {viewLog.last_name}
+                                </h2>
+                                <p className="text-xs font-semibold text-slate-500 mt-1">Date: {new Date(filterDate).toLocaleDateString()}</p>
+                            </div>
+                            <button onClick={() => setViewLog(null)} className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+                                <FaTimes />
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                            {!viewLog.daily_logs || viewLog.daily_logs.length === 0 ? (
+                                <p className="text-sm text-slate-500 text-center py-8 font-semibold">No active sessions found for this date.</p>
+                            ) : (
+                                viewLog.daily_logs.map((log, idx) => (
+                                    <div key={idx} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                                        <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
+                                            <span className="font-bold text-[#010a1f] bg-slate-100 px-3 py-1 rounded-md text-xs uppercase tracking-wider">Session {idx + 1}</span>
+                                            {log.late_minutes > 0 ? (
+                                                <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2.5 py-1 rounded">Late {log.late_minutes} Mins</span>
+                                            ) : (
+                                                <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded">On Time</span>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            {/* Clock In Data */}
+                                            <div className="space-y-3 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Check In Time</p>
+                                                    <p className="text-sm font-bold text-[#0437cc]">{formatTime(log.clock_in)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1.5"><FaMapMarkerAlt className="text-slate-300" /> Location</p>
+                                                    <p className="text-[11px] font-medium text-slate-600 leading-snug">{log.clock_in_location || 'Not Recorded'}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
+                                                        {log.clock_in_device?.includes('iOS') || log.clock_in_device?.includes('Android') ? <FaMobileAlt className="text-slate-300" /> : <FaDesktop className="text-slate-300" />} Device
+                                                    </p>
+                                                    <p className="text-[11px] font-medium text-slate-600">{log.clock_in_device || 'Not Recorded'}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Clock Out Data */}
+                                            <div className="space-y-3 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Check Out Time</p>
+                                                    {log.clock_out ? (
+                                                        <p className="text-sm font-bold text-slate-700">{formatTime(log.clock_out)}</p>
+                                                    ) : (
+                                                        <p className="text-sm font-bold text-green-600 animate-pulse">Working...</p>
+                                                    )}
+                                                </div>
+                                                {log.clock_out && (
+                                                    <>
+                                                        <div>
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1.5"><FaMapMarkerAlt className="text-slate-300" /> Location</p>
+                                                            <p className="text-[11px] font-medium text-slate-600 leading-snug">{log.clock_out_location || 'Not Recorded'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
+                                                                {log.clock_out_device?.includes('iOS') || log.clock_out_device?.includes('Android') ? <FaMobileAlt className="text-slate-300" /> : <FaDesktop className="text-slate-300" />} Device
+                                                            </p>
+                                                            <p className="text-[11px] font-medium text-slate-600">{log.clock_out_device || 'Not Recorded'}</p>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Sticky Header */}
             <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
@@ -121,7 +253,12 @@ const SuperAdminAttendanceOverviewCom = () => {
                     <Button variant="outline" icon={FaFilter} className="border-slate-200 text-slate-600 hover:bg-slate-50" onClick={fetchAttendanceData}>
                         Refresh Data
                     </Button>
-                    <Button variant="primary" className="shadow-md shadow-[#0437cc]/20">
+                    <Button 
+                        variant="primary" 
+                        className="shadow-md shadow-[#0437cc]/20" 
+                        onClick={handleExport}
+                        disabled={isLoading || filteredRecords.length === 0}
+                    >
                         Export Report
                     </Button>
                 </div>
@@ -146,57 +283,59 @@ const SuperAdminAttendanceOverviewCom = () => {
             )}
 
             {/* Attendance Metrics Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                        <FaBuilding className="text-xl" />
+            {!isLoading && (
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                            <FaBuilding className="text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Staff</p>
+                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.total}</h3>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Staff</p>
-                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.total}</h3>
-                    </div>
-                </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
-                        <FaUserCheck className="text-xl" />
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
+                            <FaUserCheck className="text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Present</p>
+                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.present}</h3>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Present</p>
-                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.present}</h3>
-                    </div>
-                </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-500 shrink-0">
-                        <FaUserTimes className="text-xl" />
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-500 shrink-0">
+                            <FaUserTimes className="text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Absent</p>
+                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.absent}</h3>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Absent</p>
-                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.absent}</h3>
-                    </div>
-                </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
-                        <FaUserClock className="text-xl" />
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
+                            <FaUserClock className="text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">On Leave</p>
+                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.onLeave}</h3>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">On Leave</p>
-                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.onLeave}</h3>
-                    </div>
-                </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-                        <FaLaptopHouse className="text-xl" />
-                    </div>
-                    <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">WFH</p>
-                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.wfh}</h3>
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                            <FaLaptopHouse className="text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">WFH</p>
+                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.wfh}</h3>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* Filter Bar & Data Table Container */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -314,19 +453,19 @@ const SuperAdminAttendanceOverviewCom = () => {
                                             </p>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className={`text-sm font-bold ${record.clock_in ? 'text-slate-700' : 'text-slate-300'}`}>
-                                                {formatTime(record.clock_in)}
+                                            <p className={`text-sm font-bold ${record.first_clock_in ? 'text-slate-700' : 'text-slate-300'}`}>
+                                                {formatTime(record.first_clock_in)}
                                             </p>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className={`text-sm font-bold ${record.clock_out ? 'text-slate-700' : 'text-slate-300'}`}>
-                                                {formatTime(record.clock_out)}
+                                            <p className={`text-sm font-bold ${record.last_clock_out ? 'text-slate-700' : 'text-slate-300'}`}>
+                                                {record.is_working ? 'Working...' : formatTime(record.last_clock_out)}
                                             </p>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className={`text-sm font-semibold flex items-center gap-1.5 ${record.total_hours ? 'text-[#0437cc]' : 'text-slate-400'}`}>
-                                                <FaClock className={record.total_hours ? 'text-[#0437cc]/50 text-xs' : 'text-slate-300 text-xs'} />
-                                                {record.total_hours || (record.clock_in && !record.clock_out ? 'Working...' : '—')}
+                                            <p className={`text-sm font-semibold flex items-center gap-1.5 ${record.total_hours || record.is_working ? 'text-[#0437cc]' : 'text-slate-400'}`}>
+                                                <FaClock className={record.total_hours || record.is_working ? 'text-[#0437cc]/50 text-xs' : 'text-slate-300 text-xs'} />
+                                                {record.is_working ? 'Working...' : (record.total_hours || '—')}
                                             </p>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -335,7 +474,12 @@ const SuperAdminAttendanceOverviewCom = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button className="p-2 text-slate-400 hover:text-[#0437cc] transition-colors rounded hover:bg-[#0437cc]/10" title="View Full Log">
+                                            <button 
+                                                onClick={() => setViewLog(record)} 
+                                                className={`p-2 transition-colors rounded ${record.daily_logs && record.daily_logs.length > 0 ? 'text-slate-400 hover:text-[#0437cc] hover:bg-[#0437cc]/10' : 'text-slate-300 cursor-not-allowed'}`}
+                                                disabled={!record.daily_logs || record.daily_logs.length === 0}
+                                                title="View Full Log"
+                                            >
                                                 <FaEye className="text-sm" />
                                             </button>
                                         </td>

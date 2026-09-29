@@ -10,7 +10,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
     if (!user) {
         // Fix: Redirects correctly to the new employee login route
-        return <Navigate to="/employee-login" replace />;
+        return <Navigate to="/login" replace />;
     }
 
     if (allowedRoles && !allowedRoles.includes(user.role)) {
