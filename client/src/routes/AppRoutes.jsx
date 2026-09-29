@@ -2,22 +2,66 @@ import { Routes, Route } from 'react-router-dom';
 
 // Website & Auth
 import Index from '../pages/website/Index';
-import EmployeeLogin from '../pages/auth/EmployeeLogin';
-import ActivateAccount from '../pages/auth/ActivateAccount'; // NEW IMPORT
+import CommonLogin from '../pages/auth/CommonLogin';
+import ActivateAccount from '../pages/auth/ActivateAccount';
 import ProtectedRoute from './ProtectedRoute';
+
 
 // Super Admin
 import SuperAdminLayout from '../layouts/SuperAdminLayout';
 import SuperAdminDashboard from '../pages/superadmin/SuperAdminDashboard';
+// Superadmin Organization
+import SuperAdminOrganizationOverview from '../pages/superadmin/organization/SuperAdminOrganizationOverview';
+import SuperAdminCompanyProfile from '../pages/superadmin/organization/SuperAdminCompanyProfile';
+import SuperAdminBranches from '../pages/superadmin/organization/SuperAdminBranches';
+import SuperAdminDepartments from '../pages/superadmin/organization/SuperAdminDepartments';
+import SuperAdminDesignations from '../pages/superadmin/organization/SuperAdminDesignations';
+import SuperAdminLocations from '../pages/superadmin/organization/SuperAdminLocations';
+// Superadmin Users
+import SuperAdminHR from '../pages/superadmin/users/SuperAdminHR';
+import SuperAdminManagers from '../pages/superadmin/users/SuperAdminManagers';
+import SuperAdminEmployee from '../pages/superadmin/users/SuperAdminEmployee';
 import SuperAdminEmployeeManagement from '../pages/superadmin/SuperAdminEmployeeManagement';
+// Super Admin Payroll
+import SuperAdminPayrollDashboard from '../pages/superadmin/payroll/SuperAdminPayrollDashboard';
+import SuperAdminSalaryStructure from '../pages/superadmin/payroll/SuperAdminSalaryStructure';
+import SuperAdminGeneratePayroll from '../pages/superadmin/payroll/SuperAdminGeneratePayroll';
+import SuperAdminPayrollHistory from '../pages/superadmin/payroll/SuperAdminPayrollHistory';
+import SuperAdminPayslips from '../pages/superadmin/payroll/SuperAdminPayslips';
+// Super Admin Attendance
+import SuperAdminAttendanceOverview from '../pages/superadmin/attendance/SuperAdminAttendanceOverview';
+import SuperAdminWorkShifts from '../pages/superadmin/attendance/SuperAdminWorkShifts';
+import SuperAdminHolidays from '../pages/superadmin/attendance/SuperAdminHolidays';
+import SuperAdminLeaveManagement from '../pages/superadmin/attendance/SuperAdminLeaveManagement';
+
+import SuperAdminExpensesReimbursements from '../pages/superadmin/SuperAdminExpensesReimbursements';
+import SuperAdminLoansAdvances from '../pages/superadmin/SuperAdminLoansAdvances';
+// Super Admin Reports
+import SuperAdminPayrollReports from '../pages/superadmin/reports/SuperAdminPayrollReports';
+import SuperAdminAttendanceReports from '../pages/superadmin/reports/SuperAdminAttendanceReports';
+import SuperAdminEmployeeReports from '../pages/superadmin/reports/SuperAdminEmployeeReports';
+import SuperAdminTaxReports from '../pages/superadmin/reports/SuperAdminTaxReports';
+import SuperAdminFinancialReports from '../pages/superadmin/reports/SuperAdminFinancialReports';
+// Super Admin Settings
+import SuperAdminPayrollSettings from '../pages/superadmin/settings/SuperAdminPayrollSettings';
+import SuperAdminTaxSettings from '../pages/superadmin/settings/SuperAdminTaxSettings';
+import SuperAdminLeaveSettings from '../pages/superadmin/settings/SuperAdminLeaveSettings';
+import SuperAdminNotificationSettings from '../pages/superadmin/settings/SuperAdminNotificationSettings';
+import SuperAdminSystemSettings from '../pages/superadmin/settings/SuperAdminSystemSettings';
+
+import SuperAdminAuditLogs from '../pages/superadmin/SuperAdminAuditLogs';
+import SuperAdminProfile from '../pages/superadmin/SuperAdminProfile';
+
 
 // HR 
 import HRDashboard from '../pages/hr/HRDashboard';
 import HRLayout from '../layouts/HRLayout';
 
+
 // Manager
 import ManagerDashboard from '../pages/manager/ManagerDashboard';
 import ManagerLayout from '../layouts/ManagerLayout';
+
 
 // Employee
 import EmployeeLayout from '../layouts/EmployeeLayout';
@@ -36,12 +80,57 @@ const AppRoutes = () => {
     return (
         <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/employee-login" element={<EmployeeLogin />} />
+            <Route path="/login" element={<CommonLogin />} />
             <Route path="/activate-account" element={<ActivateAccount />} /> {/* NEW ROUTE */}
 
             <Route path="/superadmin" element={<SuperAdminLayout />}>
                 <Route index element={<SuperAdminDashboard />} />
-                <Route path="employee-management" element={<SuperAdminEmployeeManagement />} />
+                {/* Org */}
+                <Route path="org/overview" element={<SuperAdminOrganizationOverview />} />
+                <Route path="org/profile" element={<SuperAdminCompanyProfile />} />
+                <Route path="org/branches" element={<SuperAdminBranches />} />
+                <Route path="org/departments" element={<SuperAdminDepartments />} />
+                <Route path="org/designations" element={<SuperAdminDesignations />} />
+                <Route path="org/locations" element={<SuperAdminLocations />} />
+                {/* Users */}
+                <Route path="users/hr" element={<SuperAdminHR />} />
+                <Route path="users/managers" element={<SuperAdminManagers />} />
+                <Route path="users/employees" element={<SuperAdminEmployee />} />
+
+                <Route path="employee-hr-management" element={<SuperAdminEmployeeManagement />} />
+
+                {/* Payroll */}
+                <Route path="payroll/dashboard" element={<SuperAdminPayrollDashboard />} />
+                <Route path="payroll/structure" element={<SuperAdminSalaryStructure />} />
+                <Route path="payroll/generate" element={<SuperAdminGeneratePayroll />} />
+                <Route path="payroll/history" element={<SuperAdminPayrollHistory />} />
+                <Route path="payroll/payslips" element={<SuperAdminPayslips />} />
+
+                {/* Attendance */}
+                <Route path="attendance/overview" element={<SuperAdminAttendanceOverview />} />
+                <Route path="attendance/shifts" element={<SuperAdminWorkShifts />} />
+                <Route path="attendance/holidays" element={<SuperAdminHolidays />} />
+                <Route path="attendance/leave" element={<SuperAdminLeaveManagement />} />
+
+                <Route path="expenses" element={<SuperAdminExpensesReimbursements />} />
+                <Route path="loans" element={<SuperAdminLoansAdvances />} />
+
+                {/* Reports */}
+                <Route path="reports/payroll" element={<SuperAdminPayrollReports />} />
+                <Route path="reports/attendance" element={<SuperAdminAttendanceReports />} />
+                <Route path="reports/employee" element={<SuperAdminEmployeeReports />} />
+                <Route path="reports/tax" element={<SuperAdminTaxReports />} />
+                <Route path="reports/financial" element={<SuperAdminFinancialReports />} />
+
+                {/* Settings */}
+                <Route path="settings/payroll" element={<SuperAdminPayrollSettings />} />
+                <Route path="settings/tax" element={<SuperAdminTaxSettings />} />
+                <Route path="settings/leave" element={<SuperAdminLeaveSettings />} />
+                <Route path="settings/notifications" element={<SuperAdminNotificationSettings />} />
+                <Route path="settings/system" element={<SuperAdminSystemSettings />} />
+
+                <Route path="audit-logs" element={<SuperAdminAuditLogs />} />
+                <Route path="profile" element={<SuperAdminProfile />} />
             </Route>
 
             <Route path="/hr" element={<HRLayout />}>

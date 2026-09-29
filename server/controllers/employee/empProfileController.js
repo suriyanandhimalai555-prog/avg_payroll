@@ -4,7 +4,9 @@ import pool from '../../config/db.js';
 export const getProfile = async (req, res) => {
     try {
         const { employeeId } = req.params;
-        const query = 'SELECT * FROM employees WHERE employee_id = $1';
+        
+        // FIX: Query the updated sa_employees table
+        const query = 'SELECT * FROM sa_employees WHERE employee_id = $1';
         const result = await pool.query(query, [employeeId]);
 
         if (result.rows.length === 0) {
@@ -33,30 +35,31 @@ export const updateProfile = async (req, res) => {
         let updateQuery = '';
         let values = [];
 
+        // FIX: Update sa_employees instead of employees
         if (section === 'personal') {
             updateQuery = `
-                UPDATE employees 
+                UPDATE sa_employees 
                 SET phone = $1, address = $2, dob = $3, gender = $4
                 WHERE employee_id = $5 RETURNING *;
             `;
             values = [data.phone, data.address, data.dob, data.gender, employeeId];
         } else if (section === 'bank') {
             updateQuery = `
-                UPDATE employees 
+                UPDATE sa_employees 
                 SET bank_name = $1, account_number = $2, ifsc = $3 
                 WHERE employee_id = $4 RETURNING *;
             `;
             values = [data.bank_name, data.account_number, data.ifsc, employeeId];
         } else if (section === 'emergency') {
             updateQuery = `
-                UPDATE employees 
+                UPDATE sa_employees 
                 SET emergency_name = $1, emergency_relationship = $2, emergency_phone = $3 
                 WHERE employee_id = $4 RETURNING *;
             `;
             values = [data.emergency_name, data.emergency_relationship, data.emergency_phone, employeeId];
         } else if (section === 'photo') {
             updateQuery = `
-                UPDATE employees 
+                UPDATE sa_employees 
                 SET profile_photo = $1 
                 WHERE employee_id = $2 RETURNING *;
             `;

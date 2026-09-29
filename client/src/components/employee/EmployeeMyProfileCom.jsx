@@ -3,7 +3,9 @@ import axios from 'axios';
 import Cropper from 'react-easy-crop';
 import {
     FaUserEdit, FaLock, FaBuilding, FaBriefcase,
-    FaMoneyCheck, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, FaFileAlt, FaTimes
+    FaMoneyCheck, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, 
+    FaFileAlt, FaTimes, FaSitemap, FaClock, FaMoneyBillWave,
+    FaFileInvoiceDollar, FaChartLine
 } from 'react-icons/fa';
 import Button from '../common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -37,7 +39,7 @@ const getCroppedImg = async (imageSrc, pixelCrop) => {
         pixelCrop.height
     );
 
-    return canvas.toDataURL('image/jpeg'); // Returns the new cropped Base64 string
+    return canvas.toDataURL('image/jpeg');
 };
 
 const EmployeeMyProfileCom = () => {
@@ -52,7 +54,7 @@ const EmployeeMyProfileCom = () => {
     // Photo Upload & Crop States
     const fileInputRef = useRef(null);
     const [photoModalOpen, setPhotoModalOpen] = useState(false);
-    const [selectedPhoto, setSelectedPhoto] = useState(null); // Original uploaded photo
+    const [selectedPhoto, setSelectedPhoto] = useState(null);
     const [crop, setCrop] = useState({ x: 0, y: 0 });
     const [zoomLevel, setZoomLevel] = useState(1);
     const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
@@ -85,11 +87,25 @@ const EmployeeMyProfileCom = () => {
                     address: data.address
                 },
                 employment: {
-                    department: data.department,
-                    designation: data.designation,
+                    company: data.company || "Not Assigned",
+                    branch: data.branch || "Not Assigned",
+                    department: data.department || "Not Assigned",
+                    designation: data.designation || "Not Assigned",
+                    location: data.location || "Not Assigned",
+                    shift: data.shift || "Not Assigned",
                     joiningDate: formatDateForDisplay(data.joining_date),
-                    employmentType: data.emp_type,
-                    reportingManager: data.manager
+                    employmentType: data.emp_type || "Not Assigned",
+                    reportingManager: data.manager || "Not Assigned",
+                    status: data.status || "Unknown"
+                },
+                salary: {
+                    basic: data.basic_salary || 0,
+                    hra: data.hra || 0,
+                    allowances: data.allowances || 0,
+                    pf: data.pf || 0,
+                    esi: data.esi || 0,
+                    pt: data.pt || 0,
+                    otherDeductions: data.other_deductions || 0
                 },
                 bank: {
                     bankName: data.bank_name,
@@ -147,7 +163,6 @@ const EmployeeMyProfileCom = () => {
         }
     };
 
-    // --- Photo Crop Handlers ---
     const handlePhotoFileChange = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -160,7 +175,6 @@ const EmployeeMyProfileCom = () => {
             };
             reader.readAsDataURL(file);
         }
-        // Reset input so selecting the same file again triggers onChange
         e.target.value = null;
     };
 
@@ -171,7 +185,6 @@ const EmployeeMyProfileCom = () => {
     const handlePhotoSave = async () => {
         setIsUploadingPhoto(true);
         try {
-            // Generate the physically cropped Base64 image
             const finalCroppedBase64 = await getCroppedImg(selectedPhoto, croppedAreaPixels);
 
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, {
@@ -185,10 +198,14 @@ const EmployeeMyProfileCom = () => {
             fetchProfile();
         } catch (error) {
             console.error("Error updating photo", error);
-            alert("Failed to update photo. Payload might still be too large.");
+            alert("Failed to update photo.");
         } finally {
             setIsUploadingPhoto(false);
         }
+    };
+
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
     };
 
     if (loading || !profileData) {
@@ -204,7 +221,7 @@ const EmployeeMyProfileCom = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
                     <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight">My Profile</h1>
-                    <p className="text-sm text-slate-500 mt-1">View and manage your personal and employment information.</p>
+                    <p className="text-sm text-slate-500 mt-1">View and manage your personal, employment, and financial information.</p>
                 </div>
                 <div className="flex gap-3">
                     <Button variant="outline" icon={FaFileAlt} className="border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm">
@@ -223,8 +240,13 @@ const EmployeeMyProfileCom = () => {
                     <input type="file" accept="image/*" ref={fileInputRef} onChange={handlePhotoFileChange} className="hidden" />
                 </div>
                 <div className="flex-1 text-center md:text-left">
-                    <h2 className="text-2xl font-bold text-[#010a1f]">{profileData.personal.fullName}</h2>
-                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-2 text-sm text-slate-500 font-medium">
+                    <div className="flex flex-col md:flex-row md:items-center gap-3">
+                        <h2 className="text-2xl font-bold text-[#010a1f]">{profileData.personal.fullName}</h2>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${profileData.employment.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {profileData.employment.status}
+                        </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-3 text-sm text-slate-500 font-medium">
                         <span className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100"><FaLock className="text-xs text-slate-400" /> {profileData.personal.employeeId}</span>
                         <span className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100"><FaBriefcase className="text-[#0437cc]/60" /> {profileData.employment.designation}</span>
                         <span className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100"><FaBuilding className="text-[#f77704]/60" /> {profileData.employment.department}</span>
@@ -314,6 +336,14 @@ const EmployeeMyProfileCom = () => {
                             <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.employment.employmentType}</p>
                         </div>
                         <div>
+                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Company <FaLock className="text-slate-300 text-[10px]" /></p>
+                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.employment.company}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Branch <FaLock className="text-slate-300 text-[10px]" /></p>
+                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.employment.branch}</p>
+                        </div>
+                        <div>
                             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Department <FaLock className="text-slate-300 text-[10px]" /></p>
                             <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.employment.department}</p>
                         </div>
@@ -322,12 +352,92 @@ const EmployeeMyProfileCom = () => {
                             <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.employment.designation}</p>
                         </div>
                         <div>
-                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Joining Date <FaLock className="text-slate-300 text-[10px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.employment.joiningDate}</p>
+                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Work Location <FaLock className="text-slate-300 text-[10px]" /></p>
+                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.employment.location}</p>
                         </div>
                         <div>
-                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Reporting Manager <FaLock className="text-slate-300 text-[10px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.employment.reportingManager}</p>
+                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Assigned Shift <FaLock className="text-slate-300 text-[10px]" /></p>
+                            <p className="text-sm font-medium text-[#0437cc] bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 inline-block">{profileData.employment.shift}</p>
+                        </div>
+                        <div className="sm:col-span-2 border-t border-slate-100 pt-4 mt-2 grid grid-cols-2 gap-5">
+                            <div>
+                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Joining Date <FaLock className="text-slate-300 text-[10px]" /></p>
+                                <p className="text-sm font-medium text-slate-700">{profileData.employment.joiningDate}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Reporting Manager <FaLock className="text-slate-300 text-[10px]" /></p>
+                                <p className="text-sm font-bold text-slate-700">{profileData.employment.reportingManager}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Salary & Financial Information (Read Only) */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 relative overflow-hidden lg:col-span-2">
+                    <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-base font-bold text-[#010a1f] flex items-center gap-2"><FaFileInvoiceDollar className="text-green-600" /> Financial Structure (Monthly)</h2>
+                            <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><FaLock className="text-[9px]" /> Read Only</span>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
+                        {/* Earnings */}
+                        <div className="bg-green-50/50 p-5 rounded-xl border border-green-100">
+                            <h3 className="text-xs font-bold text-green-700 uppercase tracking-wider mb-4 border-b border-green-100 pb-2 flex items-center gap-2">
+                                <FaChartLine /> Earnings
+                            </h3>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 font-medium">Basic Salary</span>
+                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.basic)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 font-medium">HRA</span>
+                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.hra)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 font-medium">Allowances</span>
+                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.allowances)}</span>
+                                </div>
+                                <div className="pt-3 mt-3 border-t border-green-200 flex justify-between items-center">
+                                    <span className="text-sm font-bold text-green-800">Gross Earnings</span>
+                                    <span className="text-base font-black text-green-700">
+                                        {formatCurrency(parseFloat(profileData.salary.basic) + parseFloat(profileData.salary.hra) + parseFloat(profileData.salary.allowances))}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Deductions */}
+                        <div className="bg-red-50/50 p-5 rounded-xl border border-red-100">
+                            <h3 className="text-xs font-bold text-red-600 uppercase tracking-wider mb-4 border-b border-red-100 pb-2 flex items-center gap-2">
+                                <FaMoneyBillWave /> Deductions
+                            </h3>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 font-medium">PF (Provident Fund)</span>
+                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.pf)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 font-medium">ESI</span>
+                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.esi)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 font-medium">Professional Tax</span>
+                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.pt)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 font-medium">Other Deductions</span>
+                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.otherDeductions)}</span>
+                                </div>
+                                <div className="pt-3 mt-3 border-t border-red-200 flex justify-between items-center">
+                                    <span className="text-sm font-bold text-red-800">Total Deductions</span>
+                                    <span className="text-base font-black text-red-600">
+                                        {formatCurrency(parseFloat(profileData.salary.pf) + parseFloat(profileData.salary.esi) + parseFloat(profileData.salary.pt) + parseFloat(profileData.salary.otherDeductions))}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -427,7 +537,6 @@ const EmployeeMyProfileCom = () => {
                         <p className="text-xs text-slate-500 text-center mb-6">Drag and zoom to perfectly frame your avatar.</p>
 
                         <div className="flex justify-center mb-6">
-                            {/* React-Easy-Crop container mirroring original design */}
                             <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-slate-100 shadow-inner relative bg-slate-50">
                                 <Cropper
                                     image={selectedPhoto}

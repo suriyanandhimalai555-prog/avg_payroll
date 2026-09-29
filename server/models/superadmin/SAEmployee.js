@@ -1,8 +1,8 @@
 import pool from '../../config/db.js';
 
-const initializeEmployeeModel = async () => {
+const initializeSAEmployeeModel = async () => {
     const createTableQuery = `
-        CREATE TABLE IF NOT EXISTS employees (
+        CREATE TABLE IF NOT EXISTS sa_employees (
             id SERIAL PRIMARY KEY,
             first_name VARCHAR(100) NOT NULL,
             last_name VARCHAR(100) NOT NULL,
@@ -13,6 +13,8 @@ const initializeEmployeeModel = async () => {
             address TEXT NOT NULL,
             employee_id VARCHAR(50) UNIQUE NOT NULL,
             joining_date DATE NOT NULL,
+            company VARCHAR(255),
+            branch VARCHAR(255),
             department VARCHAR(100) NOT NULL,
             designation VARCHAR(100) NOT NULL,
             manager VARCHAR(100) NOT NULL,
@@ -40,21 +42,22 @@ const initializeEmployeeModel = async () => {
         );
     `;
 
-    // Safe migration to add new columns if they don't exist yet
     const alterQueries = `
-        ALTER TABLE employees ADD COLUMN IF NOT EXISTS emergency_name VARCHAR(150);
-        ALTER TABLE employees ADD COLUMN IF NOT EXISTS emergency_relationship VARCHAR(100);
-        ALTER TABLE employees ADD COLUMN IF NOT EXISTS emergency_phone VARCHAR(20);
-        ALTER TABLE employees ADD COLUMN IF NOT EXISTS profile_photo TEXT;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_name VARCHAR(150);
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_relationship VARCHAR(100);
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_phone VARCHAR(20);
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS profile_photo TEXT;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS company VARCHAR(255);
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS branch VARCHAR(255);
     `;
 
     try {
         await pool.query(createTableQuery);
         await pool.query(alterQueries);
-        console.log('Employee table checked/updated successfully.');
+        console.log('SAEmployee (SuperAdmin) table checked/updated successfully.');
     } catch (error) {
-        console.error('Error updating Employee table:', error);
+        console.error('Error updating SAEmployee table:', error);
     }
 };
 
-export default initializeEmployeeModel;
+export default initializeSAEmployeeModel;

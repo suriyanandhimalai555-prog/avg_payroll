@@ -1,4 +1,4 @@
-import SuperAdminEmployeeManagementCom from "../../components/superadmin/SuperAdminEmployeeManagementCom"
+import SuperAdminEmployeeManagementCom from '../../components/superadmin/SuperAdminEmployeeManagementCom'
 
 const SuperAdminEmployeeManagement = () => {
     return (

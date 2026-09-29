@@ -26,7 +26,7 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
 
     const handleLogout = () => {
         logout();
-        navigate('/employee-login');
+        navigate('/login');
     };
 
     return (

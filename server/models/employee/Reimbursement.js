@@ -5,7 +5,7 @@ const initializeReimbursementModels = async () => {
         CREATE TABLE IF NOT EXISTS reimbursements (
             id SERIAL PRIMARY KEY,
             claim_id VARCHAR(50) UNIQUE NOT NULL,
-            employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+            employee_id VARCHAR(50) NOT NULL REFERENCES sa_employees(employee_id) ON DELETE CASCADE,
             expense_type VARCHAR(100) NOT NULL,
             amount NUMERIC NOT NULL,
             expense_date DATE NOT NULL,

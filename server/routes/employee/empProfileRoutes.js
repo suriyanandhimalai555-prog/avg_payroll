@@ -1,5 +1,6 @@
 import express from 'express';
-import { getProfile, updateProfile } from '../../controllers/employee/profileController.js';
+// FIX: Update import to target the new controller file name
+import { getProfile, updateProfile } from '../../controllers/employee/empProfileController.js';
 
 const router = express.Router();
 

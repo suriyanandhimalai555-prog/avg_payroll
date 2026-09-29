@@ -4,7 +4,7 @@ const initializeLeaveModels = async () => {
     const createLeaveBalancesTable = `
         CREATE TABLE IF NOT EXISTS leave_balances (
             id SERIAL PRIMARY KEY,
-            employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+            employee_id VARCHAR(50) NOT NULL REFERENCES sa_employees(employee_id) ON DELETE CASCADE,
             leave_type VARCHAR(50) NOT NULL,
             used_days NUMERIC DEFAULT 0,
             total_days NUMERIC NOT NULL,
@@ -15,7 +15,7 @@ const initializeLeaveModels = async () => {
     const createLeaveRequestsTable = `
         CREATE TABLE IF NOT EXISTS leave_requests (
             id SERIAL PRIMARY KEY,
-            employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+            employee_id VARCHAR(50) NOT NULL REFERENCES sa_employees(employee_id) ON DELETE CASCADE,
             leave_type VARCHAR(50) NOT NULL,
             from_date DATE NOT NULL,
             to_date DATE NOT NULL,

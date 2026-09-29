@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
     FaTachometerAlt, FaUsers, FaCalendarCheck, FaPlaneDeparture,
     FaClock, FaBusinessTime, FaChartLine, FaMoneyCheckAlt,
     FaBullhorn, FaUserCircle, FaSignOutAlt, FaChevronDown, FaTimes
 } from 'react-icons/fa';
+import { useAuth } from '../../context/AuthContext';
 
 const ManagerSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIsDesktopCollapsed }) => {
     const [openSubmenu, setOpenSubmenu] = useState('');
+    const navigate = useNavigate();
+    const { logout } = useAuth(); // Import the logout method from your AuthContext
 
     const toggleSubmenu = (title) => {
         if (isDesktopCollapsed && window.innerWidth >= 768) {
@@ -16,6 +19,18 @@ const ManagerSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIs
             return;
         }
         setOpenSubmenu(openSubmenu === title ? '' : title);
+    };
+
+    const handleLogout = () => {
+        // Clear all access tokens and user session data
+        localStorage.removeItem('token');
+        sessionStorage.clear();
+        
+        // Execute the AuthContext logout to clear state properly
+        logout();
+        
+        // Redirect back to the login page
+        navigate('/login'); // Or simply '/' based on your routing preference
     };
 
     const menuItems = [
@@ -159,7 +174,10 @@ const ManagerSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIs
                     </div>
                 </div>
 
-                <button className={`flex items-center justify-center py-2.5 rounded-lg bg-white border border-slate-200 text-red-600 hover:bg-red-50 hover:border-red-200 transition-all duration-300 shadow-sm ${isDesktopCollapsed ? 'md:w-10 md:h-10 md:p-0 w-full' : 'w-full'}`}>
+                <button 
+                    onClick={handleLogout}
+                    className={`flex items-center justify-center py-2.5 rounded-lg bg-white border border-slate-200 text-red-600 hover:bg-red-50 hover:border-red-200 transition-all duration-300 shadow-sm ${isDesktopCollapsed ? 'md:w-10 md:h-10 md:p-0 w-full' : 'w-full'}`}
+                >
                     <FaSignOutAlt className="text-lg shrink-0" />
                     <span className={`overflow-hidden whitespace-nowrap transition-all duration-300 font-medium text-sm ${isDesktopCollapsed ? 'md:max-w-0 md:opacity-0' : 'max-w-[100px] opacity-100 pl-2'}`}>
                         Logout

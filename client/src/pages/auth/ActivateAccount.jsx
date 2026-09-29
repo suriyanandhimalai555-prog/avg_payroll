@@ -54,7 +54,7 @@ const ActivateAccount = () => {
                 setStatus({ loading: false, error: '', success: true });
                 // Redirect to login after 3 seconds
                 setTimeout(() => {
-                    navigate('/employee-login');
+                    navigate('/login');
                 }, 3000);
             }
         } catch (error) {
@@ -70,7 +70,7 @@ const ActivateAccount = () => {
                     <FaCheckCircle className="text-5xl text-green-500 mx-auto mb-4" />
                     <h2 className="text-2xl font-bold text-[#010a1f] mb-2">Account Activated!</h2>
                     <p className="text-slate-500 mb-6">Your password has been set successfully. You will be redirected to the login page momentarily.</p>
-                    <Button variant="primary" fullWidth onClick={() => navigate('/employee-login')}>
+                    <Button variant="primary" fullWidth onClick={() => navigate('/login')}>
                         Go to Login Now
                     </Button>
                 </div>

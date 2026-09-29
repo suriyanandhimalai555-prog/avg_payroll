@@ -71,7 +71,7 @@ const HeroCom = () => {
                         size="lg"
                         fullWidth
                         icon={FaUser}
-                        onClick={() => navigate('/employee-login')}
+                        onClick={() => navigate('/login')}
                         className="bg-white group hover:shadow-[0_8px_25px_rgba(4,55,204,0.2)] justify-start px-6"
                     >
                         <span className="text-lg tracking-wide ml-2">Employee Login</span>
