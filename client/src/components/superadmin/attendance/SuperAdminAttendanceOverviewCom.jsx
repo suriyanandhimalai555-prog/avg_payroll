@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-// import axios from 'axios'; // Uncomment when ready for real-time data
+import axios from 'axios';
 import {
     FaCalendarCheck, FaInfoCircle, FaSearch, FaFilter,
     FaUserCheck, FaUserTimes, FaUserClock, FaLaptopHouse,
     FaBuilding, FaSitemap, FaClock, FaEye
 } from 'react-icons/fa';
-import Button from '../../common/Button';
-import Select from '../../common/Select';
-import Input from '../../common/Input';
+import Button from '../../../components/common/Button';
+import Select from '../../../components/common/Select';
+import Input from '../../../components/common/Input';
 
 const SuperAdminAttendanceOverviewCom = () => {
     const [attendanceData, setAttendanceData] = useState([]);
@@ -15,116 +15,77 @@ const SuperAdminAttendanceOverviewCom = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
 
+    // Organization Data for Filters
+    const [companies, setCompanies] = useState([]);
+    const [branches, setBranches] = useState([]);
+    const [departments, setDepartments] = useState([]);
+
     // Filter States
     const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString('en-CA')); // YYYY-MM-DD
+    const [filterCompany, setFilterCompany] = useState('All');
     const [filterBranch, setFilterBranch] = useState('All');
     const [filterDepartment, setFilterDepartment] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Simulated Fetch for UI Visualization
+    // Fetch Org Data for Filter Dropdowns
+    const fetchOrgData = async () => {
+        try {
+            const [compRes, branchRes, deptRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`)
+            ]);
+            setCompanies(compRes.data || []);
+            setBranches(branchRes.data || []);
+            setDepartments(deptRes.data || []);
+        } catch (error) {
+            console.error('Error fetching org data:', error);
+        }
+    };
+
     const fetchAttendanceData = async () => {
         setIsLoading(true);
         setApiError('');
 
         try {
-            // ==========================================
-            // FUTURE REAL-TIME DATA FETCH
-            // ==========================================
-            // const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/overview`, {
-            //     params: { date: filterDate, branch: filterBranch, department: filterDepartment }
-            // });
-            // setAttendanceData(response.data.records || []);
-            // setMetrics(response.data.metrics || {});
-
-            // ==========================================
-            // TEMPORARY DUMMY DATA FOR VISUALIZATION
-            // ==========================================
-            setTimeout(() => {
-                // Mocking the specific metrics requested
-                setMetrics({
-                    present: 221,
-                    absent: 17,
-                    onLeave: 12,
-                    wfh: 15,
-                    total: 265
-                });
-
-                setAttendanceData([
-                    {
-                        id: 1,
-                        first_name: 'Ranjith',
-                        last_name: 'Kumar',
-                        employee_id: 'AVG-2026-001',
-                        department: 'IT',
-                        branch: 'Trichy Branch',
-                        clock_in: '2026-09-24T09:05:00.000Z',
-                        clock_out: null,
-                        total_hours: null,
-                        status: 'Present'
-                    },
-                    {
-                        id: 2,
-                        first_name: 'Pooja',
-                        last_name: 'Sharma',
-                        employee_id: 'AVG-2026-002',
-                        department: 'HR',
-                        branch: 'Chennai Branch',
-                        clock_in: '2026-09-24T08:50:00.000Z',
-                        clock_out: '2026-09-24T18:00:00.000Z',
-                        total_hours: '9:10 Hrs',
-                        status: 'Present'
-                    },
-                    {
-                        id: 3,
-                        first_name: 'Arun',
-                        last_name: 'Singh',
-                        employee_id: 'AVG-2026-003',
-                        department: 'Sales',
-                        branch: 'Bangalore Branch',
-                        clock_in: null,
-                        clock_out: null,
-                        total_hours: null,
-                        status: 'Absent'
-                    },
-                    {
-                        id: 4,
-                        first_name: 'Divya',
-                        last_name: 'Krishnan',
-                        employee_id: 'AVG-2026-004',
-                        department: 'Marketing',
-                        branch: 'Trichy Branch',
-                        clock_in: null,
-                        clock_out: null,
-                        total_hours: null,
-                        status: 'On Leave'
-                    },
-                    {
-                        id: 5,
-                        first_name: 'John',
-                        last_name: 'Doe',
-                        employee_id: 'AVG-2026-005',
-                        department: 'IT',
-                        branch: 'Work From Home',
-                        clock_in: '2026-09-24T09:15:00.000Z',
-                        clock_out: null,
-                        total_hours: null,
-                        status: 'WFH'
-                    }
-                ]);
-                setIsLoading(false);
-            }, 800);
-
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-attendance/overview`, {
+                params: {
+                    date: filterDate,
+                    company: filterCompany,
+                    branch: filterBranch,
+                    department: filterDepartment
+                }
+            });
+            setAttendanceData(response.data.records || []);
+            setMetrics(response.data.metrics || { present: 0, absent: 0, onLeave: 0, wfh: 0, total: 0 });
         } catch (error) {
             console.error('Failed to load attendance data', error);
             setApiError('Failed to load attendance records. Please try again later.');
+        } finally {
             setIsLoading(false);
         }
     };
 
-    // Re-fetch when major filters change (Date, Branch, Department)
+    useEffect(() => {
+        fetchOrgData();
+    }, []);
+
+    // Re-fetch when major filters change
     useEffect(() => {
         fetchAttendanceData();
-    }, [filterDate, filterBranch, filterDepartment]);
+    }, [filterDate, filterCompany, filterBranch, filterDepartment]);
+
+    // Handle Cascade Filter Resets
+    const handleCompanyChange = (e) => {
+        setFilterCompany(e.target.value);
+        setFilterBranch('All');
+        setFilterDepartment('All');
+    };
+
+    const handleBranchChange = (e) => {
+        setFilterBranch(e.target.value);
+        setFilterDepartment('All');
+    };
 
     // Client-side filter for Search Term (Employee Name/ID)
     const filteredRecords = attendanceData.filter(record => {
@@ -185,56 +146,64 @@ const SuperAdminAttendanceOverviewCom = () => {
             )}
 
             {/* Attendance Metrics Grid */}
-            {!isLoading && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
-                            <FaUserCheck className="text-xl" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Present</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.present}</h3>
-                        </div>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                        <FaBuilding className="text-xl" />
                     </div>
-
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-500 shrink-0">
-                            <FaUserTimes className="text-xl" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Absent</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.absent}</h3>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
-                            <FaUserClock className="text-xl" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">On Leave</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.onLeave}</h3>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-                            <FaLaptopHouse className="text-xl" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">WFH</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.wfh}</h3>
-                        </div>
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Staff</p>
+                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.total}</h3>
                     </div>
                 </div>
-            )}
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
+                        <FaUserCheck className="text-xl" />
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Present</p>
+                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.present}</h3>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-500 shrink-0">
+                        <FaUserTimes className="text-xl" />
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Absent</p>
+                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.absent}</h3>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
+                        <FaUserClock className="text-xl" />
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">On Leave</p>
+                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.onLeave}</h3>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                        <FaLaptopHouse className="text-xl" />
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">WFH</p>
+                        <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.wfh}</h3>
+                    </div>
+                </div>
+            </div>
 
             {/* Filter Bar & Data Table Container */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
 
                 {/* Advanced Filters */}
                 <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                         <div>
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Select Date</label>
                             <Input
@@ -246,17 +215,27 @@ const SuperAdminAttendanceOverviewCom = () => {
                             />
                         </div>
                         <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Company</label>
+                            <Select
+                                name="filterCompany"
+                                value={filterCompany}
+                                onChange={handleCompanyChange}
+                                options={[
+                                    { value: 'All', label: 'All Companies' },
+                                    ...companies.map(c => ({ value: c.company_name, label: c.company_name }))
+                                ]}
+                            />
+                        </div>
+                        <div>
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Branch</label>
                             <Select
                                 name="filterBranch"
                                 value={filterBranch}
-                                onChange={(e) => setFilterBranch(e.target.value)}
+                                onChange={handleBranchChange}
+                                disabled={filterCompany === 'All'}
                                 options={[
                                     { value: 'All', label: 'All Branches' },
-                                    { value: 'Trichy Branch', label: 'Trichy Branch' },
-                                    { value: 'Chennai Branch', label: 'Chennai Branch' },
-                                    { value: 'Bangalore Branch', label: 'Bangalore Branch' },
-                                    { value: 'Work From Home', label: 'Work From Home' }
+                                    ...branches.filter(b => b.company_name === filterCompany).map(b => ({ value: b.branch_name, label: b.branch_name }))
                                 ]}
                             />
                         </div>
@@ -266,12 +245,10 @@ const SuperAdminAttendanceOverviewCom = () => {
                                 name="filterDepartment"
                                 value={filterDepartment}
                                 onChange={(e) => setFilterDepartment(e.target.value)}
+                                disabled={filterBranch === 'All'}
                                 options={[
                                     { value: 'All', label: 'All Departments' },
-                                    { value: 'IT', label: 'IT' },
-                                    { value: 'HR', label: 'HR' },
-                                    { value: 'Sales', label: 'Sales' },
-                                    { value: 'Marketing', label: 'Marketing' }
+                                    ...departments.filter(d => d.branch_name === filterBranch).map(d => ({ value: d.department_name, label: d.department_name }))
                                 ]}
                             />
                         </div>
@@ -306,7 +283,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                             <thead>
                                 <tr className="border-b border-slate-100 text-[12px] text-slate-400 uppercase tracking-wider bg-white">
                                     <th className="px-6 py-4 font-semibold">Employee</th>
-                                    <th className="px-6 py-4 font-semibold">Location / Dept</th>
+                                    <th className="px-6 py-4 font-semibold">Org Placement</th>
                                     <th className="px-6 py-4 font-semibold">Check In</th>
                                     <th className="px-6 py-4 font-semibold">Check Out</th>
                                     <th className="px-6 py-4 font-semibold">Total Hours</th>
@@ -329,11 +306,11 @@ const SuperAdminAttendanceOverviewCom = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                                                <FaBuilding className="text-slate-400 text-xs" /> {record.branch}
+                                            <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate max-w-[200px]">
+                                                <FaBuilding className="text-slate-400 text-xs" /> {record.company}
                                             </p>
-                                            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                                                <FaSitemap className="text-slate-400 text-[10px]" /> {record.department} Dept
+                                            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate max-w-[200px]">
+                                                <FaSitemap className="text-slate-400 text-[10px]" /> {record.department} • {record.branch}
                                             </p>
                                         </td>
                                         <td className="px-6 py-4">

@@ -13,6 +13,7 @@ import saLocationRoutes from './routes/superadmin/saLocationRoutes.js';
 import saShiftRoutes from './routes/superadmin/saShiftRoutes.js';
 import saHolidayRoutes from './routes/superadmin/saHolidayRoutes.js';
 import saLeavePolicyRoutes from './routes/superadmin/saLeavePolicyRoutes.js';
+import saAttendanceRoutes from './routes/superadmin/saAttendanceRoutes.js';
 // Employee Routes
 import employeeProfileRoutes from './routes/employee/empProfileRoutes.js';
 import empAttendanceRoutes from './routes/employee/empAttendanceRoutes.js';
@@ -88,6 +89,7 @@ app.use('/api/sa-locations', saLocationRoutes);
 app.use('/api/sa-shifts', saShiftRoutes);
 app.use('/api/sa-holidays', saHolidayRoutes);
 app.use('/api/sa-leave-policies', saLeavePolicyRoutes);
+app.use('/api/sa-attendance', saAttendanceRoutes);
 // Employee Routes
 app.use('/api/employee-profile', employeeProfileRoutes);
 app.use('/api/attendance', empAttendanceRoutes);
