@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FaUsers, FaInfoCircle, FaSearch, FaUserEdit,
-    FaEye, FaSitemap, FaBriefcase, FaFileInvoiceDollar, FaFilter
+    FaEye, FaSitemap, FaBriefcase, FaFileInvoiceDollar, FaFilter, FaIdBadge
 } from 'react-icons/fa';
 import Button from '../common/Button';
 
@@ -17,72 +17,73 @@ const SuperAdminEmployeeManagementCom = () => {
         setApiError('');
 
         try {
-            // ==========================================
-            // FUTURE REAL-TIME DATA FETCH
-            // ==========================================
-            // When your backend route (GET /api/employees) is ready, 
-            // uncomment the two lines below and delete the dummy data block.
+            // Fetch all three role collections concurrently
+            const [hrRes, mgrRes, empRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`).catch(() => ({ data: [] }))
+            ]);
 
-            // const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employees`);
-            // setEmployees(response.data || []);
-            // setIsLoading(false);
+            // Normalize and tag the data for unified rendering
+            const hrData = (hrRes.data || []).map(u => ({
+                ...u, 
+                _roleType: 'HR Admin', 
+                _roleColor: 'text-purple-700 bg-purple-50 border-purple-200',
+                _displayId: `HR-${String(u.id).padStart(3, '0')}`, 
+                _joining: u.created_at, 
+                _manager: 'Super Admin'
+            }));
 
-            // ==========================================
-            // TEMPORARY DUMMY DATA FOR VISUALIZATION
-            // ==========================================
-            setTimeout(() => {
-                setEmployees([
+            const mgrData = (mgrRes.data || []).map(u => ({
+                ...u, 
+                _roleType: 'Manager', 
+                _roleColor: 'text-[#f77704] bg-[#f77704]/10 border-[#f77704]/20',
+                _displayId: `MGR-${String(u.id).padStart(3, '0')}`, 
+                _joining: u.created_at, 
+                _manager: 'Super Admin / HR'
+            }));
+
+            const empData = (empRes.data || []).map(u => ({
+                ...u, 
+                _roleType: 'Employee', 
+                _roleColor: 'text-[#0437cc] bg-[#0437cc]/10 border-[#0437cc]/20',
+                _displayId: u.employee_id, 
+                _joining: u.joining_date, 
+                _manager: u.manager || 'Unassigned'
+            }));
+
+            // Combine into a single master array and sort by newest first
+            let combined = [...hrData, ...mgrData, ...empData].sort((a, b) => new Date(b._joining) - new Date(a._joining));
+
+            // TEMPORARY DUMMY DATA FOR VISUALIZATION IF DB IS EMPTY
+            if (combined.length === 0) {
+                combined = [
                     {
-                        first_name: 'Ranjith',
-                        last_name: 'Kumar',
-                        employee_id: 'AVG-2026-001',
-                        designation: 'Software Engineer',
-                        department: 'Development',
-                        basic_salary: 55000,
-                        joining_date: '2026-07-01T00:00:00.000Z',
-                        manager: 'Prabhu Mayakanan',
-                        status: 'Active'
+                        id: 1, first_name: 'Pooja', last_name: 'Sharma', email: 'pooja.hr@avg.com',
+                        _displayId: 'HR-001', _roleType: 'HR Admin', _roleColor: 'text-purple-700 bg-purple-50 border-purple-200',
+                        designation: 'Senior HR Manager', department: '', branch: 'Bangalore HQ', company: 'AVG Prime Tech',
+                        basic_salary: 60000, _joining: '2026-05-15T00:00:00.000Z', _manager: 'Super Admin', status: 'Active'
                     },
                     {
-                        first_name: 'Pooja',
-                        last_name: 'Sharma',
-                        employee_id: 'AVG-2026-002',
-                        designation: 'HR Manager',
-                        department: 'Human Resources',
-                        basic_salary: 60000,
-                        joining_date: '2026-05-15T00:00:00.000Z',
-                        manager: 'Surya',
-                        status: 'Active'
+                        id: 2, first_name: 'Prabhu', last_name: 'Mayakanan', email: 'prabhu.mgr@avg.com',
+                        _displayId: 'MGR-001', _roleType: 'Manager', _roleColor: 'text-[#f77704] bg-[#f77704]/10 border-[#f77704]/20',
+                        designation: 'Engineering Lead', department: 'Development', branch: 'Bangalore HQ', company: 'AVG Prime Tech',
+                        basic_salary: 85000, _joining: '2026-06-01T00:00:00.000Z', _manager: 'Super Admin / HR', status: 'Active'
                     },
                     {
-                        first_name: 'Arun',
-                        last_name: 'Singh',
-                        employee_id: 'AVG-2026-003',
-                        designation: 'Tele-caller',
-                        department: 'Sales',
-                        basic_salary: 25000,
-                        joining_date: '2026-08-10T00:00:00.000Z',
-                        manager: 'Prabhu Mayakanan',
-                        status: 'Pending Activation'
-                    },
-                    {
-                        first_name: 'Divya',
-                        last_name: 'Krishnan',
-                        employee_id: 'AVG-2026-004',
-                        designation: 'Digital Marketer',
-                        department: 'Marketing',
-                        basic_salary: 40000,
-                        joining_date: '2026-09-01T00:00:00.000Z',
-                        manager: 'Surya',
-                        status: 'Suspended'
+                        id: 3, first_name: 'Ranjith', last_name: 'Kumar', email: 'ranjith.dev@avg.com',
+                        _displayId: 'AVG-2026-001', _roleType: 'Employee', _roleColor: 'text-[#0437cc] bg-[#0437cc]/10 border-[#0437cc]/20',
+                        designation: 'Software Engineer', department: 'Development', branch: 'Bangalore HQ', company: 'AVG Prime Tech',
+                        basic_salary: 45000, _joining: '2026-07-01T00:00:00.000Z', _manager: 'Prabhu Mayakanan', status: 'Active'
                     }
-                ]);
-                setIsLoading(false);
-            }, 800);
+                ];
+            }
 
+            setEmployees(combined);
         } catch (error) {
-            console.error('Failed to load employees', error);
-            setApiError('Failed to load employee records. Please try again later.');
+            console.error('Failed to load master employee directory', error);
+            setApiError('Failed to load organizational records. Please try again later.');
+        } finally {
             setIsLoading(false);
         }
     };
@@ -91,14 +92,14 @@ const SuperAdminEmployeeManagementCom = () => {
         fetchEmployees();
     }, []);
 
-    // Filter employees based on search term (searches across multiple fields)
+    // Unified Search Filter
     const filteredEmployees = employees.filter(emp => {
-        const searchString = `${emp.first_name} ${emp.last_name} ${emp.employee_id} ${emp.department} ${emp.designation}`.toLowerCase();
+        const searchString = `${emp.first_name} ${emp.last_name} ${emp._displayId} ${emp.department || 'All Departments'} ${emp.designation} ${emp._roleType} ${emp.branch} ${emp.company}`.toLowerCase();
         return searchString.includes(searchTerm.toLowerCase());
     });
 
     const formatCurrency = (amount) => {
-        if (!amount) return '₹0';
+        if (amount === undefined || amount === null) return '₹0';
         return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
     };
 
@@ -110,75 +111,61 @@ const SuperAdminEmployeeManagementCom = () => {
     };
 
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-6 sm:space-y-8 pb-8 w-full overflow-hidden">
             {/* Sticky Header */}
-            <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div>
-                    <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight flex items-center gap-2">
-                        <FaUsers className="text-[#0437cc]" /> Employee HR Management
+            <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/90 backdrop-blur-md p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
+                <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight flex items-center gap-2 truncate">
+                        <FaUsers className="text-[#0437cc] shrink-0" /> <span className="truncate">Employee HR Management</span>
                     </h1>
                 </div>
-                <div className="flex gap-3">
-                    <Button variant="outline" icon={FaFilter} className="border-slate-200 text-slate-600 hover:bg-slate-50">Filter</Button>
-                    <Button variant="primary" className="shadow-md shadow-[#0437cc]/20">
+                <div className="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3">
+                    <Button variant="outline" icon={FaFilter} className="w-full sm:w-auto border-slate-200 text-slate-600 hover:bg-slate-50">Filter</Button>
+                    <Button variant="primary" className="w-full sm:w-auto shadow-md shadow-[#0437cc]/20">
                         Export Records
                     </Button>
                 </div>
             </div>
 
             {/* Informational Banner */}
-            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex gap-4 items-start shadow-sm">
-                <FaInfoCircle className="text-blue-500 mt-0.5 shrink-0 text-lg" />
-                <div>
-                    <p className="text-sm font-bold text-[#010a1f]">Employee Profile vs. User Account</p>
-                    <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-                        This module manages the core <strong>Employee HR Information</strong> (Personal details, Salary, Documents, Bank info, Manager assignments, and Joining data). This is distinctly separate from <strong>User Accounts</strong>, which strictly handles system Login, Passwords, and Role-Based Access Control.
+            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row gap-3 sm:gap-4 items-start shadow-sm">
+                <FaInfoCircle className="text-blue-500 mt-0.5 shrink-0 text-lg hidden sm:block" />
+                <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-[#010a1f] flex items-center gap-2">
+                        <FaInfoCircle className="text-blue-500 shrink-0 sm:hidden" /> Master Directory Aggregation
                     </p>
-                    <div className="mt-4 flex flex-col sm:flex-row gap-4 sm:gap-8">
-                        <div className="font-mono text-xs bg-white/60 p-3 rounded border border-blue-200/50 inline-block text-slate-700">
-                            <strong>User Account</strong><br />
-                            &nbsp;│<br />
-                            &nbsp;├── Login Credentials<br />
-                            &nbsp;├── Password / 2FA<br />
-                            &nbsp;└── System Role
-                        </div>
-                        <div className="font-mono text-xs bg-white/60 p-3 rounded border border-blue-200/50 inline-block text-[#0437cc] font-semibold">
-                            <strong>Employee Profile (Managed Here)</strong><br />
-                            &nbsp;│<br />
-                            &nbsp;├── HR / Salary / Bank Data<br />
-                            &nbsp;├── Department / Designation<br />
-                            &nbsp;└── Employment Documents
-                        </div>
-                    </div>
+                    <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+                        This master table automatically aggregates records from the HR, Manager, and standard Employee modules into a single, unified view. You can review organizational hierarchy, track unified compensation, and audit active network statuses here.
+                    </p>
                 </div>
             </div>
 
             {/* Error Banner */}
             {apiError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl font-medium text-sm">
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl font-medium text-sm break-words">
                     {apiError}
                 </div>
             )}
 
             {/* Main Employee Directory List */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <FaBriefcase className="text-[#f77704] text-lg" />
-                        <h2 className="text-base font-bold text-[#010a1f]">Master Employee Directory</h2>
-                        <span className="bg-[#0437cc]/10 text-[#0437cc] text-xs font-bold px-3 py-1 rounded-full border border-[#0437cc]/20">
+                <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <FaBriefcase className="text-[#f77704] text-lg shrink-0" />
+                        <h2 className="text-base font-bold text-[#010a1f] truncate">Master Organizational Directory</h2>
+                        <span className="bg-[#0437cc]/10 text-[#0437cc] text-xs font-bold px-3 py-1 rounded-full border border-[#0437cc]/20 shrink-0 ml-2">
                             {filteredEmployees.length} Records
                         </span>
                     </div>
 
                     {/* Search Bar */}
-                    <div className="relative w-full sm:w-72">
+                    <div className="relative w-full sm:w-72 shrink-0">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <FaSearch className="text-slate-400 text-sm" />
                         </div>
                         <input
                             type="text"
-                            placeholder="Search by name, ID, or dept..."
+                            placeholder="Search name, ID, or dept..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#0437cc] focus:ring-1 focus:ring-[#0437cc] transition-all bg-white"
@@ -186,23 +173,23 @@ const SuperAdminEmployeeManagementCom = () => {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto w-full">
                     {isLoading ? (
-                        <div className="p-8 text-center text-sm font-semibold text-slate-500">Loading HR records...</div>
+                        <div className="p-8 text-center text-sm font-semibold text-slate-500">Aggregating records...</div>
                     ) : filteredEmployees.length === 0 ? (
                         <div className="p-8 text-center text-sm font-semibold text-slate-400">
-                            {searchTerm ? 'No employees match your search.' : 'No employee records found in the system.'}
+                            {searchTerm ? 'No members match your search parameters.' : 'No records found in the organizational system.'}
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse">
+                        <table className="w-full text-left border-collapse min-w-[1000px]">
                             <thead>
                                 <tr className="border-b border-slate-100 text-[12px] text-slate-400 uppercase tracking-wider bg-white">
-                                    <th className="px-6 py-4 font-semibold">Employee</th>
-                                    <th className="px-6 py-4 font-semibold">Role & Department</th>
-                                    <th className="px-6 py-4 font-semibold">Compensation & Joining</th>
-                                    <th className="px-6 py-4 font-semibold">Reporting Manager</th>
-                                    <th className="px-6 py-4 font-semibold">Status</th>
-                                    <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                                    <th className="px-6 py-4 font-semibold whitespace-nowrap">Member Details</th>
+                                    <th className="px-6 py-4 font-semibold whitespace-nowrap">Role & Hierarchy</th>
+                                    <th className="px-6 py-4 font-semibold whitespace-nowrap">Org Placement</th>
+                                    <th className="px-6 py-4 font-semibold whitespace-nowrap">Compensation Data</th>
+                                    <th className="px-6 py-4 font-semibold text-center whitespace-nowrap">Status</th>
+                                    <th className="px-6 py-4 font-semibold text-right whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
@@ -210,35 +197,40 @@ const SuperAdminEmployeeManagementCom = () => {
                                     <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-sm shrink-0 border border-[#0437cc]/20">
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-sm shrink-0 border border-slate-200">
                                                     {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-[#010a1f]">{emp.first_name} {emp.last_name}</p>
-                                                    <p className="text-xs font-mono font-semibold text-[#0437cc] mt-0.5">{emp.employee_id}</p>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-[#010a1f] truncate">{emp.first_name} {emp.last_name}</p>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[11px] font-mono font-bold text-slate-500 truncate mt-0.5"><FaIdBadge className="inline mb-0.5 text-slate-400" /> {emp._displayId}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className="text-sm font-bold text-slate-700">{emp.designation}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                                                <FaSitemap className="text-[10px]" /> {emp.department}
+                                            <div className="mb-1.5">
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${emp._roleColor}`}>
+                                                    {emp._roleType}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm font-bold text-slate-700 truncate max-w-[200px]">{emp.designation || 'General Manager'}</p>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <p className="text-sm font-semibold text-slate-700 truncate max-w-[180px]">{emp.department || 'All Departments'}</p>
+                                            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate max-w-[180px]">
+                                                <FaSitemap className="text-[10px] shrink-0" /> <span className="truncate">{emp.branch}</span>
                                             </p>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className="text-sm font-bold text-green-700 flex items-center gap-1.5">
-                                                <FaFileInvoiceDollar className="text-slate-400 text-xs" /> {formatCurrency(emp.basic_salary)}
+                                            <p className="text-sm font-bold text-green-700 flex items-center gap-1.5 whitespace-nowrap">
+                                                <FaFileInvoiceDollar className="text-slate-400 text-xs shrink-0" /> {formatCurrency(emp.basic_salary)} <span className="text-[10px] font-medium text-slate-400">(Basic)</span>
                                             </p>
-                                            <p className="text-xs text-slate-500 mt-0.5">
-                                                Joined: {formatDate(emp.joining_date)}
-                                            </p>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <p className="text-sm font-semibold text-slate-700 bg-slate-100 inline-block px-2 py-1 rounded">
-                                                {emp.manager || 'Unassigned'}
+                                            <p className="text-xs text-slate-500 mt-0.5 whitespace-nowrap">
+                                                Joined: {formatDate(emp._joining)}
                                             </p>
                                         </td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-6 py-4 text-center whitespace-nowrap">
                                             <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold ${emp.status === 'Active' ? 'text-teal-700 bg-[#eef8f8]' :
                                                 emp.status === 'Pending Activation' ? 'text-orange-700 bg-orange-50' :
                                                     emp.status === 'Suspended' ? 'text-red-700 bg-red-50' : 'text-slate-600 bg-slate-100'
@@ -246,12 +238,12 @@ const SuperAdminEmployeeManagementCom = () => {
                                                 {emp.status}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-6 py-4 text-right whitespace-nowrap">
                                             <div className="flex gap-1.5 justify-end">
                                                 <button className="p-2 text-slate-400 hover:text-[#0437cc] transition-colors rounded hover:bg-[#0437cc]/10" title="View Full Profile">
                                                     <FaEye className="text-sm" />
                                                 </button>
-                                                <button className="p-2 text-slate-400 hover:text-[#f77704] transition-colors rounded hover:bg-[#f77704]/10" title="Edit HR Data">
+                                                <button className="p-2 text-slate-400 hover:text-[#f77704] transition-colors rounded hover:bg-[#f77704]/10" title="Manage Record">
                                                     <FaUserEdit className="text-sm" />
                                                 </button>
                                             </div>

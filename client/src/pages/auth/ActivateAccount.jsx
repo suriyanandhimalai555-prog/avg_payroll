@@ -7,6 +7,8 @@ import Button from '../../components/common/Button';
 const ActivateAccount = () => {
     const [searchParams] = useSearchParams();
     const email = searchParams.get('email');
+    const role = searchParams.get('role') || 'employee';
+
     const navigate = useNavigate();
 
     const [formData, setFormData] = useState({
@@ -47,12 +49,12 @@ const ActivateAccount = () => {
         try {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/activate`, {
                 email: email,
-                password: formData.password
+                password: formData.password,
+                role: role
             });
 
             if (response.status === 200) {
                 setStatus({ loading: false, error: '', success: true });
-                // Redirect to login after 3 seconds
                 setTimeout(() => {
                     navigate('/login');
                 }, 3000);
@@ -61,6 +63,12 @@ const ActivateAccount = () => {
             const errorMsg = error.response?.data?.message || 'Failed to activate account. Please try again.';
             setStatus({ loading: false, error: errorMsg, success: false });
         }
+    };
+
+    const getRoleTitle = () => {
+        if (role === 'hr') return 'HR';
+        if (role === 'manager') return 'Manager';
+        return 'Employee';
     };
 
     if (status.success) {
@@ -84,7 +92,7 @@ const ActivateAccount = () => {
 
             <div className="relative z-10 bg-white p-8 sm:p-10 rounded-3xl shadow-[0_8px_30px_rgba(4,55,204,0.04)] border border-slate-100 max-w-md w-full">
                 <div className="text-center mb-8">
-                    <h1 className="text-2xl font-bold text-[#010a1f]">Activate Account</h1>
+                    <h1 className="text-2xl font-bold text-[#010a1f]">Activate {getRoleTitle()} Account</h1>
                     <p className="text-sm text-slate-500 mt-2">Set your password to activate your portal access for <strong>{email}</strong></p>
                 </div>
 
@@ -97,7 +105,7 @@ const ActivateAccount = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                     <div className="space-y-1.5">
-                        <label className="text-sm font-bold text-[#010a1f]">New Password</label>
+                        <label className="text-sm font-bold text-[#010a1f]">New Password <span className="text-red-500">*</span></label>
                         <div className="relative">
                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                 <FaLock className="text-slate-400 text-sm" />
@@ -115,7 +123,7 @@ const ActivateAccount = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-sm font-bold text-[#010a1f]">Confirm Password</label>
+                        <label className="text-sm font-bold text-[#010a1f]">Confirm Password <span className="text-red-500">*</span></label>
                         <div className="relative">
                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                 <FaLock className="text-slate-400 text-sm" />

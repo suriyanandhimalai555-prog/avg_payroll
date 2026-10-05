@@ -6,7 +6,6 @@ import CommonLogin from '../pages/auth/CommonLogin';
 import ActivateAccount from '../pages/auth/ActivateAccount';
 import ProtectedRoute from './ProtectedRoute';
 
-
 // Super Admin
 import SuperAdminLayout from '../layouts/SuperAdminLayout';
 import SuperAdminDashboard from '../pages/superadmin/SuperAdminDashboard';
@@ -52,16 +51,13 @@ import SuperAdminSystemSettings from '../pages/superadmin/settings/SuperAdminSys
 import SuperAdminAuditLogs from '../pages/superadmin/SuperAdminAuditLogs';
 import SuperAdminProfile from '../pages/superadmin/SuperAdminProfile';
 
-
 // HR 
-import HRDashboard from '../pages/hr/HRDashboard';
 import HRLayout from '../layouts/HRLayout';
-
+import HRDashboard from '../pages/hr/HRDashboard';
 
 // Manager
-import ManagerDashboard from '../pages/manager/ManagerDashboard';
 import ManagerLayout from '../layouts/ManagerLayout';
-
+import ManagerDashboard from '../pages/manager/ManagerDashboard';
 
 // Employee
 import EmployeeLayout from '../layouts/EmployeeLayout';
@@ -81,7 +77,7 @@ const AppRoutes = () => {
         <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<CommonLogin />} />
-            <Route path="/activate-account" element={<ActivateAccount />} /> {/* NEW ROUTE */}
+            <Route path="/activate-account" element={<ActivateAccount />} />
 
             <Route path="/superadmin" element={<SuperAdminLayout />}>
                 <Route index element={<SuperAdminDashboard />} />
@@ -97,7 +93,7 @@ const AppRoutes = () => {
                 <Route path="users/managers" element={<SuperAdminManagers />} />
                 <Route path="users/employees" element={<SuperAdminEmployee />} />
 
-                <Route path="employee-hr-management" element={<SuperAdminEmployeeManagement />} />
+                <Route path="employee-management" element={<SuperAdminEmployeeManagement />} />
 
                 {/* Payroll */}
                 <Route path="payroll/dashboard" element={<SuperAdminPayrollDashboard />} />
@@ -133,14 +129,32 @@ const AppRoutes = () => {
                 <Route path="profile" element={<SuperAdminProfile />} />
             </Route>
 
-            <Route path="/hr" element={<HRLayout />}>
+            {/* HR Protected Routes */}
+            <Route
+                path="/hr"
+                element={
+                    <ProtectedRoute allowedRoles={['hr']}>
+                        <HRLayout />
+                    </ProtectedRoute>
+                }
+            >
                 <Route index element={<HRDashboard />} />
+
             </Route>
 
-            <Route path="/manager" element={<ManagerLayout />}>
+            {/* Manager Protected Routes */}
+            <Route
+                path="/manager"
+                element={
+                    <ProtectedRoute allowedRoles={['manager']}>
+                        <ManagerLayout />
+                    </ProtectedRoute>
+                }
+            >
                 <Route index element={<ManagerDashboard />} />
             </Route>
 
+            {/* Employee Protected Routes */}
             <Route
                 path="/employee"
                 element={

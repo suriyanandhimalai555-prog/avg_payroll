@@ -20,7 +20,6 @@ export const clockIn = async (req, res) => {
     try {
         const { employeeId, todayDate, locationData, deviceInfo } = req.body;
 
-        // Fetch Employee's assigned shift rules to determine Late Status
         const shiftQuery = `
             SELECT s.* FROM sa_work_shifts s
             JOIN sa_employees e ON s.shift_name = e.shift
@@ -33,7 +32,6 @@ export const clockIn = async (req, res) => {
         if (shiftRes.rows.length > 0) {
             const shift = shiftRes.rows[0];
             
-            // Only calculate Late markings for 'Fixed' shifts
             if (shift.shift_type === 'Fixed' && shift.start_time) {
                 const now = new Date();
                 const [sHrs, sMins] = shift.start_time.split(':').map(Number);
@@ -65,7 +63,7 @@ export const clockIn = async (req, res) => {
 
 export const clockOut = async (req, res) => {
     try {
-        const { employeeId, todayDate, locationData, deviceInfo } = req.body;
+        const { employeeId, todayDate, locationData, deviceInfo, eodUpdate } = req.body;
 
         const findQuery = `
             SELECT id, clock_in FROM emp_attendance 
@@ -89,14 +87,33 @@ export const clockOut = async (req, res) => {
 
         const updateQuery = `
             UPDATE emp_attendance 
-            SET clock_out = CURRENT_TIMESTAMP, clock_out_location = $1, clock_out_device = $2, total_hours = $3
-            WHERE id = $4 RETURNING *;
+            SET clock_out = CURRENT_TIMESTAMP, clock_out_location = $1, clock_out_device = $2, total_hours = $3, eod_update = $4
+            WHERE id = $5 RETURNING *;
         `;
 
-        const result = await pool.query(updateQuery, [locationData, deviceInfo, totalHoursFormatted, recordId]);
+        const result = await pool.query(updateQuery, [locationData, deviceInfo, totalHoursFormatted, eodUpdate, recordId]);
         res.status(200).json({ message: 'Clocked out successfully', record: result.rows[0] });
     } catch (error) {
         console.error('Clock Out Error:', error);
         res.status(500).json({ message: 'Error processing clock out' });
+    }
+};
+
+export const updateEodDetails = async (req, res) => {
+    try {
+        const { recordId, eodUpdate } = req.body;
+        const updateQuery = `
+            UPDATE emp_attendance 
+            SET eod_update = $1 
+            WHERE id = $2 RETURNING *;
+        `;
+        const result = await pool.query(updateQuery, [eodUpdate, recordId]);
+        
+        if (result.rows.length === 0) return res.status(404).json({ message: 'Session not found.' });
+
+        res.status(200).json({ message: 'EOD report updated successfully', record: result.rows[0] });
+    } catch (error) {
+        console.error('Update EOD Error:', error);
+        res.status(500).json({ message: 'Error updating EOD details' });
     }
 };

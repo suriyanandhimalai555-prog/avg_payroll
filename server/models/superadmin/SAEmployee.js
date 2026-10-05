@@ -22,13 +22,24 @@ const initializeSAEmployeeModel = async () => {
             location VARCHAR(100) NOT NULL,
             shift VARCHAR(50) NOT NULL,
             status VARCHAR(50) DEFAULT 'Pending Activation',
-            basic_salary NUMERIC NOT NULL,
-            hra NUMERIC NOT NULL,
-            allowances NUMERIC NOT NULL,
-            pf NUMERIC NOT NULL,
-            esi NUMERIC NOT NULL,
-            pt NUMERIC NOT NULL,
+            
+            -- Salary Breakdown Columns
+            basic_salary NUMERIC NOT NULL DEFAULT 0,
+            hra NUMERIC NOT NULL DEFAULT 0,
+            allowances NUMERIC DEFAULT 0,
+            pf NUMERIC DEFAULT 0,
+            esi NUMERIC DEFAULT 0,
+            pt NUMERIC DEFAULT 0,
             other_deductions NUMERIC DEFAULT 0,
+            
+            conveyance NUMERIC DEFAULT 0,
+            medical NUMERIC DEFAULT 0,
+            other_allowances NUMERIC DEFAULT 0,
+            epf NUMERIC DEFAULT 0,
+            health_insurance NUMERIC DEFAULT 0,
+            tds NUMERIC DEFAULT 0,
+            leaves NUMERIC DEFAULT 0,
+            
             bank_name VARCHAR(150) NOT NULL,
             account_holder VARCHAR(150) NOT NULL,
             account_number VARCHAR(100) NOT NULL,
@@ -38,17 +49,33 @@ const initializeSAEmployeeModel = async () => {
             emergency_relationship VARCHAR(100),
             emergency_phone VARCHAR(20),
             profile_photo TEXT,
+            permissions JSONB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `;
 
     const alterQueries = `
+        -- Drop strict NOT NULL constraints from legacy columns to prevent crash
+        ALTER TABLE sa_employees ALTER COLUMN allowances DROP NOT NULL;
+        ALTER TABLE sa_employees ALTER COLUMN pf DROP NOT NULL;
+        ALTER TABLE sa_employees ALTER COLUMN esi DROP NOT NULL;
+        ALTER TABLE sa_employees ALTER COLUMN pt DROP NOT NULL;
+        
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_name VARCHAR(150);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_relationship VARCHAR(100);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_phone VARCHAR(20);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS profile_photo TEXT;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS company VARCHAR(255);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS branch VARCHAR(255);
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS permissions JSONB;
+        
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS conveyance NUMERIC DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS medical NUMERIC DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS other_allowances NUMERIC DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS epf NUMERIC DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS health_insurance NUMERIC DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS tds NUMERIC DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS leaves NUMERIC DEFAULT 0;
     `;
 
     try {

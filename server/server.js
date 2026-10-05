@@ -14,6 +14,8 @@ import saShiftRoutes from './routes/superadmin/saShiftRoutes.js';
 import saHolidayRoutes from './routes/superadmin/saHolidayRoutes.js';
 import saLeavePolicyRoutes from './routes/superadmin/saLeavePolicyRoutes.js';
 import saAttendanceRoutes from './routes/superadmin/saAttendanceRoutes.js';
+import saHrUserRoutes from './routes/superadmin/saHrUserRoutes.js';
+import saManagerRoutes from './routes/superadmin/saManagerRoutes.js';
 // Employee Routes
 import employeeProfileRoutes from './routes/employee/empProfileRoutes.js';
 import empAttendanceRoutes from './routes/employee/empAttendanceRoutes.js';
@@ -31,6 +33,9 @@ import initializeSALocationModel from './models/superadmin/SALocation.js';
 import initializeSAShiftModel from './models/superadmin/SAShift.js';
 import initializeSAHolidayModel from './models/superadmin/SAHoliday.js';
 import initializeSALeavePolicyModel from './models/superadmin/SALeavePolicy.js';
+import initializeSAHrUserModel from './models/superadmin/SAHrUser.js';
+import initializeSAManagerModel from './models/superadmin/SAManager.js';
+
 // Employee Models
 import initializeAttendanceModel from './models/employee/EmpAttendance.js';
 import initializeLeaveModels from './models/employee/EmpLeave.js';
@@ -63,7 +68,9 @@ const initializeDatabase = async () => {
         await initializeSAShiftModel();
         await initializeSAHolidayModel();
         await initializeSALeavePolicyModel();
-
+        await initializeSAHrUserModel();
+        await initializeSAManagerModel();
+        
         // Employee
         await initializeAttendanceModel();
         await initializeLeaveModels();
@@ -90,6 +97,8 @@ app.use('/api/sa-shifts', saShiftRoutes);
 app.use('/api/sa-holidays', saHolidayRoutes);
 app.use('/api/sa-leave-policies', saLeavePolicyRoutes);
 app.use('/api/sa-attendance', saAttendanceRoutes);
+app.use('/api/sa-hr-users', saHrUserRoutes);
+app.use('/api/sa-managers', saManagerRoutes);
 // Employee Routes
 app.use('/api/employee-profile', employeeProfileRoutes);
 app.use('/api/attendance', empAttendanceRoutes);

@@ -4,13 +4,12 @@ import Cropper from 'react-easy-crop';
 import {
     FaUserEdit, FaLock, FaBuilding, FaBriefcase,
     FaMoneyCheck, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, 
-    FaFileAlt, FaTimes, FaSitemap, FaClock, FaMoneyBillWave,
-    FaFileInvoiceDollar, FaChartLine
+    FaFileAlt, FaTimes, FaSitemap, FaMoneyBillWave,
+    FaFileInvoiceDollar, FaChartLine, FaPlusCircle, FaMinusCircle
 } from 'react-icons/fa';
-import Button from '../common/Button';
+import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
-// Helper function to physically crop the image using HTML5 Canvas
 const createImage = (url) =>
     new Promise((resolve, reject) => {
         const image = new Image();
@@ -101,11 +100,16 @@ const EmployeeMyProfileCom = () => {
                 salary: {
                     basic: data.basic_salary || 0,
                     hra: data.hra || 0,
-                    allowances: data.allowances || 0,
-                    pf: data.pf || 0,
+                    conveyance: data.conveyance || 0,
+                    medical: data.medical || 0,
+                    otherAllowances: data.other_allowances || 0,
+                    
+                    epf: data.epf || 0,
                     esi: data.esi || 0,
+                    healthInsurance: data.health_insurance || 0,
                     pt: data.pt || 0,
-                    otherDeductions: data.other_deductions || 0
+                    tds: data.tds || 0,
+                    leaves: data.leaves || 0
                 },
                 bank: {
                     bankName: data.bank_name,
@@ -154,7 +158,7 @@ const EmployeeMyProfileCom = () => {
                 data: editForm[section]
             });
             const updatedUser = { ...response.data.user, role: 'employee' };
-            login(updatedUser);
+            login(updatedUser, sessionStorage.getItem('token'));
             setIsEditing({ ...isEditing, [section]: false });
             fetchProfile();
         } catch (error) {
@@ -193,7 +197,7 @@ const EmployeeMyProfileCom = () => {
             });
 
             const updatedUser = { ...response.data.user, role: 'employee' };
-            login(updatedUser);
+            login(updatedUser, sessionStorage.getItem('token'));
             setPhotoModalOpen(false);
             fetchProfile();
         } catch (error) {
@@ -208,14 +212,20 @@ const EmployeeMyProfileCom = () => {
         return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
     };
 
+    const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
+
     if (loading || !profileData) {
         return <div className="p-8 text-center text-slate-500 font-semibold">Loading Profile...</div>;
     }
 
+    const liveGross = parseNum(profileData.salary.basic) + parseNum(profileData.salary.hra) + parseNum(profileData.salary.conveyance) + parseNum(profileData.salary.medical) + parseNum(profileData.salary.otherAllowances);
+    const liveDeductions = parseNum(profileData.salary.epf) + parseNum(profileData.salary.esi) + parseNum(profileData.salary.healthInsurance) + parseNum(profileData.salary.pt) + parseNum(profileData.salary.tds) + parseNum(profileData.salary.leaves);
+    const liveNet = liveGross - liveDeductions;
+
     const inputStyles = "w-full bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1 text-sm font-medium text-[#010a1f] outline-none focus:border-[#0437cc] focus:bg-white transition-all";
 
     return (
-        <div className="space-y-8 pb-8 relative">
+        <div className="space-y-8 pb-8 relative w-full overflow-hidden">
 
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -224,7 +234,7 @@ const EmployeeMyProfileCom = () => {
                     <p className="text-sm text-slate-500 mt-1">View and manage your personal, employment, and financial information.</p>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="outline" icon={FaFileAlt} className="border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm">
+                    <Button variant="outline" icon={FaFileAlt} className="border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm w-full sm:w-auto">
                         Profile Change Request
                     </Button>
                 </div>
@@ -232,16 +242,16 @@ const EmployeeMyProfileCom = () => {
 
             {/* Top Summary Card */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-center gap-6">
-                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current.click()}>
+                <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current.click()}>
                     <img src={profileData.personal.photo} alt="Profile" className="w-24 h-24 rounded-full border-4 border-slate-50 shadow-sm object-cover transition-opacity group-hover:opacity-80" />
                     <button className="absolute bottom-0 right-0 w-8 h-8 bg-[#0437cc] text-white rounded-full flex items-center justify-center border-2 border-white shadow-sm hover:bg-[#032a9e] transition-colors pointer-events-none">
                         <FaUserEdit className="text-sm" />
                     </button>
                     <input type="file" accept="image/*" ref={fileInputRef} onChange={handlePhotoFileChange} className="hidden" />
                 </div>
-                <div className="flex-1 text-center md:text-left">
+                <div className="flex-1 text-center md:text-left min-w-0">
                     <div className="flex flex-col md:flex-row md:items-center gap-3">
-                        <h2 className="text-2xl font-bold text-[#010a1f]">{profileData.personal.fullName}</h2>
+                        <h2 className="text-2xl font-bold text-[#010a1f] truncate">{profileData.personal.fullName}</h2>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${profileData.employment.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                             {profileData.employment.status}
                         </span>
@@ -252,13 +262,18 @@ const EmployeeMyProfileCom = () => {
                         <span className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100"><FaBuilding className="text-[#f77704]/60" /> {profileData.employment.department}</span>
                     </div>
                 </div>
+                {/* Net Pay Mini Card inside Profile Header */}
+                <div className="shrink-0 bg-blue-50 border border-blue-200 text-[#0437cc] px-5 py-3 rounded-xl text-center shadow-sm w-full md:w-auto">
+                    <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-500">Calculated Net Pay</p>
+                    <p className="text-2xl font-black">{formatCurrency(liveNet)}</p>
+                </div>
             </div>
 
             {/* Profile Grids */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {/* Personal Information */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col h-full">
                     <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
                         <h2 className="text-base font-bold text-[#010a1f]">Personal Information</h2>
                         {!isEditing.personal ? (
@@ -270,7 +285,7 @@ const EmployeeMyProfileCom = () => {
                             </div>
                         )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 flex-1">
                         <div>
                             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Full Name</p>
                             <p className="text-sm font-medium text-[#010a1f]">{profileData.personal.fullName}</p>
@@ -319,14 +334,14 @@ const EmployeeMyProfileCom = () => {
                 </div>
 
                 {/* Employment Information (Read Only) */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 relative overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 relative overflow-hidden flex flex-col h-full">
                     <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
                         <div className="flex items-center gap-2">
                             <h2 className="text-base font-bold text-[#010a1f]">Employment Information</h2>
                             <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><FaLock className="text-[9px]" /> Read Only</span>
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 relative z-10">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 relative z-10 flex-1">
                         <div>
                             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">Employee ID <FaLock className="text-slate-300 text-[10px]" /></p>
                             <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">{profileData.personal.employeeId}</p>
@@ -376,76 +391,88 @@ const EmployeeMyProfileCom = () => {
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 relative overflow-hidden lg:col-span-2">
                     <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
                         <div className="flex items-center gap-2">
-                            <h2 className="text-base font-bold text-[#010a1f] flex items-center gap-2"><FaFileInvoiceDollar className="text-green-600" /> Financial Structure (Monthly)</h2>
+                            <h2 className="text-base font-bold text-[#010a1f] flex items-center gap-2"><FaFileInvoiceDollar className="text-[#0437cc]" /> Elaborate Financial Structure (Monthly)</h2>
                             <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><FaLock className="text-[9px]" /> Read Only</span>
                         </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
                         {/* Earnings */}
-                        <div className="bg-green-50/50 p-5 rounded-xl border border-green-100">
-                            <h3 className="text-xs font-bold text-green-700 uppercase tracking-wider mb-4 border-b border-green-100 pb-2 flex items-center gap-2">
-                                <FaChartLine /> Earnings
+                        <div className="bg-green-50/50 p-5 rounded-xl border border-green-100 flex flex-col h-full">
+                            <h3 className="text-[13px] font-bold text-green-700 uppercase tracking-wider mb-4 border-b border-green-100 pb-2 flex items-center gap-2">
+                                <FaPlusCircle /> Earnings
                             </h3>
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-slate-600 font-medium">Basic Salary</span>
-                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.basic)}</span>
+                            <div className="space-y-3 flex-1">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">Basic Salary</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.basic)}</span>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-slate-600 font-medium">HRA</span>
-                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.hra)}</span>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">House Rent Allowance (HRA)</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.hra)}</span>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-slate-600 font-medium">Allowances</span>
-                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.allowances)}</span>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">Conveyance Allowance</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.conveyance)}</span>
                                 </div>
-                                <div className="pt-3 mt-3 border-t border-green-200 flex justify-between items-center">
-                                    <span className="text-sm font-bold text-green-800">Gross Earnings</span>
-                                    <span className="text-base font-black text-green-700">
-                                        {formatCurrency(parseFloat(profileData.salary.basic) + parseFloat(profileData.salary.hra) + parseFloat(profileData.salary.allowances))}
-                                    </span>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">Medical Allowance</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.medical)}</span>
                                 </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">Other Allowances</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.otherAllowances)}</span>
+                                </div>
+                            </div>
+                            <div className="pt-3 mt-4 border-t border-green-200 flex justify-between items-center">
+                                <span className="text-sm font-bold text-green-800">Gross Earnings</span>
+                                <span className="text-base font-black text-green-700">{formatCurrency(liveGross)}</span>
                             </div>
                         </div>
 
                         {/* Deductions */}
-                        <div className="bg-red-50/50 p-5 rounded-xl border border-red-100">
-                            <h3 className="text-xs font-bold text-red-600 uppercase tracking-wider mb-4 border-b border-red-100 pb-2 flex items-center gap-2">
-                                <FaMoneyBillWave /> Deductions
+                        <div className="bg-red-50/50 p-5 rounded-xl border border-red-100 flex flex-col h-full">
+                            <h3 className="text-[13px] font-bold text-red-600 uppercase tracking-wider mb-4 border-b border-red-100 pb-2 flex items-center gap-2">
+                                <FaMinusCircle /> Deductions
                             </h3>
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-slate-600 font-medium">PF (Provident Fund)</span>
-                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.pf)}</span>
+                            <div className="space-y-3 flex-1">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">EPF</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.epf)}</span>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-slate-600 font-medium">ESI</span>
-                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.esi)}</span>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">ESI</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.esi)}</span>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-slate-600 font-medium">Professional Tax</span>
-                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.pt)}</span>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">Health Insurance</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.healthInsurance)}</span>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-slate-600 font-medium">Other Deductions</span>
-                                    <span className="text-sm font-bold text-[#010a1f]">{formatCurrency(profileData.salary.otherDeductions)}</span>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">Professional Tax (PT)</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.pt)}</span>
                                 </div>
-                                <div className="pt-3 mt-3 border-t border-red-200 flex justify-between items-center">
-                                    <span className="text-sm font-bold text-red-800">Total Deductions</span>
-                                    <span className="text-base font-black text-red-600">
-                                        {formatCurrency(parseFloat(profileData.salary.pf) + parseFloat(profileData.salary.esi) + parseFloat(profileData.salary.pt) + parseFloat(profileData.salary.otherDeductions))}
-                                    </span>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">TDS / Income Tax</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.tds)}</span>
                                 </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-600 font-medium">Leaves</span>
+                                    <span className="font-bold text-[#010a1f]">{formatCurrency(profileData.salary.leaves)}</span>
+                                </div>
+                            </div>
+                            <div className="pt-3 mt-4 border-t border-red-200 flex justify-between items-center">
+                                <span className="text-sm font-bold text-red-800">Total Deductions</span>
+                                <span className="text-base font-black text-red-600">- {formatCurrency(liveDeductions)}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Bank Information */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col h-full">
                     <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
-                        <h2 className="text-base font-bold text-[#010a1f] flex items-center gap-2"><FaMoneyCheck className="text-slate-400" /> Bank Information</h2>
+                        <h2 className="text-base font-bold text-[#010a1f] flex items-center gap-2"><FaMoneyCheck className="text-[#0437cc]" /> Bank Information</h2>
                         {!isEditing.bank ? (
                             <button onClick={() => toggleEdit('bank')} className="text-sm font-semibold text-[#0437cc] hover:underline">Edit</button>
                         ) : (
@@ -455,7 +482,7 @@ const EmployeeMyProfileCom = () => {
                             </div>
                         )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 flex-1">
                         <div className="sm:col-span-2">
                             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Bank Name</p>
                             {isEditing.bank ? (
@@ -484,7 +511,7 @@ const EmployeeMyProfileCom = () => {
                 </div>
 
                 {/* Emergency Contact */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col h-full">
                     <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
                         <h2 className="text-base font-bold text-[#010a1f]">Emergency Contact</h2>
                         {!isEditing.emergency ? (
@@ -496,7 +523,7 @@ const EmployeeMyProfileCom = () => {
                             </div>
                         )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 flex-1">
                         <div className="sm:col-span-2">
                             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Contact Name</p>
                             {isEditing.emergency ? (
@@ -528,7 +555,7 @@ const EmployeeMyProfileCom = () => {
             {/* Hidden Photo Crop/Adjust Modal */}
             {photoModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#010a1f]/60 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full relative">
+                    <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full relative animate-in zoom-in-95 duration-200">
                         <button onClick={() => setPhotoModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors p-2 bg-slate-100 rounded-full z-10">
                             <FaTimes />
                         </button>

@@ -12,7 +12,7 @@ const CommonLogin = () => {
     const navigate = useNavigate();
     const { login, user, loading: authLoading } = useAuth();
 
-    const [loginRole, setLoginRole] = useState('employee'); // 'employee' | 'hr' | 'manager'
+    const [loginRole, setLoginRole] = useState('employee');
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +27,6 @@ const CommonLogin = () => {
         );
     }
 
-    // Auto-redirect if already logged in based on role
     if (user) {
         if (user.role === 'employee') return <Navigate to="/employee" replace />;
         if (user.role === 'hr') return <Navigate to="/hr" replace />;
@@ -47,7 +46,9 @@ const CommonLogin = () => {
             });
 
             if (response.status === 200) {
-                login(response.data.user);
+                // Pass both user data AND the secure token to the AuthContext session cache
+                login(response.data.user, response.data.token);
+
                 if (loginRole === 'hr') navigate('/hr');
                 else if (loginRole === 'manager') navigate('/manager');
                 else navigate('/employee');
@@ -59,7 +60,6 @@ const CommonLogin = () => {
         }
     };
 
-    // Helper to switch roles and clear forms
     const handleRoleSwitch = (role) => {
         setLoginRole(role);
         setError('');
@@ -69,7 +69,6 @@ const CommonLogin = () => {
 
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 p-3 sm:p-6 relative overflow-hidden">
-
             <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-br from-[#0437cc]/10 via-[#0437cc]/5 to-transparent -translate-y-20 transform skew-y-3 -z-10"></div>
             <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-[#f77704]/5 rounded-full blur-3xl -z-10 translate-x-1/3 translate-y-1/3"></div>
 
@@ -81,7 +80,6 @@ const CommonLogin = () => {
             </button>
 
             <div className="w-full max-w-[420px] min-w-[280px] animate-in fade-in slide-in-from-bottom-8 duration-700">
-
                 <div className="flex flex-col items-center mb-6 sm:mb-8">
                     <div className="w-14 h-14 sm:w-16 sm:h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-[#0437cc]/10 mb-3 sm:mb-4 border border-slate-100 overflow-hidden">
                         <img src="/logo.jpg" alt="AVG Logo" className="w-full h-full object-cover" />
@@ -127,10 +125,9 @@ const CommonLogin = () => {
                     </div>
 
                     <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
-
                         <div className="space-y-1 sm:space-y-1.5">
                             <label className="text-xs sm:text-sm font-bold text-[#010a1f]">
-                                {loginRole === 'employee' ? 'Employee ID / Email' : loginRole === 'hr' ? 'HR Email' : 'Manager Email'}
+                                {loginRole === 'employee' ? 'Employee ID / Email' : 'Official Email'}
                             </label>
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 sm:pl-4 flex items-center pointer-events-none">
@@ -142,8 +139,7 @@ const CommonLogin = () => {
                                     value={identifier}
                                     onChange={(e) => { setIdentifier(e.target.value); setError(''); }}
                                     placeholder={
-                                        loginRole === 'employee' ? "AVG-2026-001 or email" :
-                                            loginRole === 'hr' ? "hr@avg.com (dummy)" : "manager@avg.com (dummy)"
+                                        loginRole === 'employee' ? "AVG-2026-001 or email" : "Enter your email address"
                                     }
                                     required
                                     disabled={isSubmitting}
@@ -166,10 +162,7 @@ const CommonLogin = () => {
                                     name="password"
                                     value={password}
                                     onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                                    placeholder={
-                                        loginRole === 'employee' ? "••••••••" :
-                                            loginRole === 'hr' ? "hr123" : "manager123"
-                                    }
+                                    placeholder="••••••••"
                                     required
                                     disabled={isSubmitting}
                                     className="w-full pl-9 sm:pl-11 pr-10 sm:pr-12 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-[#0437cc]/20 focus:border-[#0437cc] focus:bg-white transition-all outline-none text-[#010a1f]"

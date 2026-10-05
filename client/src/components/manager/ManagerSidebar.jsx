@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
     FaTachometerAlt, FaUsers, FaCalendarCheck, FaPlaneDeparture,
     FaClock, FaBusinessTime, FaChartLine, FaMoneyCheckAlt,
@@ -9,8 +9,76 @@ import { useAuth } from '../../context/AuthContext';
 
 const ManagerSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIsDesktopCollapsed }) => {
     const [openSubmenu, setOpenSubmenu] = useState('');
+    const location = useLocation();
     const navigate = useNavigate();
-    const { logout } = useAuth(); // Import the logout method from your AuthContext
+    const { logout, user } = useAuth();
+
+    // Parse Manager permissions dynamically from AuthContext
+    const p = typeof user?.permissions === 'string' ? JSON.parse(user.permissions) : (user?.permissions || {});
+
+    // Mapped exactly to the INITIAL_PERMISSIONS JSON keys in SuperAdminManagersCom.jsx
+    const rawMenuItems = [
+        { title: 'Dashboard', icon: FaTachometerAlt, path: '/manager', show: true },
+        {
+            title: 'My Team', icon: FaUsers, show: p.teamMembers?.members || p.teamMembers?.directory,
+            subItems: [
+                { name: 'Team Members', path: '/manager/team/members', show: p.teamMembers?.members },
+                { name: 'Team Directory', path: '/manager/team/directory', show: p.teamMembers?.directory }
+            ]
+        },
+        { 
+            title: 'Attendance', icon: FaCalendarCheck, show: p.teamAttendance?.overview || p.teamAttendance?.shifts || p.teamAttendance?.directory,
+            subItems: [
+                { name: 'Attendance Overview', path: '/manager/attendance/overview', show: p.teamAttendance?.overview },
+                { name: 'Shift Tracking', path: '/manager/attendance/shifts', show: p.teamAttendance?.shifts },
+                { name: 'Directory Log', path: '/manager/attendance/directory', show: p.teamAttendance?.directory }
+            ]
+        },
+        {
+            title: 'Leave Approvals', icon: FaPlaneDeparture, show: p.leaveApprovals?.pending || p.leaveApprovals?.approved || p.leaveApprovals?.calendar,
+            subItems: [
+                { name: 'Pending Requests', path: '/manager/leave/pending', show: p.leaveApprovals?.pending },
+                { name: 'Approved Requests', path: '/manager/leave/approved', show: p.leaveApprovals?.approved },
+                { name: 'Leave Calendar', path: '/manager/leave/calendar', show: p.leaveApprovals?.calendar }
+            ]
+        },
+        { title: 'Timesheet', icon: FaClock, path: '/manager/timesheet', show: p.timesheet },
+        { title: 'Overtime', icon: FaBusinessTime, path: '/manager/overtime', show: p.overtime },
+        {
+            title: 'Performance', icon: FaChartLine, show: p.performance?.goals || p.performance?.reviews || p.performance?.team,
+            subItems: [
+                { name: 'Goals', path: '/manager/performance/goals', show: p.performance?.goals },
+                { name: 'Reviews', path: '/manager/performance/reviews', show: p.performance?.reviews },
+                { name: 'Team Performance', path: '/manager/performance/team', show: p.performance?.team }
+            ]
+        },
+        {
+            title: 'Team Payroll', icon: FaMoneyCheckAlt, show: p.teamPayroll?.summary,
+            subItems: [
+                { name: 'Payroll Summary', path: '/manager/payroll/summary', show: p.teamPayroll?.summary }
+            ]
+        },
+        { title: 'Announcements', icon: FaBullhorn, path: '/manager/announcements', show: p.announcements }
+    ];
+
+    const menuItems = rawMenuItems.map(item => {
+        if (item.subItems) {
+            return { ...item, subItems: item.subItems.filter(sub => sub.show === true) };
+        }
+        return item;
+    }).filter(item => {
+        if (item.show === false) return false;
+        if (item.subItems && item.subItems.length === 0) return false;
+        return true;
+    });
+
+    useEffect(() => {
+        const activeParent = menuItems.find(item =>
+            item.subItems?.some(sub => location.pathname.includes(sub.path))
+        );
+        if (activeParent) setOpenSubmenu(activeParent.title);
+        else setOpenSubmenu('');
+    }, [location.pathname]);
 
     const toggleSubmenu = (title) => {
         if (isDesktopCollapsed && window.innerWidth >= 768) {
@@ -22,73 +90,22 @@ const ManagerSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIs
     };
 
     const handleLogout = () => {
-        // Clear all access tokens and user session data
         localStorage.removeItem('token');
         sessionStorage.clear();
-        
-        // Execute the AuthContext logout to clear state properly
         logout();
-        
-        // Redirect back to the login page
-        navigate('/login'); // Or simply '/' based on your routing preference
+        navigate('/login');
     };
 
-    const menuItems = [
-        { title: 'Dashboard', icon: FaTachometerAlt, path: '/manager' },
-        {
-            title: 'My Team', icon: FaUsers,
-            subItems: [
-                { name: 'Team Members', path: '/manager/team/members' },
-                { name: 'Team Attendance', path: '/manager/team/attendance' },
-                { name: 'Team Directory', path: '/manager/team/directory' }
-            ]
-        },
-        { title: 'Attendance', icon: FaCalendarCheck, path: '/manager/attendance' },
-        {
-            title: 'Leave Approvals', icon: FaPlaneDeparture,
-            subItems: [
-                { name: 'Pending Requests', path: '/manager/leave/pending' },
-                { name: 'Approved Requests', path: '/manager/leave/approved' },
-                { name: 'Leave Calendar', path: '/manager/leave/calendar' }
-            ]
-        },
-        { title: 'Timesheet', icon: FaClock, path: '/manager/timesheet' },
-        { title: 'Overtime', icon: FaBusinessTime, path: '/manager/overtime' },
-        {
-            title: 'Performance', icon: FaChartLine,
-            subItems: [
-                { name: 'Goals', path: '/manager/performance/goals' },
-                { name: 'Reviews', path: '/manager/performance/reviews' },
-                { name: 'Team Performance', path: '/manager/performance/team' }
-            ]
-        },
-        {
-            title: 'Team Payroll', icon: FaMoneyCheckAlt,
-            subItems: [
-                { name: 'Payroll Summary', path: '/manager/payroll/summary' }
-            ]
-        },
-        { title: 'Announcements', icon: FaBullhorn, path: '/manager/announcements' }
-    ];
-
     return (
-        <aside
-            className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out md:relative md:translate-x-0 ${isOpen ? 'translate-x-0 shadow-2xl md:shadow-none' : '-translate-x-full'} ${isDesktopCollapsed ? 'w-72 md:w-20' : 'w-72'}`}
-        >
-            {/* Brand Header with Logo */}
+        <aside className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out md:relative md:translate-x-0 ${isOpen ? 'translate-x-0 shadow-2xl md:shadow-none' : '-translate-x-full'} ${isDesktopCollapsed ? 'w-72 md:w-20' : 'w-72'}`}>
+            {/* Brand Header */}
             <div className={`relative flex items-center h-20 border-b border-slate-100 shrink-0 bg-slate-50 transition-all duration-300 ${isDesktopCollapsed ? 'md:justify-center md:px-0 px-6' : 'justify-between px-6'}`}>
-                <div className="flex items-center overflow-hidden">
-                    <img
-                        src="/logo.jpg"
-                        alt="AVG Logo"
-                        className="w-10 h-10 object-cover rounded-lg shadow-sm shrink-0"
-                    />
+                <Link to="/manager" onClick={() => { if (window.innerWidth < 768) toggleMobileSidebar() }} className="flex items-center overflow-hidden cursor-pointer">
+                    <img src="/logo.jpg" alt="AVG Logo" className="w-10 h-10 object-cover rounded-lg shadow-sm shrink-0" />
                     <span className={`font-bold text-[#010a1f] tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 ${isDesktopCollapsed ? 'md:max-w-0 md:opacity-0 md:pl-0' : 'max-w-[200px] opacity-100 pl-3 text-xl'}`}>
                         AVG <span className="text-[#f77704]">Payroll</span>
                     </span>
-                </div>
-
-                {/* Mobile Close Button */}
+                </Link>
                 <button onClick={toggleMobileSidebar} className="md:hidden absolute right-4 p-2 text-slate-500 hover:text-red-500 bg-slate-100 rounded-lg transition-colors">
                     <FaTimes className="text-xl" />
                 </button>
@@ -112,7 +129,6 @@ const ManagerSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIs
                                         <FaChevronDown className={`text-sm shrink-0 transition-all duration-300 ${openSubmenu === item.title ? 'rotate-180' : ''} ${isDesktopCollapsed ? 'md:max-w-0 md:opacity-0' : 'max-w-[20px] opacity-100'}`} />
                                     </button>
 
-                                    {/* Submenu */}
                                     <div className={`overflow-hidden transition-all duration-300 ${openSubmenu === item.title && (!isDesktopCollapsed || window.innerWidth < 768) ? 'max-h-[500px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
                                         <ul className="pl-11 pr-2 py-2 space-y-1 border-l-2 border-slate-100 ml-6">
                                             {item.subItems.map((sub, idx) => (
@@ -151,7 +167,6 @@ const ManagerSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIs
                                 </NavLink>
                             )}
 
-                            {/* Tooltip for Collapsed State */}
                             {isDesktopCollapsed && (
                                 <div className="hidden md:flex absolute left-full top-1/2 -translate-y-1/2 ml-2 px-3 py-1.5 bg-[#404040] text-white text-sm font-medium rounded-md shadow-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] whitespace-nowrap pointer-events-none">
                                     {item.title}
@@ -168,13 +183,13 @@ const ManagerSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIs
                     <div className="flex items-center">
                         <FaUserCircle className="text-slate-400 text-3xl shrink-0" />
                         <div className={`overflow-hidden transition-all duration-300 ${isDesktopCollapsed ? 'md:max-w-0 md:opacity-0' : 'max-w-[150px] opacity-100 pl-3'}`}>
-                            <p className="text-[#010a1f] text-sm font-semibold truncate">Manager</p>
-                            <p className="text-xs text-slate-500 truncate">Engineering</p>
+                            <p className="text-[#010a1f] text-sm font-semibold truncate">{user?.first_name || 'Department'} {user?.last_name || 'Manager'}</p>
+                            <p className="text-xs text-slate-500 truncate">{user?.email || 'manager@avg.com'}</p>
                         </div>
                     </div>
                 </div>
 
-                <button 
+                <button
                     onClick={handleLogout}
                     className={`flex items-center justify-center py-2.5 rounded-lg bg-white border border-slate-200 text-red-600 hover:bg-red-50 hover:border-red-200 transition-all duration-300 shadow-sm ${isDesktopCollapsed ? 'md:w-10 md:h-10 md:p-0 w-full' : 'w-full'}`}
                 >

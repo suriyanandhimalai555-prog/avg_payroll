@@ -42,25 +42,27 @@ export const createEmployee = async (req, res) => {
 
         const generatedEmployeeId = `AVG-${currentYear}-${String(newSequence).padStart(3, '0')}`;
 
+        // Explicitly passing '0' to legacy columns: allowances, pf, other_deductions
         const insertQuery = `
             INSERT INTO sa_employees (
                 first_name, last_name, email, phone, dob, gender, address,
                 employee_id, joining_date, company, branch, department, designation, manager, emp_type, location, shift, status,
-                basic_salary, hra, allowances, pf, esi, pt, other_deductions,
-                bank_name, account_holder, account_number, ifsc
+                basic_salary, hra, conveyance, medical, other_allowances, allowances, epf, pf, esi, health_insurance, pt, tds, leaves, other_deductions,
+                bank_name, account_holder, account_number, ifsc, permissions
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21, $22, $23, $24, $25,
-                $26, $27, $28, $29
+                $19, $20, $21, $22, $23, 0, $24, 0, $25, $26, $27, $28, $29, 0,
+                $30, $31, $32, $33, $34
             ) RETURNING *;
         `;
 
         const values = [
             data.firstName, data.lastName, data.email, data.phone, data.dob, data.gender, data.address,
             generatedEmployeeId, data.joiningDate, data.company, data.branch, data.department, data.designation, data.manager, data.empType, data.location, data.shift, data.status,
-            parseNum(data.basic), parseNum(data.hra), parseNum(data.allowances), 
-            parseNum(data.pf), parseNum(data.esi), parseNum(data.pt), parseNum(data.otherDeductions),
-            data.bankName, data.accountHolder, data.accountNumber, data.ifsc
+            parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.otherAllowances),
+            parseNum(data.epf), parseNum(data.esi), parseNum(data.healthInsurance), parseNum(data.pt), parseNum(data.tds), parseNum(data.leaves),
+            data.bankName, data.accountHolder, data.accountNumber, data.ifsc,
+            JSON.stringify(data.permissions)
         ];
 
         const result = await pool.query(insertQuery, values);
@@ -130,23 +132,24 @@ export const updateEmployee = async (req, res) => {
             UPDATE sa_employees SET
                 first_name = $1, last_name = $2, phone = $3, dob = $4, gender = $5, address = $6,
                 joining_date = $7, company = $8, branch = $9, department = $10, designation = $11, manager = $12, emp_type = $13, 
-                location = $14, shift = $15, status = $16, basic_salary = $17, hra = $18, allowances = $19, 
-                pf = $20, esi = $21, pt = $22, other_deductions = $23, bank_name = $24, 
-                account_holder = $25, account_number = $26, ifsc = $27
-            WHERE id = $28 RETURNING *;
+                location = $14, shift = $15, status = $16, 
+                basic_salary = $17, hra = $18, conveyance = $19, medical = $20, other_allowances = $21, allowances = 0,
+                epf = $22, pf = 0, esi = $23, health_insurance = $24, pt = $25, tds = $26, leaves = $27, other_deductions = 0, 
+                bank_name = $28, account_holder = $29, account_number = $30, ifsc = $31, permissions = $32
+            WHERE id = $33 RETURNING *;
         `;
 
         const values = [
             data.firstName, data.lastName, data.phone, data.dob, data.gender, data.address,
-            data.joiningDate, data.company, data.branch, data.department, data.designation, data.manager, data.empType, 
-            data.location, data.shift, data.status, 
-            parseNum(data.basic), parseNum(data.hra), parseNum(data.allowances), 
-            parseNum(data.pf), parseNum(data.esi), parseNum(data.pt), parseNum(data.otherDeductions), 
-            data.bankName, data.accountHolder, data.accountNumber, data.ifsc, id
+            data.joiningDate, data.company, data.branch, data.department, data.designation, data.manager, data.empType,
+            data.location, data.shift, data.status,
+            parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.otherAllowances),
+            parseNum(data.epf), parseNum(data.esi), parseNum(data.healthInsurance), parseNum(data.pt), parseNum(data.tds), parseNum(data.leaves),
+            data.bankName, data.accountHolder, data.accountNumber, data.ifsc, JSON.stringify(data.permissions), id
         ];
 
         const result = await pool.query(updateQuery, values);
-        
+
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Employee not found.' });
         }
@@ -162,11 +165,11 @@ export const deleteEmployee = async (req, res) => {
     try {
         const { id } = req.params;
         const result = await pool.query('DELETE FROM sa_employees WHERE id = $1 RETURNING id', [id]);
-        
+
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Employee not found.' });
         }
-        
+
         res.status(200).json({ message: 'Employee deleted successfully.' });
     } catch (error) {
         console.error('Delete Error:', error);

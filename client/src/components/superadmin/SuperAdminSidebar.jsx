@@ -29,7 +29,7 @@ const menuItems = [
             { name: 'Employees', path: '/superadmin/users/employees' }
         ]
     },
-    { title: 'Employee HR Management', icon: FaUserTie, path: '/superadmin/employee-hr-management' },
+    { title: 'Employee Management', icon: FaUserTie, path: '/superadmin/employee-management' },
     {
         title: 'Payroll', icon: FaMoneyCheckAlt,
         subItems: [

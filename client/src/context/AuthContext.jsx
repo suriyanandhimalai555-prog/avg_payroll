@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 
 const AuthContext = createContext();
 
@@ -7,23 +7,33 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Restore user session from localStorage on app load
-        const storedUser = localStorage.getItem('avg_user');
-        if (storedUser) {
+        // 1. Force wipe any old insecure local storage data left over from previous versions
+        localStorage.removeItem('token');
+        localStorage.removeItem('avg_user');
+
+        // 2. Read strictly from temporary Session Storage (Cache)
+        const token = sessionStorage.getItem('token');
+        const storedUser = sessionStorage.getItem('avg_user');
+
+        if (token && storedUser) {
             setUser(JSON.parse(storedUser));
         }
         setLoading(false);
     }, []);
 
-    // Now simply accepts the real user object returned from our Postgres DB
-    const login = (userData) => {
+    const login = (userData, token) => {
+        // Save to Session Storage (clears when tab closes)
+        sessionStorage.setItem('token', token);
+        sessionStorage.setItem('avg_user', JSON.stringify(userData));
         setUser(userData);
-        localStorage.setItem('avg_user', JSON.stringify(userData));
     };
 
     const logout = () => {
+        // Clear all session cache
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('avg_user');
+        sessionStorage.clear();
         setUser(null);
-        localStorage.removeItem('avg_user');
     };
 
     return (

@@ -10,11 +10,13 @@ const initializeEmpAttendanceModel = async () => {
             clock_out TIMESTAMP,
             clock_in_location TEXT,     
             clock_out_location TEXT,    
-            clock_in_device TEXT,       -- Captures OS/Browser used for clock in
-            clock_out_device TEXT,      -- Captures OS/Browser used for clock out
+            clock_in_device TEXT,       
+            clock_out_device TEXT,      
             late_minutes INT DEFAULT 0, 
             total_hours VARCHAR(20),
             status VARCHAR(50) DEFAULT 'Present',
+            project_details TEXT,
+            eod_update TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `;
@@ -25,6 +27,8 @@ const initializeEmpAttendanceModel = async () => {
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS clock_in_device TEXT;
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS clock_out_device TEXT;
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS late_minutes INT DEFAULT 0;
+        ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS project_details TEXT;
+        ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS eod_update TEXT;
     `;
 
     try {

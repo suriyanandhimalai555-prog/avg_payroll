@@ -8,23 +8,30 @@ import { useAuth } from '../../context/AuthContext';
 
 const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) => {
     const navigate = useNavigate();
-    const { logout } = useAuth();
+    const { logout, user } = useAuth();
 
-    // Flat menu structure without submenus for the restricted Employee view
-    const menuItems = [
-        { title: 'Dashboard', icon: FaTachometerAlt, path: '/employee' },
-        { title: 'My Profile', icon: FaUserEdit, path: '/employee/profile' },
-        { title: 'Attendance', icon: FaCalendarCheck, path: '/employee/attendance' },
-        { title: 'Leave', icon: FaPlaneDeparture, path: '/employee/leave' },
-        { title: 'Payroll', icon: FaMoneyCheckAlt, path: '/employee/payroll' },
-        { title: 'Reimbursements', icon: FaFileInvoiceDollar, path: '/employee/reimbursements' },
-        { title: 'Loans & Advances', icon: FaHandHoldingUsd, path: '/employee/loans' },
-        { title: 'Documents', icon: FaFolderOpen, path: '/employee/documents' },
-        { title: 'Notifications', icon: FaBell, path: '/employee/notifications' },
-        { title: 'Settings', icon: FaCogs, path: '/employee/settings' }
+    // Dynamically retrieve the permissions mapped in SuperAdminEmployeeCom.jsx
+    const p = typeof user?.permissions === 'string' ? JSON.parse(user.permissions) : (user?.permissions || {});
+
+    // Flat menu structure dynamically filtered based on JSON true/false flags
+    const rawMenuItems = [
+        { title: 'Dashboard', icon: FaTachometerAlt, path: '/employee', show: true },
+        { title: 'My Profile', icon: FaUserEdit, path: '/employee/profile', show: true },
+        { title: 'Attendance', icon: FaCalendarCheck, path: '/employee/attendance', show: p.core?.attendance },
+        { title: 'Leave', icon: FaPlaneDeparture, path: '/employee/leave', show: p.core?.leave },
+        { title: 'Payroll', icon: FaMoneyCheckAlt, path: '/employee/payroll', show: p.finance?.payroll },
+        { title: 'Reimbursements', icon: FaFileInvoiceDollar, path: '/employee/reimbursements', show: p.finance?.reimbursements },
+        { title: 'Loans & Advances', icon: FaHandHoldingUsd, path: '/employee/loans', show: p.finance?.loans },
+        { title: 'Documents', icon: FaFolderOpen, path: '/employee/documents', show: p.core?.documents },
+        { title: 'Notifications', icon: FaBell, path: '/employee/notifications', show: p.system?.notifications },
+        { title: 'Settings', icon: FaCogs, path: '/employee/settings', show: p.system?.settings }
     ];
 
+    const menuItems = rawMenuItems.filter(item => item.show !== false);
+
     const handleLogout = () => {
+        localStorage.removeItem('token');
+        sessionStorage.clear();
         logout();
         navigate('/login');
     };
