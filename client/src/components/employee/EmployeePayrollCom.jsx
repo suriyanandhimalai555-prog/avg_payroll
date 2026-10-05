@@ -9,7 +9,7 @@ import {
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
-// Base64 Placeholder Logo (Replace this string with your actual Base64 company logo if desired)
+// Base64 Placeholder Logo
 const COMPANY_LOGO_BASE64 = "https://avgwork.avgprimetech.com/assets/icon-C5ZMRYg3.png";
 
 const EmployeePayrollCom = () => {
@@ -34,91 +34,104 @@ const EmployeePayrollCom = () => {
     useEffect(() => {
         const fetchPayroll = async () => {
             try {
-                // 1. Fetch Profile (Base Financials) & Attendance (Working Hours) Simultaneously
-                const [profileRes, attRes] = await Promise.all([
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`)
+                // 1. Fetch Profile, Attendance, Leave Requests, and Policies Simultaneously
+                const [profileRes, attRes, leaveReqRes, leavePolRes] = await Promise.all([
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`).catch(() => ({ data: {} })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`).catch(() => ({ data: { history: [] } })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`).catch(() => ({ data: [] })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`).catch(() => ({ data: [] }))
                 ]);
 
                 const profile = profileRes.data;
                 const attendanceLogs = attRes.data.history || [];
+                const leaveRequests = leaveReqRes.data || [];
+                const leavePolicies = leavePolRes.data || [];
+
+                const approvedLeaves = leaveRequests.filter(req => req.status === 'Approved');
 
                 // Safe parsing helper
                 const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
 
-                // Map Real-Time Earnings
+                // Map Real-Time Base Earnings
                 const basic = parseNum(profile.basic_salary);
                 const hra = parseNum(profile.hra);
                 const conveyance = parseNum(profile.conveyance);
                 const medical = parseNum(profile.medical);
                 const otherAllowances = parseNum(profile.other_allowances);
 
-                // Map Real-Time Deductions
+                // Map Real-Time Fixed Deductions
                 const epf = parseNum(profile.epf);
                 const esi = parseNum(profile.esi);
                 const healthInsurance = parseNum(profile.health_insurance);
                 const pt = parseNum(profile.pt);
                 const tds = parseNum(profile.tds);
-                const leaves = parseNum(profile.leaves);
 
-                // Calculate Totals
-                const grossSalary = basic + hra + conveyance + medical + otherAllowances;
-                const totalDeductions = epf + esi + healthInsurance + pt + tds + leaves;
-                const netSalary = grossSalary - totalDeductions;
+                const grossFull = basic + hra + conveyance + medical + otherAllowances;
 
-                const targetHours = 160; // Default standard monthly hours
+                const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 
-                // Group attendance logs by Month-Year for Payslip Generation
-                const groupedByMonth = {};
-                attendanceLogs.forEach(r => {
-                    const date = new Date(r.date);
-                    const label = date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-                    if (!groupedByMonth[label]) groupedByMonth[label] = [];
-                    groupedByMonth[label].push(r);
-                });
+                // Generate last 4 months of history
+                let historyArray = [];
+                for (let i = 0; i < 4; i++) {
+                    const targetDate = new Date();
+                    targetDate.setMonth(targetDate.getMonth() - i);
+                    const y = targetDate.getFullYear();
+                    const m = targetDate.getMonth();
+                    const daysInMonth = getDaysInMonth(y, m);
+                    const monthLabel = targetDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
-                // Ensure the current month always exists even if no logs are present yet
-                const currentMonthLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
-                if (!groupedByMonth[currentMonthLabel]) {
-                    groupedByMonth[currentMonthLabel] = [];
-                }
+                    // A. Calculate Actually Worked Days (Present)
+                    const monthLogs = attendanceLogs.filter(log => {
+                        const ld = new Date(log.date);
+                        return ld.getFullYear() === y && ld.getMonth() === m && !!log.clock_in;
+                    });
+                    const presentDates = new Set(monthLogs.map(l => new Date(l.date).toLocaleDateString('en-CA')));
+                    const presentDaysCount = presentDates.size;
 
-                // Construct historical payroll array
-                const historyArray = Object.keys(groupedByMonth).map(label => {
-                    const records = groupedByMonth[label];
-                    let totalMins = 0;
-                    let presentDays = new Set();
+                    // B. Calculate Paid Leave Days
+                    let paidLeaveDaysCount = 0;
+                    approvedLeaves.forEach(req => {
+                        let curr = new Date(req.from_date);
+                        const end = new Date(req.to_date);
+                        const policy = leavePolicies.find(p => p.leave_name === req.leave_type);
+                        const isPaid = policy ? policy.paid_status === 'Paid' : false; 
 
-                    records.forEach(r => {
-                        if (r.total_hours) {
-                            const [h, m] = r.total_hours.replace(' Hrs', '').split(':').map(Number);
-                            totalMins += (h * 60) + (m || 0);
+                        while (curr <= end) {
+                            if (curr.getFullYear() === y && curr.getMonth() === m) {
+                                if (isPaid) paidLeaveDaysCount++;
+                            }
+                            curr.setDate(curr.getDate() + 1);
                         }
-                        if (r.clock_in) presentDays.add(new Date(r.date).toLocaleDateString());
                     });
 
-                    const hoursWorked = Math.floor(totalMins / 60);
-                    const multiplier = targetHours > 0 ? Math.min(hoursWorked / targetHours, 1) : 1;
+                    // C. Core Calculation Logic (Payable vs Unpayable days)
+                    const totalPayableDays = presentDaysCount + paidLeaveDaysCount;
+                    const unworkedDays = Math.max(daysInMonth - totalPayableDays, 0);
 
-                    return {
-                        monthLabel: label,
-                        targetHours,
-                        hoursWorked,
-                        multiplier,
-                        workingDays: 20, // Standard approx working days
-                        presentDays: presentDays.size,
-                        leaveDays: Math.max(20 - presentDays.size, 0),
-                        grossSalary,
+                    const dailyRate = grossFull / daysInMonth;
+                    
+                    // Exact leaves deduction based on unworked/unpaid days
+                    const calculatedLeavesDeduction = unworkedDays * dailyRate;
+
+                    const totalDeductions = epf + esi + healthInsurance + pt + tds + calculatedLeavesDeduction;
+                    const netSalary = grossFull - totalDeductions;
+
+                    historyArray.push({
+                        monthLabel,
+                        daysInMonth,
+                        presentDays: presentDaysCount,
+                        paidLeaveDays: paidLeaveDaysCount,
+                        unworkedDays,
+                        grossSalary: grossFull,
                         totalDeductions,
                         netSalary,
                         earnings: { basic, hra, conveyance, medical, otherAllowances },
-                        deductions: { epf, esi, healthInsurance, pt, tds, leaves }
-                    };
-                });
+                        deductions: { epf, esi, healthInsurance, pt, tds, leaves: calculatedLeavesDeduction }
+                    });
+                }
 
-                // Sort descending so the newest month is at index 0
-                historyArray.sort((a, b) => new Date(b.monthLabel) - new Date(a.monthLabel));
-
+                // Ensure the current month is selected correctly
+                const currentMonthLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
                 const currentPayroll = historyArray.find(h => h.monthLabel === currentMonthLabel) || historyArray[0];
 
                 setPayrollData({
@@ -192,17 +205,17 @@ const EmployeePayrollCom = () => {
 
             doc.setFont("helvetica", "normal");
             doc.setTextColor(100, 100, 100);
-            doc.text("Pay Period:", 110, 56);
-            doc.text("Working Days:", 110, 64);
-            doc.text("Present Days:", 110, 72);
-            doc.text("Leave Days:", 110, 80);
+            doc.text("Pay Period Days:", 110, 56);
+            doc.text("Present Days:", 110, 64);
+            doc.text("Paid Leaves:", 110, 72);
+            doc.text("Unpaid Leaves:", 110, 80);
 
             doc.setFont("helvetica", "bold");
             doc.setTextColor(1, 10, 31);
-            doc.text(record.monthLabel, 145, 56);
-            doc.text(`${record.workingDays || '20'}`, 145, 64);
-            doc.text(`${record.presentDays || '0'}`, 145, 72);
-            doc.text(`${record.leaveDays || '0'}`, 145, 80);
+            doc.text(`${record.daysInMonth}`, 155, 56);
+            doc.text(`${record.presentDays}`, 155, 64);
+            doc.text(`${record.paidLeaveDays}`, 155, 72);
+            doc.text(`${record.unworkedDays}`, 155, 80);
 
             // 4. Financial Table 
             autoTable(doc, {
@@ -222,7 +235,7 @@ const EmployeePayrollCom = () => {
                     ['Conveyance Allowance', formatCurrency(record.earnings.conveyance), 'Health Insurance', formatCurrency(record.deductions.healthInsurance)],
                     ['Medical Allowance', formatCurrency(record.earnings.medical), 'Professional Tax (PT)', formatCurrency(record.deductions.pt)],
                     ['Other Allowances', formatCurrency(record.earnings.otherAllowances), 'TDS / Income Tax', formatCurrency(record.deductions.tds)],
-                    ['', '', 'Leaves Deduction', formatCurrency(record.deductions.leaves)]
+                    ['', '', 'Leaves Deduction (Unpaid)', formatCurrency(record.deductions.leaves)]
                 ],
             });
 
@@ -267,10 +280,10 @@ const EmployeePayrollCom = () => {
 
     if (loading || !payrollData) {
         return (
-            <div className="min-h-[400px] flex items-center justify-center">
+            <div className="min-h-[400px] flex items-center justify-center w-full">
                 <div className="text-center space-y-3 animate-pulse">
                     <FaMoneyCheckAlt className="text-4xl text-slate-300 mx-auto" />
-                    <p className="text-slate-500 font-semibold">Fetching live salary and attendance records...</p>
+                    <p className="text-sm text-slate-500 font-semibold">Calculating exact payroll from attendance logs...</p>
                 </div>
             </div>
         );
@@ -279,7 +292,7 @@ const EmployeePayrollCom = () => {
     const { currentPayroll, history } = payrollData;
 
     return (
-        <div className="space-y-6 sm:space-y-8 pb-8">
+        <div className="space-y-6 sm:space-y-8 pb-8 w-full overflow-hidden">
 
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -287,7 +300,7 @@ const EmployeePayrollCom = () => {
                     <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight">My Payroll</h1>
                     <p className="text-[13px] sm:text-sm text-slate-500 mt-1">Securely view your live salary structure, tax deductions, and download payslips.</p>
                 </div>
-                <div className="flex w-full sm:w-auto gap-3">
+                <div className="flex w-full sm:w-auto gap-3 shrink-0">
                     <Button onClick={() => downloadPDF(currentPayroll)} variant="outline" icon={FaDownload} className="w-full sm:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm">
                         Download Latest Payslip
                     </Button>
@@ -331,11 +344,13 @@ const EmployeePayrollCom = () => {
                             </div>
 
                             <div className="p-5 sm:p-6">
-                                <div className="mb-6 sm:mb-8 bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 items-start">
-                                    <FaInfoCircle className="text-blue-500 mt-0.5 shrink-0" />
+                                <div className="mb-6 sm:mb-8 bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 items-start shadow-sm">
+                                    <FaInfoCircle className="text-blue-500 mt-0.5 shrink-0 text-lg" />
                                     <div>
-                                        <p className="text-[13px] sm:text-sm font-bold text-[#010a1f]">Real-Time Data Integration</p>
-                                        <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-relaxed">This breakdown pulls your live base financials configured by HR, combined with your actual monthly attendance hours (<strong>{currentPayroll.hoursWorked} Hrs</strong> completed so far this month).</p>
+                                        <p className="text-[13px] sm:text-sm font-bold text-[#010a1f]">Real-Time Attendance Integration</p>
+                                        <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-relaxed">
+                                            Your salary is calculated based strictly on days worked and approved paid leaves. Out of <strong>{currentPayroll.daysInMonth} days</strong> this month, you have <strong>{currentPayroll.presentDays} Present Days</strong> and <strong>{currentPayroll.paidLeaveDays} Paid Leaves</strong>. The remaining <strong>{currentPayroll.unworkedDays} Unworked/Holiday Days</strong> are calculated and deducted automatically below.
+                                        </p>
                                     </div>
                                 </div>
 
@@ -343,7 +358,7 @@ const EmployeePayrollCom = () => {
                                     {/* Earnings Section */}
                                     <div className="space-y-4">
                                         <h3 className="text-xs sm:text-[13px] font-bold text-green-700 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
-                                            <FaPlusCircle /> Earnings
+                                            <FaPlusCircle /> Earnings (Full Month)
                                         </h3>
                                         <div className="space-y-3">
                                             <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Basic Salary</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.basic)}</span></div>
@@ -369,7 +384,7 @@ const EmployeePayrollCom = () => {
                                             <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Health Insurance</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.healthInsurance)}</span></div>
                                             <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Professional Tax</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.pt)}</span></div>
                                             <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">TDS</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.tds)}</span></div>
-                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Leaves</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.leaves)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-[#0437cc] font-bold">Unworked Days Deduction</span><span className="font-bold text-red-600">₹{formatCurrency(currentPayroll.deductions.leaves)}</span></div>
                                         </div>
                                         <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center bg-slate-50 p-3 rounded-lg">
                                             <span className="text-[13px] sm:text-sm font-bold text-[#010a1f]">Total Deductions</span>
@@ -414,7 +429,7 @@ const EmployeePayrollCom = () => {
                                     <thead>
                                         <tr className="border-b border-slate-100 text-[11px] sm:text-[12px] text-slate-400 uppercase tracking-wider bg-slate-50/50">
                                             <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Month</th>
-                                            <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Hours Worked</th>
+                                            <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Present Days</th>
                                             <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Gross</th>
                                             <th className="px-4 sm:px-6 py-4 font-semibold text-right whitespace-nowrap">Net Salary</th>
                                             {activeTab === 'payslips' && <th className="px-4 sm:px-6 py-4 font-semibold text-right">Action</th>}
@@ -427,7 +442,7 @@ const EmployeePayrollCom = () => {
                                                     <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] whitespace-nowrap">{record.monthLabel}</p>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4">
-                                                    <p className="text-[13px] sm:text-sm font-semibold text-slate-600 whitespace-nowrap">{record.hoursWorked} Hrs</p>
+                                                    <p className="text-[13px] sm:text-sm font-semibold text-slate-600 whitespace-nowrap">{record.presentDays} Days</p>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4">
                                                     <p className="text-[13px] sm:text-sm font-bold text-slate-700 whitespace-nowrap">₹{formatCurrency(record.grossSalary)}</p>
