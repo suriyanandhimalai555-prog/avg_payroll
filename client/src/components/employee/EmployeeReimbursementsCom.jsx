@@ -4,12 +4,11 @@ import {
     FaFileInvoiceDollar, FaPlusCircle, FaListUl, FaHistory,
     FaPaperclip, FaPaperPlane, FaRupeeSign, FaCheckCircle, FaClock, FaTimesCircle
 } from 'react-icons/fa';
-import Button from '../common/Button';
-import Input from '../common/Input';
-import Select from '../common/Select';
+import Button from '../../components/common/Button';
+import Input from '../../components/common/Input';
+import Select from '../../components/common/Select';
 import { useAuth } from '../../context/AuthContext';
 
-// FieldWrapper defined OUTSIDE to prevent input focus loss
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full">
         {children}
@@ -92,7 +91,6 @@ const EmployeeReimbursementsCom = () => {
             setErrors({});
             fetchClaims();
 
-            // Auto hide message and switch tabs
             setTimeout(() => {
                 setSubmitMsg({ text: '', type: '' });
                 setActiveTab('my_claims');
@@ -107,29 +105,29 @@ const EmployeeReimbursementsCom = () => {
     };
 
     const getStatusStyle = (status) => {
-        if (status.includes('Approved')) return { icon: FaCheckCircle, color: 'text-teal-700', bg: 'bg-[#eef8f8]' };
-        if (status.includes('Rejected')) return { icon: FaTimesCircle, color: 'text-red-700', bg: 'bg-red-50' };
-        return { icon: FaClock, color: 'text-[#eda439]', bg: 'bg-[#fef9f0]' };
+        if (status.includes('Approved')) return { icon: FaCheckCircle, color: 'text-teal-700', bg: 'bg-[#eef8f8]', border: 'border-teal-100' };
+        if (status.includes('Rejected')) return { icon: FaTimesCircle, color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-100' };
+        return { icon: FaClock, color: 'text-[#eda439]', bg: 'bg-[#fef9f0]', border: 'border-[#eda439]/30' };
     };
 
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-6 sm:space-y-8 pb-8 w-full overflow-hidden">
 
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
-                    <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight">Reimbursements</h1>
-                    <p className="text-sm text-slate-500 mt-1">Submit and track your company expenses for reimbursement.</p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight">Reimbursements</h1>
+                    <p className="text-[13px] sm:text-sm text-slate-500 mt-1">Submit and track your company expenses for reimbursement.</p>
                 </div>
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100">
+            <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100 custom-scrollbar pb-1">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${activeTab === tab.id
+                        className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-lg text-[13px] sm:text-sm font-semibold transition-all whitespace-nowrap ${activeTab === tab.id
                             ? 'bg-[#0437cc]/10 text-[#0437cc]'
                             : 'text-slate-500 hover:bg-slate-50 hover:text-[#010a1f]'
                             }`}
@@ -148,25 +146,25 @@ const EmployeeReimbursementsCom = () => {
 
                     {activeTab === 'submit' && (
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition-all duration-300">
-                            <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-[#0437cc]/10 flex items-center justify-center text-[#0437cc]">
+                            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                                <div className="w-10 h-10 rounded-full bg-[#0437cc]/10 flex items-center justify-center text-[#0437cc] shrink-0">
                                     <FaFileInvoiceDollar className="text-lg" />
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-bold text-[#010a1f]">Submit Claim</h2>
-                                    <p className="text-xs text-slate-400 mt-0.5">Fill out the expense details and upload your receipt</p>
+                                    <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">Submit Claim</h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Fill out the expense details and upload your receipt</p>
                                 </div>
                             </div>
 
-                            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                            <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5 sm:space-y-6">
                                 {/* Success/Error Banner */}
-                                <div className={`transition-all duration-300 overflow-hidden ${submitMsg.text ? 'max-h-24 opacity-100 mb-6' : 'max-h-0 opacity-0 m-0'}`}>
-                                    <div className={`p-3 text-sm font-medium rounded-xl border ${submitMsg.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                <div className={`transition-all duration-300 overflow-hidden ${submitMsg.text ? 'max-h-24 opacity-100 mb-4 sm:mb-6' : 'max-h-0 opacity-0 m-0'}`}>
+                                    <div className={`p-3 text-xs sm:text-sm font-medium rounded-xl border ${submitMsg.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
                                         {submitMsg.text}
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
                                     <FieldWrapper error={errors.expenseType}>
                                         <Select
                                             label="Expense Type *"
@@ -240,7 +238,7 @@ const EmployeeReimbursementsCom = () => {
                                 </div>
 
                                 <div className="pt-4 border-t border-slate-100 flex justify-end">
-                                    <Button type="submit" variant="primary" size="lg" icon={FaPaperPlane} disabled={isSubmitting} className="px-8 shadow-md shadow-[#0437cc]/20">
+                                    <Button type="submit" variant="primary" size="lg" icon={FaPaperPlane} disabled={isSubmitting} className="w-full sm:w-auto sm:px-8 shadow-md shadow-[#0437cc]/20">
                                         {isSubmitting ? 'Submitting...' : 'Submit Claim'}
                                     </Button>
                                 </div>
@@ -251,24 +249,24 @@ const EmployeeReimbursementsCom = () => {
                     {/* MY CLAIMS & HISTORY TABS */}
                     {(activeTab === 'my_claims' || activeTab === 'history') && (
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden h-full flex flex-col">
-                            <div className="p-6 border-b border-slate-100">
-                                <h2 className="text-lg font-bold text-[#010a1f]">{activeTab === 'history' ? 'Claim History' : 'Active Claims'}</h2>
-                                <p className="text-xs text-slate-400 mt-0.5">Track the status of your reimbursements</p>
+                            <div className="p-5 sm:p-6 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">{activeTab === 'history' ? 'Claim History' : 'Active Claims'}</h2>
+                                <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Track the status of your reimbursements</p>
                             </div>
-                            <div className="overflow-x-auto flex-1">
+                            <div className="overflow-x-auto flex-1 w-full">
                                 {loading ? (
                                     <div className="p-8 text-center text-sm text-slate-500">Loading claims...</div>
                                 ) : claims.length === 0 ? (
                                     <div className="p-8 text-center text-sm font-semibold text-slate-400">No reimbursement claims found.</div>
                                 ) : (
-                                    <table className="w-full text-left border-collapse">
+                                    <table className="w-full text-left border-collapse min-w-[700px]">
                                         <thead>
-                                            <tr className="border-b border-slate-100 text-[12px] text-slate-400 uppercase tracking-wider bg-slate-50/50">
-                                                <th className="px-6 py-4 font-semibold">Claim ID</th>
-                                                <th className="px-6 py-4 font-semibold">Type</th>
-                                                <th className="px-6 py-4 font-semibold">Expense Date</th>
-                                                <th className="px-6 py-4 font-semibold">Amount</th>
-                                                <th className="px-6 py-4 font-semibold text-right">Status</th>
+                                            <tr className="border-b border-slate-100 text-[11px] sm:text-[12px] text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                                                <th className="px-4 sm:px-6 py-4 font-semibold">Claim ID</th>
+                                                <th className="px-4 sm:px-6 py-4 font-semibold">Type</th>
+                                                <th className="px-4 sm:px-6 py-4 font-semibold">Expense Date</th>
+                                                <th className="px-4 sm:px-6 py-4 font-semibold">Amount</th>
+                                                <th className="px-4 sm:px-6 py-4 font-semibold text-right">Status</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
@@ -276,23 +274,23 @@ const EmployeeReimbursementsCom = () => {
                                                 const StatusIcon = getStatusStyle(claim.status).icon;
                                                 return (
                                                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                                                        <td className="px-6 py-4">
+                                                        <td className="px-4 sm:px-6 py-4">
                                                             <p className="text-xs font-mono font-bold text-[#0437cc]">{claim.claim_id}</p>
                                                         </td>
-                                                        <td className="px-6 py-4">
-                                                            <p className="text-sm font-bold text-[#010a1f] capitalize">{claim.expense_type}</p>
-                                                            <p className="text-xs text-slate-500 truncate max-w-[150px]">{claim.description}</p>
+                                                        <td className="px-4 sm:px-6 py-4">
+                                                            <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] capitalize">{claim.expense_type}</p>
+                                                            <p className="text-[11px] sm:text-xs text-slate-500 truncate max-w-[150px]">{claim.description}</p>
                                                         </td>
-                                                        <td className="px-6 py-4">
-                                                            <p className="text-xs font-semibold text-slate-600">
+                                                        <td className="px-4 sm:px-6 py-4">
+                                                            <p className="text-[11px] sm:text-xs font-semibold text-slate-600 whitespace-nowrap">
                                                                 {new Date(claim.expense_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                                             </p>
                                                         </td>
-                                                        <td className="px-6 py-4">
-                                                            <p className="text-sm font-bold text-slate-700">₹{parseFloat(claim.amount).toLocaleString('en-IN')}</p>
+                                                        <td className="px-4 sm:px-6 py-4">
+                                                            <p className="text-[13px] sm:text-sm font-bold text-slate-700">₹{parseFloat(claim.amount).toLocaleString('en-IN')}</p>
                                                         </td>
-                                                        <td className="px-6 py-4 text-right flex items-center justify-end gap-1.5 h-full">
-                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold ${getStatusStyle(claim.status).color} ${getStatusStyle(claim.status).bg}`}>
+                                                        <td className="px-4 sm:px-6 py-4 text-right flex items-center justify-end gap-1.5 h-full">
+                                                            <span className={`inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold border ${getStatusStyle(claim.status).color} ${getStatusStyle(claim.status).bg} ${getStatusStyle(claim.status).border} whitespace-nowrap`}>
                                                                 <StatusIcon /> {claim.status}
                                                             </span>
                                                         </td>
@@ -312,10 +310,10 @@ const EmployeeReimbursementsCom = () => {
                 <div className="space-y-6">
 
                     {/* Recent Claims Overview */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 relative overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 relative overflow-hidden">
                         <div className="mb-5 flex justify-between items-center z-10 relative border-b border-slate-100 pb-3">
-                            <h2 className="text-base font-bold text-[#010a1f]">Recent Claims</h2>
-                            <button onClick={() => setActiveTab('my_claims')} className="text-xs font-semibold text-[#0437cc] hover:underline">View All</button>
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f]">Recent Claims</h2>
+                            <button onClick={() => setActiveTab('my_claims')} className="text-[11px] sm:text-xs font-semibold text-[#0437cc] hover:underline">View All</button>
                         </div>
 
                         <div className="space-y-4 relative z-10">
@@ -330,14 +328,14 @@ const EmployeeReimbursementsCom = () => {
                                     <div key={i} className="flex flex-col gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="text-sm font-bold text-[#010a1f]">{claim.expense_type}</p>
-                                                <p className="text-xs text-slate-400">{new Date(claim.expense_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f]">{claim.expense_type}</p>
+                                                <p className="text-[11px] sm:text-xs text-slate-400">{new Date(claim.expense_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                                             </div>
                                             <span className="font-bold text-[#010a1f]">₹{parseFloat(claim.amount).toLocaleString('en-IN')}</span>
                                         </div>
                                         <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-200/60">
-                                            <span className="text-[10px] text-slate-400 font-semibold">{claim.claim_id}</span>
-                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${style.color} ${style.bg}`}>
+                                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-semibold">{claim.claim_id}</span>
+                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold border ${style.color} ${style.bg} ${style.border}`}>
                                                 <StatusIcon /> {claim.status}
                                             </span>
                                         </div>
@@ -350,28 +348,28 @@ const EmployeeReimbursementsCom = () => {
                     </div>
 
                     {/* Approval Flow Info Card */}
-                    <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6">
+                    <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5 sm:p-6">
                         <h2 className="text-sm font-bold text-[#010a1f] mb-4">Reimbursement Flow</h2>
                         <div className="relative border-l-2 border-slate-200 ml-3 space-y-4 pb-2">
-                            <div className="relative pl-6">
+                            <div className="relative pl-5 sm:pl-6">
                                 <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-[#0437cc] border-2 border-white shadow-sm"></div>
-                                <p className="text-sm font-bold text-[#010a1f]">Submit Claim</p>
-                                <p className="text-xs text-slate-500">Employee submits with receipt</p>
+                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f]">Submit Claim</p>
+                                <p className="text-[11px] sm:text-xs text-slate-500">Employee submits with receipt</p>
                             </div>
-                            <div className="relative pl-6">
+                            <div className="relative pl-5 sm:pl-6">
                                 <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-slate-300 border-2 border-white shadow-sm"></div>
-                                <p className="text-sm font-semibold text-slate-600">Manager Review</p>
-                                <p className="text-xs text-slate-500">Manager verifies the expense</p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-600">Manager Review</p>
+                                <p className="text-[11px] sm:text-xs text-slate-500">Manager verifies the expense</p>
                             </div>
-                            <div className="relative pl-6">
+                            <div className="relative pl-5 sm:pl-6">
                                 <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-slate-300 border-2 border-white shadow-sm"></div>
-                                <p className="text-sm font-semibold text-slate-600">HR/Finance Review</p>
-                                <p className="text-xs text-slate-500">Final policy check & approval</p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-600">HR/Finance Review</p>
+                                <p className="text-[11px] sm:text-xs text-slate-500">Final policy check & approval</p>
                             </div>
-                            <div className="relative pl-6">
+                            <div className="relative pl-5 sm:pl-6">
                                 <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-slate-300 border-2 border-white shadow-sm"></div>
-                                <p className="text-sm font-semibold text-slate-600">Payment</p>
-                                <p className="text-xs text-slate-500">Reimbursed with next payroll</p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-600">Payment</p>
+                                <p className="text-[11px] sm:text-xs text-slate-500">Reimbursed with next payroll</p>
                             </div>
                         </div>
                     </div>

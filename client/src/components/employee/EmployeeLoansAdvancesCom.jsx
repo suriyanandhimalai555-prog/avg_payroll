@@ -3,9 +3,9 @@ import {
     FaHandHoldingUsd, FaMoneyBillWave, FaChartPie,
     FaHistory, FaCalendarAlt, FaPaperPlane, FaRupeeSign, FaCheckCircle
 } from 'react-icons/fa';
-import Button from '../common/Button';
-import Input from '../common/Input';
-import Select from '../common/Select';
+import Button from '../../components/common/Button';
+import Input from '../../components/common/Input';
+import Select from '../../components/common/Select';
 
 const EmployeeLoansAdvancesCom = () => {
     // Local state for the advance request form
@@ -36,29 +36,29 @@ const EmployeeLoansAdvancesCom = () => {
     };
 
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-6 sm:space-y-8 pb-8 w-full overflow-hidden">
 
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
-                    <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight">Loans & Advances</h1>
-                    <p className="text-sm text-slate-500 mt-1">Track your active company loans, EMI schedules, and request new advances.</p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight">Loans & Advances</h1>
+                    <p className="text-[13px] sm:text-sm text-slate-500 mt-1">Track your active company loans, EMI schedules, and request new advances.</p>
                 </div>
             </div>
 
             {/* Top Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                 {topCards.map((card, index) => (
                     <div
                         key={index}
-                        className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center justify-between border-l-4 transition-all duration-300 hover:shadow-md hover:-translate-y-1 ${card.border}`}
+                        className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex items-center justify-between border-l-4 transition-all duration-300 hover:shadow-md hover:-translate-y-1 ${card.border}`}
                     >
                         <div>
-                            <p className="text-sm font-semibold text-slate-500 mb-1">{card.title}</p>
-                            <p className="text-3xl font-bold text-[#010a1f] tracking-tight">{card.value}</p>
+                            <p className="text-[13px] sm:text-sm font-semibold text-slate-500 mb-1">{card.title}</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-[#010a1f] tracking-tight">{card.value}</p>
                         </div>
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${card.bg}`}>
-                            <card.icon className={`text-2xl ${card.color}`} />
+                        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 ${card.bg}`}>
+                            <card.icon className={`text-xl sm:text-2xl ${card.color}`} />
                         </div>
                     </div>
                 ))}
@@ -72,44 +72,44 @@ const EmployeeLoansAdvancesCom = () => {
 
                     {/* Active Loan Overview */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
                             <div>
-                                <h2 className="text-lg font-bold text-[#010a1f]">Active Loan Details</h2>
-                                <p className="text-xs text-slate-500 mt-0.5">Personal Medical Emergency Advance</p>
+                                <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">Active Loan Details</h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Personal Medical Emergency Advance</p>
                             </div>
-                            <span className="flex items-center gap-1.5 bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded border border-green-200 shadow-sm uppercase tracking-wider">
+                            <span className="flex items-center justify-center gap-1.5 bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded border border-green-200 shadow-sm uppercase tracking-wider w-full sm:w-auto">
                                 <FaCheckCircle className="text-green-600" /> Active
                             </span>
                         </div>
 
-                        <div className="p-6">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 mb-6">
+                        <div className="p-5 sm:p-6">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 sm:gap-6 mb-6">
                                 <div>
-                                    <p className="text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Total Amount</p>
-                                    <p className="text-lg font-bold text-[#010a1f]">₹50,000</p>
+                                    <p className="text-[10px] sm:text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Total Amount</p>
+                                    <p className="text-base sm:text-lg font-bold text-[#010a1f]">₹50,000</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Monthly EMI</p>
-                                    <p className="text-lg font-bold text-[#0437cc]">₹5,000</p>
+                                    <p className="text-[10px] sm:text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Monthly EMI</p>
+                                    <p className="text-base sm:text-lg font-bold text-[#0437cc]">₹5,000</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Deduction Date</p>
-                                    <p className="text-sm font-bold text-[#010a1f] mt-1 flex items-center gap-1.5">
-                                        <FaCalendarAlt className="text-slate-400" /> End of Month
+                                    <p className="text-[10px] sm:text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Deduction Date</p>
+                                    <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] mt-1 flex items-center gap-1.5">
+                                        <FaCalendarAlt className="text-slate-400 shrink-0" /> <span className="truncate">End of Month</span>
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Remaining</p>
-                                    <p className="text-lg font-bold text-[#f77704]">₹30,000</p>
+                                    <p className="text-[10px] sm:text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Remaining</p>
+                                    <p className="text-base sm:text-lg font-bold text-[#f77704]">₹30,000</p>
                                 </div>
                             </div>
 
                             {/* Repayment Progress Bar */}
-                            <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500">
+                            <div className="mb-2 flex justify-between text-[11px] sm:text-xs font-semibold text-slate-500">
                                 <span>Repayment Progress</span>
                                 <span>40% Paid</span>
                             </div>
-                            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="w-full h-2.5 sm:h-3 bg-slate-100 rounded-full overflow-hidden">
                                 <div className="h-full bg-green-500 rounded-full transition-all duration-500" style={{ width: '40%' }}></div>
                             </div>
                         </div>
@@ -117,46 +117,46 @@ const EmployeeLoansAdvancesCom = () => {
 
                     {/* Payment History Table */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-6 flex items-center justify-between border-b border-slate-100">
+                        <div className="p-5 sm:p-6 flex items-center justify-between border-b border-slate-100">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-[#0437cc]/10 flex items-center justify-center text-[#0437cc]">
+                                <div className="w-10 h-10 rounded-full bg-[#0437cc]/10 flex items-center justify-center text-[#0437cc] shrink-0">
                                     <FaHistory className="text-lg" />
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-bold text-[#010a1f]">Payment History</h2>
-                                    <p className="text-xs text-slate-400 mt-0.5">Automated payroll deductions</p>
+                                    <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">Payment History</h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Automated payroll deductions</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
+                        <div className="overflow-x-auto w-full">
+                            <table className="w-full text-left border-collapse min-w-[600px]">
                                 <thead>
-                                    <tr className="border-b border-slate-100 text-[12px] text-slate-400 uppercase tracking-wider bg-slate-50/50">
-                                        <th className="px-6 py-4 font-semibold">Payroll Month</th>
-                                        <th className="px-6 py-4 font-semibold">Deduction Date</th>
-                                        <th className="px-6 py-4 font-semibold">Method</th>
-                                        <th className="px-6 py-4 font-semibold">Amount</th>
-                                        <th className="px-6 py-4 font-semibold text-right">Status</th>
+                                    <tr className="border-b border-slate-100 text-[11px] sm:text-[12px] text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                                        <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Payroll Month</th>
+                                        <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Deduction Date</th>
+                                        <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Method</th>
+                                        <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Amount</th>
+                                        <th className="px-4 sm:px-6 py-4 font-semibold text-right whitespace-nowrap">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {paymentHistory.map((record, i) => (
                                         <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <p className="text-sm font-bold text-[#010a1f]">{record.month}</p>
+                                            <td className="px-4 sm:px-6 py-4">
+                                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] whitespace-nowrap">{record.month}</p>
                                             </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600 font-medium">
+                                            <td className="px-4 sm:px-6 py-4 text-[13px] sm:text-sm text-slate-600 font-medium whitespace-nowrap">
                                                 {record.date}
                                             </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600 font-medium">
+                                            <td className="px-4 sm:px-6 py-4 text-[13px] sm:text-sm text-slate-600 font-medium whitespace-nowrap">
                                                 {record.method}
                                             </td>
-                                            <td className="px-6 py-4 text-sm font-bold text-[#0437cc]">
+                                            <td className="px-4 sm:px-6 py-4 text-[13px] sm:text-sm font-bold text-[#0437cc] whitespace-nowrap">
                                                 {record.amount}
                                             </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold text-green-700 bg-green-100">
+                                            <td className="px-4 sm:px-6 py-4 text-right whitespace-nowrap">
+                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold text-green-700 bg-green-100 border border-green-200">
                                                     {record.status}
                                                 </span>
                                             </td>
@@ -171,14 +171,14 @@ const EmployeeLoansAdvancesCom = () => {
                 {/* Right Side: Request New Advance Form */}
                 <div className="space-y-6">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-6 border-b border-slate-100">
-                            <h2 className="text-base font-bold text-[#010a1f]">Request Advance</h2>
-                            <p className="text-xs text-slate-400 mt-1">Submit a new salary advance request</p>
+                        <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/50">
+                            <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">Request Advance</h2>
+                            <p className="text-[11px] sm:text-xs text-slate-400 mt-1">Submit a new salary advance request</p>
                         </div>
 
-                        <div className="p-6 space-y-5">
+                        <div className="p-5 sm:p-6 space-y-5 sm:space-y-6">
                             {/* Warning / Info Alert */}
-                            <div className="bg-[#fef9f0] border border-[#eda439]/30 rounded-lg p-3 flex gap-3 text-[#eda439] text-xs font-medium leading-relaxed">
+                            <div className="bg-[#fef9f0] border border-[#eda439]/30 rounded-xl p-3 sm:p-4 flex gap-3 text-[#eda439] text-[11px] sm:text-xs font-medium leading-relaxed">
                                 <p>You currently have an active loan. Additional advances are subject to strict HR approval and available limits.</p>
                             </div>
 
@@ -207,7 +207,7 @@ const EmployeeLoansAdvancesCom = () => {
                             />
 
                             <div className="flex flex-col gap-1.5 w-full">
-                                <label className="text-sm font-semibold text-[#010a1f]">
+                                <label className="text-[13px] sm:text-sm font-semibold text-[#010a1f]">
                                     Reason <span className="text-red-500">*</span>
                                 </label>
                                 <textarea
@@ -221,7 +221,7 @@ const EmployeeLoansAdvancesCom = () => {
                             </div>
 
                             <div className="pt-2 border-t border-slate-100">
-                                <Button variant="primary" fullWidth icon={FaPaperPlane} className="shadow-md shadow-[#0437cc]/20">
+                                <Button variant="primary" fullWidth icon={FaPaperPlane} className="shadow-md shadow-[#0437cc]/20 py-2.5 sm:py-3 text-[13px] sm:text-sm">
                                     Submit Request
                                 </Button>
                             </div>

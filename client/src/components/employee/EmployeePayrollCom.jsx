@@ -23,7 +23,7 @@ const EmployeePayrollCom = () => {
         { id: 'salary_details', label: 'Salary Details', icon: FaMoneyCheckAlt },
         { id: 'payslips', label: 'Payslips', icon: FaFileInvoiceDollar },
         { id: 'salary_history', label: 'Salary History', icon: FaHistory },
-        { id: 'tax_deductions', label: 'Tax / Deduction Details', icon: FaPercentage },
+        { id: 'tax_deductions', label: 'Tax / Deductions', icon: FaPercentage },
     ];
 
     const formatCurrency = (amount) => {
@@ -282,25 +282,25 @@ const EmployeePayrollCom = () => {
         <div className="space-y-6 sm:space-y-8 pb-8">
 
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
-                    <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight">My Payroll</h1>
-                    <p className="text-sm text-slate-500 mt-1">Securely view your live salary structure, tax deductions, and download payslips.</p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight">My Payroll</h1>
+                    <p className="text-[13px] sm:text-sm text-slate-500 mt-1">Securely view your live salary structure, tax deductions, and download payslips.</p>
                 </div>
-                <div className="flex gap-3">
-                    <Button onClick={() => downloadPDF(currentPayroll)} variant="outline" icon={FaDownload} className="border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm w-full sm:w-auto">
+                <div className="flex w-full sm:w-auto gap-3">
+                    <Button onClick={() => downloadPDF(currentPayroll)} variant="outline" icon={FaDownload} className="w-full sm:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm">
                         Download Latest Payslip
                     </Button>
                 </div>
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100 custom-scrollbar">
+            <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100 custom-scrollbar pb-1">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${activeTab === tab.id
+                        className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-lg text-[13px] sm:text-sm font-semibold transition-all whitespace-nowrap ${activeTab === tab.id
                             ? 'bg-[#0437cc]/10 text-[#0437cc]'
                             : 'text-slate-500 hover:bg-slate-50 hover:text-[#010a1f]'
                             }`}
@@ -320,80 +320,80 @@ const EmployeePayrollCom = () => {
                     {/* 1. SALARY DETAILS TAB */}
                     {activeTab === 'salary_details' && (
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition-all">
-                            <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
                                 <div>
-                                    <h2 className="text-lg font-bold text-[#010a1f]">Monthly Salary Breakdown</h2>
-                                    <p className="text-xs text-slate-500 mt-0.5">Payslip context for {currentPayroll.monthLabel}</p>
+                                    <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">Monthly Salary Breakdown</h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Payslip context for {currentPayroll.monthLabel}</p>
                                 </div>
-                                <span className="flex items-center gap-1.5 bg-white text-slate-500 text-[10px] font-bold px-2.5 py-1 rounded border border-slate-200 shadow-sm uppercase tracking-wider">
+                                <span className="flex items-center justify-center gap-1.5 bg-white text-slate-500 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-md border border-slate-200 shadow-sm uppercase tracking-wider w-full sm:w-auto">
                                     <FaLock className="text-slate-400" /> Secure
                                 </span>
                             </div>
 
-                            <div className="p-4 sm:p-6">
-                                <div className="mb-8 bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 items-start">
+                            <div className="p-5 sm:p-6">
+                                <div className="mb-6 sm:mb-8 bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 items-start">
                                     <FaInfoCircle className="text-blue-500 mt-0.5 shrink-0" />
                                     <div>
-                                        <p className="text-sm font-bold text-[#010a1f]">Real-Time Data Integration</p>
-                                        <p className="text-xs text-slate-600 mt-1">This breakdown pulls your live base financials configured by HR, combined with your actual monthly attendance hours (<strong>{currentPayroll.hoursWorked} Hrs</strong> completed so far this month).</p>
+                                        <p className="text-[13px] sm:text-sm font-bold text-[#010a1f]">Real-Time Data Integration</p>
+                                        <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-relaxed">This breakdown pulls your live base financials configured by HR, combined with your actual monthly attendance hours (<strong>{currentPayroll.hoursWorked} Hrs</strong> completed so far this month).</p>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
                                     {/* Earnings Section */}
                                     <div className="space-y-4">
-                                        <h3 className="text-[13px] font-bold text-green-700 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
+                                        <h3 className="text-xs sm:text-[13px] font-bold text-green-700 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
                                             <FaPlusCircle /> Earnings
                                         </h3>
                                         <div className="space-y-3">
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">Basic Salary</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.basic)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">HRA</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.hra)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">Conveyance</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.conveyance)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">Medical</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.medical)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">Other Allowances</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.otherAllowances)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Basic Salary</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.basic)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">HRA</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.hra)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Conveyance</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.conveyance)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Medical</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.medical)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Other Allowances</span><span className="font-semibold text-slate-700">₹{formatCurrency(currentPayroll.earnings.otherAllowances)}</span></div>
                                         </div>
                                         <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center bg-slate-50 p-3 rounded-lg">
-                                            <span className="font-bold text-[#010a1f]">Gross Salary</span>
-                                            <span className="font-bold text-green-700 text-base">₹{formatCurrency(currentPayroll.grossSalary)}</span>
+                                            <span className="text-[13px] sm:text-sm font-bold text-[#010a1f]">Gross Salary</span>
+                                            <span className="text-sm sm:text-base font-bold text-green-700">₹{formatCurrency(currentPayroll.grossSalary)}</span>
                                         </div>
                                     </div>
 
                                     {/* Deductions Section */}
                                     <div className="space-y-4">
-                                        <h3 className="text-[13px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
+                                        <h3 className="text-xs sm:text-[13px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
                                             <FaMinusCircle /> Deductions
                                         </h3>
                                         <div className="space-y-3">
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">EPF</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.epf)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">ESI</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.esi)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">Health Insurance</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.healthInsurance)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">Professional Tax</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.pt)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">TDS</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.tds)}</span></div>
-                                            <div className="flex justify-between text-sm"><span className="text-slate-500">Leaves</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.leaves)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">EPF</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.epf)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">ESI</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.esi)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Health Insurance</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.healthInsurance)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Professional Tax</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.pt)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">TDS</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.tds)}</span></div>
+                                            <div className="flex justify-between text-[13px] sm:text-sm"><span className="text-slate-500">Leaves</span><span className="font-semibold text-red-600">₹{formatCurrency(currentPayroll.deductions.leaves)}</span></div>
                                         </div>
                                         <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center bg-slate-50 p-3 rounded-lg">
-                                            <span className="font-bold text-[#010a1f]">Total Deductions</span>
-                                            <span className="font-bold text-red-600 text-base">- ₹{formatCurrency(currentPayroll.totalDeductions)}</span>
+                                            <span className="text-[13px] sm:text-sm font-bold text-[#010a1f]">Total Deductions</span>
+                                            <span className="text-sm sm:text-base font-bold text-red-600">- ₹{formatCurrency(currentPayroll.totalDeductions)}</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Net Salary Highlight Box */}
-                                <div className="mt-8 bg-[#0437cc]/5 border border-[#0437cc]/20 rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                                    <div className="flex items-center gap-4">
+                                <div className="mt-8 bg-[#0437cc]/5 border border-[#0437cc]/20 rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                                    <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto">
                                         <div className="w-12 h-12 rounded-full bg-[#0437cc] text-white flex items-center justify-center shrink-0 shadow-md shadow-[#0437cc]/30">
                                             <FaRupeeSign className="text-xl" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-slate-600 uppercase tracking-wide">Net Take Home Salary</p>
-                                            <p className="text-xs text-slate-500 mt-0.5">(Gross Salary - Total Deductions)</p>
+                                            <p className="text-[13px] sm:text-sm font-bold text-slate-600 uppercase tracking-wide">Net Take Home Salary</p>
+                                            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">(Gross Salary - Total Deductions)</p>
                                         </div>
                                     </div>
                                     <h2 className="text-3xl sm:text-4xl font-extrabold text-[#0437cc] tracking-tight">
                                         ₹{formatCurrency(currentPayroll.netSalary)}
                                     </h2>
                                 </div>
-                                <p className="text-center text-[10px] text-slate-400 mt-6 pt-4 border-t border-slate-50">
+                                <p className="text-center text-[9px] sm:text-[10px] text-slate-400 mt-6 pt-4 border-t border-slate-50">
                                     * Final payout may vary slightly subject to exact EOM leave calculations and tax audits.
                                 </p>
                             </div>
@@ -403,43 +403,43 @@ const EmployeePayrollCom = () => {
                     {/* 2. PAYSLIPS & HISTORY TABS */}
                     {(activeTab === 'payslips' || activeTab === 'salary_history') && (
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden h-full flex flex-col">
-                            <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <div className="p-5 sm:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                                 <div>
-                                    <h2 className="text-lg font-bold text-[#010a1f]">{activeTab === 'payslips' ? 'Payslip Documents' : 'Salary History'}</h2>
-                                    <p className="text-xs text-slate-500 mt-0.5">Records for the last 4 months</p>
+                                    <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">{activeTab === 'payslips' ? 'Payslip Documents' : 'Salary History'}</h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Records for the last 4 months</p>
                                 </div>
                             </div>
                             <div className="overflow-x-auto flex-1 w-full">
-                                <table className="w-full text-left border-collapse min-w-[500px]">
+                                <table className="w-full text-left border-collapse min-w-[700px]">
                                     <thead>
-                                        <tr className="border-b border-slate-100 text-[12px] text-slate-400 uppercase tracking-wider bg-slate-50/50">
-                                            <th className="px-6 py-4 font-semibold whitespace-nowrap">Month</th>
-                                            <th className="px-6 py-4 font-semibold whitespace-nowrap">Hours Worked</th>
-                                            <th className="px-6 py-4 font-semibold whitespace-nowrap">Gross</th>
-                                            <th className="px-6 py-4 font-semibold text-right whitespace-nowrap">Net Salary</th>
-                                            {activeTab === 'payslips' && <th className="px-6 py-4 font-semibold text-right">Action</th>}
+                                        <tr className="border-b border-slate-100 text-[11px] sm:text-[12px] text-slate-400 uppercase tracking-wider bg-slate-50/50">
+                                            <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Month</th>
+                                            <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Hours Worked</th>
+                                            <th className="px-4 sm:px-6 py-4 font-semibold whitespace-nowrap">Gross</th>
+                                            <th className="px-4 sm:px-6 py-4 font-semibold text-right whitespace-nowrap">Net Salary</th>
+                                            {activeTab === 'payslips' && <th className="px-4 sm:px-6 py-4 font-semibold text-right">Action</th>}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {history.map((record, i) => (
                                             <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <p className="text-sm font-bold text-[#010a1f] whitespace-nowrap">{record.monthLabel}</p>
+                                                <td className="px-4 sm:px-6 py-4">
+                                                    <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] whitespace-nowrap">{record.monthLabel}</p>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <p className="text-sm font-semibold text-slate-600 whitespace-nowrap">{record.hoursWorked} Hrs</p>
+                                                <td className="px-4 sm:px-6 py-4">
+                                                    <p className="text-[13px] sm:text-sm font-semibold text-slate-600 whitespace-nowrap">{record.hoursWorked} Hrs</p>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <p className="text-sm font-bold text-slate-700 whitespace-nowrap">₹{formatCurrency(record.grossSalary)}</p>
+                                                <td className="px-4 sm:px-6 py-4">
+                                                    <p className="text-[13px] sm:text-sm font-bold text-slate-700 whitespace-nowrap">₹{formatCurrency(record.grossSalary)}</p>
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <p className="text-sm font-bold text-green-700 whitespace-nowrap">₹{formatCurrency(record.netSalary)}</p>
+                                                <td className="px-4 sm:px-6 py-4 text-right">
+                                                    <p className="text-[13px] sm:text-sm font-bold text-green-700 whitespace-nowrap">₹{formatCurrency(record.netSalary)}</p>
                                                 </td>
                                                 {activeTab === 'payslips' && (
-                                                    <td className="px-6 py-4 text-right whitespace-nowrap">
+                                                    <td className="px-4 sm:px-6 py-4 text-right whitespace-nowrap">
                                                         <div className="flex gap-2 justify-end">
                                                             <button onClick={() => downloadPDF(record)} className="p-2 text-slate-400 hover:text-[#0437cc] transition-colors rounded hover:bg-[#0437cc]/10" title="Download">
-                                                                <FaDownload className="text-sm" />
+                                                                <FaDownload className="text-[13px] sm:text-sm" />
                                                             </button>
                                                         </div>
                                                     </td>
@@ -455,10 +455,10 @@ const EmployeePayrollCom = () => {
                     {/* 3. TAX DEDUCTIONS TAB */}
                     {activeTab === 'tax_deductions' && (
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 h-full flex flex-col items-center justify-center text-center">
-                            <FaPercentage className="text-5xl text-slate-200 mb-4" />
-                            <h2 className="text-lg font-bold text-[#010a1f]">Tax & Deductions Portal</h2>
-                            <p className="text-sm mt-1 max-w-sm text-slate-500">Submit your 80C, 80D, and HRA proofs to optimize your tax deductions before the financial year ends.</p>
-                            <Button variant="outline" size="sm" className="mt-6 text-[#0437cc] border-[#0437cc]">Upload Declarations</Button>
+                            <FaPercentage className="text-4xl sm:text-5xl text-slate-200 mb-4" />
+                            <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">Tax & Deductions Portal</h2>
+                            <p className="text-[13px] sm:text-sm mt-1.5 max-w-sm text-slate-500 leading-relaxed">Submit your 80C, 80D, and HRA proofs to optimize your tax deductions before the financial year ends.</p>
+                            <Button variant="outline" size="sm" className="mt-6 text-[#0437cc] border-[#0437cc] w-full sm:w-auto">Upload Declarations</Button>
                         </div>
                     )}
 
@@ -468,43 +468,43 @@ const EmployeePayrollCom = () => {
                 <div className="space-y-6">
 
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-6 border-b border-slate-100">
-                            <h2 className="text-base font-bold text-[#010a1f]">Recent Payslips</h2>
-                            <p className="text-xs text-slate-400 mt-1">Download your last 3 months</p>
+                        <div className="p-5 sm:p-6 border-b border-slate-100">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f]">Recent Payslips</h2>
+                            <p className="text-[11px] sm:text-xs text-slate-400 mt-1">Download your last 3 months</p>
                         </div>
 
                         <div className="p-4 space-y-2">
                             {history.slice(0, 3).map((record, i) => (
                                 <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-colors group">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
                                         <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 group-hover:bg-white group-hover:text-[#0437cc] transition-colors border border-slate-200">
-                                            <FaFileInvoiceDollar />
+                                            <FaFileInvoiceDollar size={14} />
                                         </div>
-                                        <span className="text-sm font-semibold text-[#010a1f]">{record.monthLabel}</span>
+                                        <span className="text-[13px] sm:text-sm font-semibold text-[#010a1f] truncate">{record.monthLabel}</span>
                                     </div>
-                                    <div className="flex gap-1">
+                                    <div className="flex gap-1 shrink-0">
                                         <button onClick={() => downloadPDF(record)} className="p-2 text-slate-400 hover:text-[#0437cc] transition-colors rounded hover:bg-[#0437cc]/10" title="Download">
-                                            <FaDownload className="text-sm" />
+                                            <FaDownload size={14} />
                                         </button>
                                     </div>
                                 </div>
                             ))}
                         </div>
                         <div className="p-4 bg-slate-50 border-t border-slate-100">
-                            <Button variant="ghost" fullWidth onClick={() => setActiveTab('payslips')} className="text-[#0437cc] hover:bg-[#0437cc]/5 font-semibold text-sm">
+                            <Button variant="ghost" fullWidth onClick={() => setActiveTab('payslips')} className="text-[#0437cc] hover:bg-[#0437cc]/5 font-semibold text-[13px] sm:text-sm">
                                 View All Payslips
                             </Button>
                         </div>
                     </div>
 
-                    <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6">
+                    <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5 sm:p-6">
                         <h2 className="text-sm font-bold text-[#010a1f] mb-3 flex items-center gap-2">
                             <FaPercentage className="text-slate-400" /> Tax Overview
                         </h2>
-                        <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                        <p className="text-[11px] sm:text-xs text-slate-500 leading-relaxed mb-4">
                             Ensure your investment declarations are up to date to optimize your tax deductions before the financial year ends.
                         </p>
-                        <Button variant="outline" size="sm" fullWidth onClick={() => setActiveTab('tax_deductions')} className="bg-white border-slate-200 text-slate-600 hover:text-[#0437cc]">
+                        <Button variant="outline" size="sm" fullWidth onClick={() => setActiveTab('tax_deductions')} className="bg-white border-slate-200 text-slate-600 hover:text-[#0437cc] text-[13px] sm:text-sm py-2">
                             Submit Declarations
                         </Button>
                     </div>

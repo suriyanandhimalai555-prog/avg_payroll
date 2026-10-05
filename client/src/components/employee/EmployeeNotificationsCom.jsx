@@ -3,10 +3,10 @@ import {
     FaBell, FaFileInvoiceDollar, FaPlaneDeparture,
     FaRupeeSign, FaUserClock, FaCheckDouble
 } from 'react-icons/fa';
-import Button from '../common/Button';
+import Button from '../../components/common/Button';
 
 const EmployeeNotificationsCom = () => {
-    // Notification data based on your requested flow
+    // Notification data
     const [notifications, setNotifications] = useState([
         {
             id: 1,
@@ -65,26 +65,26 @@ const EmployeeNotificationsCom = () => {
     const unreadCount = notifications.filter(n => n.unread).length;
 
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-6 sm:space-y-8 pb-8 w-full overflow-hidden">
 
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-[#0437cc]/10 flex items-center justify-center text-[#0437cc] shrink-0">
-                        <FaBell className="text-xl" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#0437cc]/10 flex items-center justify-center text-[#0437cc] shrink-0">
+                        <FaBell className="text-lg sm:text-xl" />
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight">Notifications</h1>
-                        <p className="text-sm text-slate-500 mt-0.5">Stay updated with your latest alerts and approvals.</p>
+                    <div className="min-w-0">
+                        <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">Notifications</h1>
+                        <p className="text-[13px] sm:text-sm text-slate-500 mt-0.5 truncate">Stay updated with your latest alerts and approvals.</p>
                     </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex w-full sm:w-auto mt-2 sm:mt-0">
                     <Button
                         variant="outline"
                         icon={FaCheckDouble}
                         onClick={markAllAsRead}
                         disabled={unreadCount === 0}
-                        className="border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#0437cc]"
+                        className="w-full sm:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#0437cc] py-2 sm:py-2.5 text-[13px] sm:text-sm"
                     >
                         Mark all as read
                     </Button>
@@ -95,10 +95,10 @@ const EmployeeNotificationsCom = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
 
                 {/* Header */}
-                <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                    <h2 className="text-base font-bold text-[#010a1f]">Recent Alerts</h2>
+                <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                    <h2 className="text-sm sm:text-base font-bold text-[#010a1f]">Recent Alerts</h2>
                     {unreadCount > 0 && (
-                        <span className="bg-[#f77704] text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm">
+                        <span className="bg-[#f77704] text-white text-[10px] sm:text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm tracking-wide">
                             {unreadCount} Unread
                         </span>
                     )}
@@ -110,34 +110,34 @@ const EmployeeNotificationsCom = () => {
                         <div
                             key={notif.id}
                             onClick={() => markAsRead(notif.id)}
-                            className={`p-5 flex items-start gap-4 transition-colors cursor-pointer group ${notif.unread ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/40 hover:bg-slate-50/80'
+                            className={`p-4 sm:p-5 flex items-start gap-3 sm:gap-4 transition-colors cursor-pointer group ${notif.unread ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/40 hover:bg-slate-50/80'
                                 }`}
                         >
                             {/* Visual Unread Indicator (Dot) */}
                             <div className="mt-2 shrink-0 w-2.5 flex justify-center">
                                 {notif.unread ? (
-                                    <div className="w-2.5 h-2.5 rounded-full bg-[#0437cc] shadow-sm shadow-[#0437cc]/40 ring-4 ring-[#0437cc]/10"></div>
+                                    <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#0437cc] shadow-sm shadow-[#0437cc]/40 ring-[3px] sm:ring-4 ring-[#0437cc]/10"></div>
                                 ) : (
                                     <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
                                 )}
                             </div>
 
                             {/* Icon */}
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-transparent group-hover:border-white shadow-sm ${notif.bg} ${notif.color} transition-all`}>
-                                <notif.icon className="text-lg" />
+                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 border border-transparent group-hover:border-white shadow-sm ${notif.bg} ${notif.color} transition-all`}>
+                                <notif.icon className="text-base sm:text-lg" />
                             </div>
 
                             {/* Content */}
                             <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-2 mb-1">
-                                    <p className={`text-sm truncate ${notif.unread ? 'font-bold text-[#010a1f]' : 'font-semibold text-slate-700'}`}>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 mb-1">
+                                    <p className={`text-[13px] sm:text-sm truncate pr-2 ${notif.unread ? 'font-bold text-[#010a1f]' : 'font-semibold text-slate-700'}`}>
                                         {notif.title}
                                     </p>
-                                    <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">
+                                    <span className="text-[10px] sm:text-[11px] font-medium text-slate-400 whitespace-nowrap">
                                         {notif.time}
                                     </span>
                                 </div>
-                                <p className={`text-sm ${notif.unread ? 'text-slate-600 font-medium' : 'text-slate-500'}`}>
+                                <p className={`text-[13px] sm:text-sm leading-relaxed ${notif.unread ? 'text-slate-600 font-medium' : 'text-slate-500'}`}>
                                     {notif.message}
                                 </p>
                             </div>
@@ -147,18 +147,18 @@ const EmployeeNotificationsCom = () => {
 
                 {/* Empty State / Footer */}
                 {notifications.length === 0 && (
-                    <div className="p-12 flex flex-col items-center justify-center text-center">
-                        <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 mb-4 border border-slate-100">
-                            <FaBell className="text-2xl" />
+                    <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 mb-4 border border-slate-100">
+                            <FaBell className="text-xl sm:text-2xl" />
                         </div>
-                        <h3 className="text-base font-bold text-[#010a1f]">No notifications</h3>
-                        <p className="text-sm text-slate-500 mt-1">You're all caught up! Check back later for updates.</p>
+                        <h3 className="text-sm sm:text-base font-bold text-[#010a1f]">No notifications</h3>
+                        <p className="text-[13px] sm:text-sm text-slate-500 mt-1 max-w-xs">You're all caught up! Check back later for updates.</p>
                     </div>
                 )}
 
                 {notifications.length > 0 && (
-                    <div className="p-4 border-t border-slate-100 bg-slate-50 text-center">
-                        <button className="text-sm font-semibold text-[#0437cc] hover:underline transition-all">
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 text-center hover:bg-slate-100 transition-colors cursor-pointer">
+                        <button className="text-[13px] sm:text-sm font-bold text-[#0437cc]">
                             View Older Notifications
                         </button>
                     </div>

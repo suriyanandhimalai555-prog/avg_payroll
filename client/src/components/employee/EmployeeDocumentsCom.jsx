@@ -3,12 +3,12 @@ import {
     FaFolderOpen, FaFilePdf, FaEye, FaDownload,
     FaSearch, FaFileArchive, FaFileWord, FaBuilding
 } from 'react-icons/fa';
-import Input from '../common/Input';
+import Input from '../../components/common/Input';
 
 const EmployeeDocumentsCom = () => {
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Categorized Document Data matching the requested flow
+    // Categorized Document Data 
     const documentCategories = [
         {
             categoryName: 'Official Letters',
@@ -46,22 +46,22 @@ const EmployeeDocumentsCom = () => {
     // Helper to render correct file icon based on type
     const getFileIcon = (type) => {
         switch (type) {
-            case 'pdf': return <FaFilePdf className="text-red-500 text-xl" />;
-            case 'zip': return <FaFileArchive className="text-indigo-500 text-xl" />;
-            default: return <FaFileWord className="text-blue-500 text-xl" />;
+            case 'pdf': return <FaFilePdf className="text-red-500 text-lg sm:text-xl" />;
+            case 'zip': return <FaFileArchive className="text-indigo-500 text-lg sm:text-xl" />;
+            default: return <FaFileWord className="text-blue-500 text-lg sm:text-xl" />;
         }
     };
 
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-6 sm:space-y-8 pb-8 w-full overflow-hidden">
 
             {/* Page Header with Search */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div>
-                    <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight">My Documents</h1>
-                    <p className="text-sm text-slate-500 mt-1">Access your official company records and policy documents securely.</p>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
+                <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight">My Documents</h1>
+                    <p className="text-[13px] sm:text-sm text-slate-500 mt-1 truncate">Access your official company records and policy documents securely.</p>
                 </div>
-                <div className="w-full md:w-72">
+                <div className="w-full md:w-80 shrink-0">
                     <Input
                         placeholder="Search documents..."
                         icon={FaSearch}
@@ -78,43 +78,43 @@ const EmployeeDocumentsCom = () => {
                     <div key={catIndex} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
 
                         {/* Category Header */}
-                        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
+                        <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${category.bg} ${category.color}`}>
-                                <category.icon className="text-lg" />
+                                <category.icon className="text-base sm:text-lg" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-[#010a1f]">{category.categoryName}</h2>
-                                <p className="text-xs text-slate-400 mt-0.5">{category.docs.length} Documents</p>
+                                <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">{category.categoryName}</h2>
+                                <p className="text-[11px] sm:text-xs font-semibold text-slate-400 mt-0.5">{category.docs.length} Documents</p>
                             </div>
                         </div>
 
                         {/* Documents List */}
                         <div className="divide-y divide-slate-100">
                             {category.docs.map((doc, docIndex) => (
-                                <div key={docIndex} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors group">
+                                <div key={docIndex} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors group">
 
                                     {/* Document Info */}
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center justify-center shrink-0">
+                                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center justify-center shrink-0">
                                             {getFileIcon(doc.type)}
                                         </div>
-                                        <div>
-                                            <p className="text-sm font-bold text-[#010a1f]">{doc.title}</p>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <p className="text-xs font-semibold text-[#0437cc] bg-[#0437cc]/10 px-2 py-0.5 rounded">
+                                        <div className="min-w-0">
+                                            <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{doc.title}</p>
+                                            <div className="flex flex-wrap items-center gap-1 sm:gap-2 mt-1">
+                                                <p className="text-[10px] sm:text-xs font-semibold text-[#0437cc] bg-[#0437cc]/10 px-2 py-0.5 rounded truncate max-w-[180px] sm:max-w-[300px]">
                                                     {doc.filename}
                                                 </p>
-                                                <span className="text-xs text-slate-400 hidden sm:inline-block">• {doc.size}</span>
+                                                <span className="text-[10px] sm:text-xs font-medium text-slate-400 shrink-0">• {doc.size}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex items-center gap-2 sm:ml-auto">
-                                        <button className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-white hover:text-[#0437cc] hover:border-[#0437cc]/30 shadow-sm transition-all">
+                                    <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto shrink-0 mt-2 sm:mt-0">
+                                        <button className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-white hover:text-[#0437cc] hover:border-[#0437cc]/30 shadow-sm transition-all">
                                             <FaEye className="text-sm" /> View
                                         </button>
-                                        <button className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-[#0437cc] bg-[#0437cc]/10 border border-transparent rounded-lg hover:bg-[#0437cc] hover:text-white shadow-sm transition-all">
+                                        <button className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-bold text-[#0437cc] bg-[#0437cc]/10 border border-transparent rounded-lg hover:bg-[#0437cc] hover:text-white shadow-sm transition-all">
                                             <FaDownload className="text-sm" /> Download
                                         </button>
                                     </div>
