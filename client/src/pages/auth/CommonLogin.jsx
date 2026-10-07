@@ -179,8 +179,8 @@ const CommonLogin = () => {
                                 {successMsg && <div className="bg-green-50 text-green-700 p-2.5 sm:p-3 rounded-xl text-[11px] sm:text-[12px] font-semibold text-center border border-green-100 animate-in fade-in">{successMsg}</div>}
 
                                 <div className="pt-2 sm:pt-4">
-                                    <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full !py-3 sm:!py-3.5 !text-xs sm:!text-[14px] shadow-lg shadow-[#0437cc]/25 flex items-center justify-center gap-2">
-                                        {isSubmitting ? <><FaSpinner className="animate-spin text-sm sm:text-lg" /> Authenticating...</> : <><FaSignInAlt className="text-sm sm:text-lg" /> Sign In to Portal</>}
+                                    <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full !py-3 sm:!py-3.5 !text-xs sm:!text-[14px] shadow-lg shadow-[#0437cc]/25">
+                                        {isSubmitting ? <div className="flex items-center justify-center gap-2"><FaSpinner className="animate-spin text-sm sm:text-lg" /> Authenticating...</div> : <div className='flex items-center justify-center gap-2'><FaSignInAlt className="text-sm sm:text-lg" /> Sign In to Portal</div>}
                                     </Button>
                                 </div>
                             </form>
