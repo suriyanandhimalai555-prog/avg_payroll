@@ -262,7 +262,7 @@ const EmployeeDashboardCom = () => {
     }
 
     return (
-        <div className="space-y-6 md:space-y-8 pb-8">
+        <div className="space-y-6 sm:space-y-8 pb-8 relative w-full overflow-hidden">
             <style>
                 {`
                     @keyframes pulse-clock {
@@ -275,21 +275,21 @@ const EmployeeDashboardCom = () => {
             </style>
 
             {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div>
-                    <h1 className="text-xl md:text-2xl font-bold text-[#010a1f] tracking-tight">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100">
+                <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">
                         Good Morning, {user?.first_name} {user?.last_name} 👋
                     </h1>
-                    <p className="text-sm text-slate-500 mt-1">Have a productive day!</p>
+                    <p className="text-[13px] sm:text-sm text-slate-500 mt-1 truncate">Have a productive day!</p>
                 </div>
-                <div className="flex w-full sm:w-auto gap-3">
+                <div className="flex w-full sm:w-auto gap-3 shrink-0">
                     {!isClockedIn ? (
                         <Button
                             variant="outline"
                             icon={FaSignInAlt}
                             onClick={handleCheckIn}
                             fullWidth
-                            className="sm:w-auto border-green-500 text-green-600 hover:bg-green-500 hover:text-white shadow-sm"
+                            className="sm:w-auto border-green-500 text-green-600 hover:bg-green-500 hover:text-white shadow-sm transition-all"
                         >
                             {hasWorkedToday ? 'Resume Shift' : 'Clock In'}
                         </Button>
@@ -299,7 +299,7 @@ const EmployeeDashboardCom = () => {
                             icon={FaSignOutAlt}
                             onClick={handleCheckOut}
                             fullWidth
-                            className="sm:w-auto shadow-md shadow-red-500/20"
+                            className="sm:w-auto shadow-md shadow-red-500/20 transition-all"
                         >
                             Clock Out
                         </Button>
@@ -308,20 +308,20 @@ const EmployeeDashboardCom = () => {
             </div>
 
             {/* Top Cards Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-5 md:gap-6">
                 {topCards.map((card, index) => (
                     <div
                         key={index}
-                        className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-4 md:p-5 flex flex-col gap-3 md:gap-4 border-l-4 transition-all duration-300 hover:shadow-md hover:-translate-y-1 ${card.border}`}
+                        className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col gap-3 sm:gap-4 border-l-4 transition-all duration-300 hover:shadow-md hover:-translate-y-1 ${card.border}`}
                     >
                         <div className="flex items-start justify-between">
-                            <div className={`w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center ${card.bg}`}>
-                                <card.icon className={`text-base md:text-lg ${card.color}`} />
+                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${card.bg} shrink-0`}>
+                                <card.icon className={`text-lg sm:text-xl ${card.color}`} />
                             </div>
                         </div>
-                        <div>
-                            <p className="text-xl md:text-2xl lg:text-3xl font-bold text-[#010a1f] tracking-tight">{card.value}</p>
-                            <p className="text-xs md:text-sm font-semibold text-slate-500 mt-0.5">{card.title}</p>
+                        <div className="min-w-0">
+                            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[#010a1f] tracking-tight truncate">{card.value}</p>
+                            <p className="text-[11px] sm:text-xs md:text-sm font-semibold text-slate-500 mt-0.5 sm:mt-1 truncate">{card.title}</p>
                         </div>
                     </div>
                 ))}
@@ -331,38 +331,38 @@ const EmployeeDashboardCom = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* Left Side (Spans 2 columns) - Attendance Overview */}
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 md:p-8 min-h-[380px] flex flex-col relative overflow-hidden">
-                        <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 z-10 border-b border-slate-100 pb-4">
-                            <div>
-                                <h2 className="text-lg font-bold text-[#010a1f] flex items-center gap-2">
-                                    <FaChartLine className="text-[#0437cc]" /> Weekly Overview
+                <div className="lg:col-span-2 space-y-6 flex flex-col">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 md:p-8 flex flex-col relative overflow-hidden flex-1 min-h-[350px]">
+                        <div className="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 z-10 border-b border-slate-100 pb-4">
+                            <div className="min-w-0">
+                                <h2 className="text-base sm:text-lg font-bold text-[#010a1f] flex items-center gap-2 truncate">
+                                    <FaChartLine className="text-[#0437cc] shrink-0" /> Weekly Overview
                                 </h2>
-                                <p className="text-xs text-slate-400 mt-0.5">Your working hours and status for the last 5 days</p>
+                                <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 truncate">Your working hours and status for the last 5 days</p>
                             </div>
-                            <Button variant="outline" size="sm" onClick={() => navigate('/employee/attendance')} className="w-full sm:w-auto bg-white text-slate-600 hover:text-[#0437cc] border-slate-200">
+                            <Button variant="outline" size="sm" onClick={() => navigate('/employee/attendance')} className="w-full sm:w-auto bg-white text-slate-600 hover:text-[#0437cc] border-slate-200 shrink-0 text-[13px] sm:text-sm py-2">
                                 View Full History
                             </Button>
                         </div>
 
-                        <div className="flex-1 flex flex-col justify-center z-10 mt-2">
-                            <div className="grid grid-cols-5 gap-2 md:gap-4">
+                        <div className="flex-1 flex flex-col justify-end z-10 mt-2">
+                            <div className="grid grid-cols-5 gap-2 sm:gap-3 md:gap-4 items-end h-full">
                                 {weeklyAttendance.map((day, i) => (
-                                    <div key={i} className="flex flex-col items-center gap-2 md:gap-3">
-                                        <div className="h-24 md:h-32 w-full bg-slate-50 rounded-lg flex items-end justify-center pb-2 border border-slate-100 relative overflow-hidden group">
+                                    <div key={i} className="flex flex-col items-center gap-2 sm:gap-3 h-full justify-end">
+                                        <div className="h-28 sm:h-36 md:h-40 w-full bg-slate-50 rounded-lg flex items-end justify-center pb-2 border border-slate-100 relative overflow-hidden group transition-all">
                                             {day.status !== 'Absent' && day.status !== 'Off' && (
                                                 <div
                                                     className={`w-full absolute bottom-0 rounded-t-sm transition-all duration-1000 ${day.status === 'Late' ? 'bg-[#f77704]' : 'bg-[#0437cc]'}`}
                                                     style={{ height: day.hrs === 'In Progress' ? '50%' : '85%' }}
                                                 ></div>
                                             )}
-                                            <span className="absolute bottom-1 md:bottom-2 text-[8px] md:text-[10px] font-bold text-slate-700 group-hover:text-white z-10 transition-colors">
+                                            <span className="absolute bottom-1 sm:bottom-2 text-[9px] sm:text-[10px] md:text-xs font-bold text-slate-700 group-hover:text-white z-10 transition-colors pointer-events-none truncate px-1 w-full text-center">
                                                 {day.hrs}
                                             </span>
                                         </div>
-                                        <div className="text-center">
-                                            <p className="text-xs md:text-sm font-bold text-[#010a1f]">{day.day}</p>
-                                            <span className={`inline-block mt-1 px-1.5 md:px-2 py-0.5 rounded text-[8px] md:text-[10px] font-bold ${day.status === 'Present' ? 'bg-green-100 text-green-700' :
+                                        <div className="text-center w-full min-w-0">
+                                            <p className="text-[11px] sm:text-xs md:text-sm font-bold text-[#010a1f] truncate">{day.day}</p>
+                                            <span className={`inline-block mt-1 px-1 sm:px-1.5 md:px-2 py-0.5 rounded text-[8px] sm:text-[9px] md:text-[10px] font-bold truncate max-w-full ${day.status === 'Present' ? 'bg-green-100 text-green-700' :
                                                     day.status === 'Late' ? 'bg-orange-100 text-orange-700' :
                                                         day.status === 'Off' ? 'bg-slate-200 text-slate-600' :
                                                             'bg-red-100 text-red-700'
@@ -374,55 +374,60 @@ const EmployeeDashboardCom = () => {
                                 ))}
                             </div>
                         </div>
+                        {/* Decorative Background Element */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-[#0437cc] rounded-full blur-[120px] opacity-5 pointer-events-none"></div>
                     </div>
                 </div>
 
                 {/* Right Side Column - Quick Actions & Notifications */}
-                <div className="space-y-6">
+                <div className="space-y-6 flex flex-col h-full">
 
                     {/* Quick Actions Panel */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 md:p-6">
-                        <h2 className="text-base font-bold text-[#010a1f] mb-4 md:mb-5 border-b border-slate-100 pb-3">Quick Actions</h2>
-                        <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6">
+                        <h2 className="text-sm sm:text-base font-bold text-[#010a1f] mb-4 sm:mb-5 border-b border-slate-100 pb-3">Quick Actions</h2>
+                        <div className="grid grid-cols-2 gap-3 sm:gap-4">
                             {quickActions.map((action, index) => (
                                 <button
                                     key={index}
                                     onClick={action.action}
-                                    className="flex flex-col items-center justify-center gap-2 p-3 md:p-4 bg-slate-50 border border-transparent rounded-xl hover:border-slate-200 hover:bg-white text-[#010a1f] font-semibold transition-all shadow-sm"
+                                    className="flex flex-col items-center justify-center gap-2 sm:gap-3 p-3 sm:p-4 bg-slate-50 border border-transparent rounded-xl hover:border-slate-200 hover:bg-white text-[#010a1f] font-semibold transition-all shadow-sm"
                                 >
-                                    <action.icon className={`text-lg md:text-xl ${action.color}`} />
-                                    <span className="text-[10px] md:text-xs text-slate-600 text-center">{action.label}</span>
+                                    <action.icon className={`text-xl sm:text-2xl ${action.color}`} />
+                                    <span className="text-[11px] sm:text-xs text-slate-600 text-center">{action.label}</span>
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     {/* Recent Notifications Panel */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 md:p-6">
-                        <div className="flex items-center justify-between mb-4 md:mb-5 border-b border-slate-100 pb-3">
-                            <h2 className="text-base font-bold text-[#010a1f] flex items-center gap-2">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex-1 flex flex-col">
+                        <div className="flex items-center justify-between mb-4 sm:mb-5 border-b border-slate-100 pb-3">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] flex items-center gap-2">
                                 <FaBell className="text-[#f77704]" /> Recent Alerts
                             </h2>
-                            <span className="bg-[#f77704] text-white text-[9px] md:text-[10px] font-bold px-2 py-0.5 rounded-full">{alerts.length} Updates</span>
+                            <span className="bg-[#f77704] text-white text-[9px] sm:text-[10px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full shrink-0 tracking-wide">
+                                {alerts.length} Updates
+                            </span>
                         </div>
 
-                        <div className="space-y-3 md:space-y-4">
+                        <div className="space-y-3 sm:space-y-4 flex-1">
                             {alerts.length === 0 ? (
-                                <p className="text-sm text-slate-500 text-center py-4">No recent alerts or notifications.</p>
+                                <div className="h-full flex items-center justify-center">
+                                    <p className="text-sm text-slate-500 text-center py-4 font-medium">No recent alerts or notifications.</p>
+                                </div>
                             ) : (
                                 alerts.map((alert, i) => (
-                                    <div key={i} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-start gap-3 relative">
+                                    <div key={i} className="p-3 sm:p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-3 relative transition-all hover:bg-slate-100/50">
                                         {alert.status === 'Pending' && <div className="absolute top-3 right-3 w-2 h-2 rounded-full bg-[#0437cc] animate-pulse"></div>}
-                                        <div className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${alert.status === 'Approved' ? 'bg-green-100 text-green-600' :
+                                        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${alert.status === 'Approved' ? 'bg-green-100 text-green-600' :
                                                 alert.status === 'Rejected' ? 'bg-red-100 text-red-600' :
                                                     'bg-orange-100 text-orange-600'
                                             }`}>
-                                            {alert.status === 'Approved' ? <FaCheckCircle size={14} /> : alert.status === 'Rejected' ? <FaTimesCircle size={14} /> : <FaClock size={14} />}
+                                            {alert.status === 'Approved' ? <FaCheckCircle className="text-[14px] sm:text-base" /> : alert.status === 'Rejected' ? <FaTimesCircle className="text-[14px] sm:text-base" /> : <FaClock className="text-[14px] sm:text-base" />}
                                         </div>
-                                        <div className="pr-4">
-                                            <p className="text-xs md:text-sm font-bold text-[#010a1f]">{alert.title}</p>
-                                            <p className="text-[10px] md:text-xs text-slate-500 mt-1">{alert.desc}</p>
+                                        <div className="pr-4 min-w-0 flex-1">
+                                            <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{alert.title}</p>
+                                            <p className="text-[11px] sm:text-xs text-slate-500 mt-1 sm:mt-1.5 leading-relaxed">{alert.desc}</p>
                                         </div>
                                     </div>
                                 ))
