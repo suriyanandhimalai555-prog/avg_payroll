@@ -14,7 +14,11 @@ const poolConfig = isProduction
         connectionString: process.env.DATABASE_URL,
         ssl: {
             rejectUnauthorized: false // Required for external cloud connections
-        }
+        },
+        // STRICT CONNECTION POOLING FOR SCALABILITY
+        max: 20, // Max number of connections per worker (Prevents DB exhaustion)
+        idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+        connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection cannot be established
     }
     : {
         // Local Environment
@@ -23,14 +27,14 @@ const poolConfig = isProduction
         database: process.env.DB_NAME,
         password: process.env.DB_PASSWORD,
         port: process.env.DB_PORT,
+        max: 10, // Smaller pool for local testing
     };
 
 const pool = new Pool(poolConfig);
 
 pool.on('connect', () => {
-    if (isProduction) {
-        console.log('Connected to Live PostgreSQL database (Railway)');
-    } else {
+    // Only log locally to avoid spamming Railway production logs every time a pool connection opens
+    if (!isProduction) {
         console.log('Connected to Local PostgreSQL database');
     }
 });

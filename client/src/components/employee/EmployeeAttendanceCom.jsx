@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
+import Countdown from 'react-countdown';
 import {
     FaClock, FaCalendarDay, FaHistory, FaCalendarAlt,
     FaSignOutAlt, FaSignInAlt, FaTasks, FaFingerprint,
     FaBusinessTime, FaWalking, FaExclamationTriangle,
-    FaMapMarkerAlt, FaDesktop, FaMobileAlt, FaChevronDown, FaChevronUp, FaTimes, FaCheck, FaEdit, FaFilter
+    FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp, FaTimes, FaCheck, FaEdit, FaFilter
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -28,7 +29,8 @@ const EmployeeAttendanceCom = () => {
     const [historyFilterMonth, setHistoryFilterMonth] = useState('All');
 
     // Timer States
-    const [runningTime, setRunningTime] = useState('00:00:00');
+    const countdownRef = useRef(null);
+    const [completedMsToday, setCompletedMsToday] = useState(0);
 
     // EOD Modals
     const [isEodModalOpen, setIsEodModalOpen] = useState(false);
@@ -57,6 +59,16 @@ const EmployeeAttendanceCom = () => {
             });
             setTodayLogs(todays);
 
+            // Calculate exact MS worked previously today (if any completed sessions exist)
+            let previousMs = 0;
+            todays.forEach(log => {
+                if (log.clock_out && log.total_hours) {
+                    const [h, m] = log.total_hours.replace(' Hrs', '').split(':').map(Number);
+                    previousMs += (h * 3600000) + (m * 60000);
+                }
+            });
+            setCompletedMsToday(previousMs);
+
             const employeeShiftName = profRes.data.shift;
             const assignedShift = (shiftRes.data || []).find(s => s.shift_name === employeeShiftName);
             setShiftDetails(assignedShift || null);
@@ -72,56 +84,29 @@ const EmployeeAttendanceCom = () => {
         if (user?.employee_id) fetchAttendanceData();
     }, [user]);
 
+    // Derived States for UI and Logic
     const latestRecord = todayLogs.length > 0 ? todayLogs[0] : null;
-    const isClockedIn = latestRecord && latestRecord.clock_in && !latestRecord.clock_out;
+    const activeSession = fullHistory.find(r => r.clock_in && !r.clock_out);
+    const isClockedIn = !!activeSession;
+    
+    // Check if the open session belongs to a past date (Forgot to checkout)
+    const isPendingOldCheckout = isClockedIn && new Date(activeSession.date).toLocaleDateString('en-CA') !== new Date().toLocaleDateString('en-CA');
+
     const hasWorkedToday = todayLogs.length > 0;
     const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours) : 8;
+    const targetMs = targetHours * 3600000;
 
     const currentLateMins = latestRecord?.late_minutes || 0;
     const isCurrentlyLate = currentLateMins > 0;
 
-    // Main Timer Logic
-    useEffect(() => {
-        let interval;
-
-        const calculateCompletedMs = () => {
-            let ms = 0;
-            todayLogs.forEach(log => {
-                if (log.clock_out && log.total_hours) {
-                    const timePart = log.total_hours.replace(' Hrs', '').split(':');
-                    ms += (parseInt(timePart[0], 10) * 3600000) + (parseInt(timePart[1], 10) * 60000);
-                }
-            });
-            return ms;
-        };
-
-        const updateDisplay = (totalMs) => {
-            if (totalMs < 0) totalMs = 0;
-            const diffHrs = Math.floor(totalMs / 3600000);
-            const diffMins = Math.floor((totalMs % 3600000) / 60000);
-            const diffSecs = Math.floor((totalMs % 60000) / 1000);
-            setRunningTime(`${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}:${diffSecs.toString().padStart(2, '0')}`);
-        };
-
-        if (isClockedIn) {
-            const updateTimer = () => {
-                const start = new Date(latestRecord.clock_in).getTime();
-                const now = new Date().getTime();
-                let currentSessionMs = now - start;
-                if (currentSessionMs < 0) currentSessionMs = 0;
-                updateDisplay(calculateCompletedMs() + currentSessionMs);
-            };
-
-            updateTimer();
-            interval = setInterval(updateTimer, 1000);
-        } else {
-            updateDisplay(calculateCompletedMs());
-        }
-
-        return () => clearInterval(interval);
-    }, [todayLogs, isClockedIn, latestRecord]);
-
-    const [rHrs, rMins] = runningTime.split(':').map(Number);
+    // Calculate dynamic values for progress bar and goal tracking
+    let liveProgressMs = completedMsToday;
+    if (isClockedIn && !isPendingOldCheckout) {
+        liveProgressMs += new Date() - new Date(activeSession.clock_in);
+    }
+    const rHrs = Math.floor(liveProgressMs / 3600000);
+    const rMins = Math.floor((liveProgressMs % 3600000) / 60000);
+    
     const totalWorkedMinutes = (rHrs * 60) + (rMins || 0);
     const targetMinutes = Math.round(targetHours * 60);
     const remainingMinutes = Math.max(0, targetMinutes - totalWorkedMinutes);
@@ -132,37 +117,20 @@ const EmployeeAttendanceCom = () => {
     // Advanced Device Details Extractor
     const getDeviceInfo = () => {
         const ua = navigator.userAgent;
-        let browserName = "Unknown Browser";
+        let browserName = "Web Browser";
         if (ua.match(/chrome|chromium|crios/i)) browserName = "Chrome";
         else if (ua.match(/firefox|fxios/i)) browserName = "Firefox";
         else if (ua.match(/safari/i)) browserName = "Safari";
-        else if (ua.match(/opr\//i)) browserName = "Opera";
         else if (ua.match(/edg/i)) browserName = "Edge";
 
         let osName = "Unknown OS";
         if (ua.match(/windows nt 10/i)) osName = "Windows 10/11";
-        else if (ua.match(/windows nt 6.3/i)) osName = "Windows 8.1";
-        else if (ua.match(/windows nt 6.2/i)) osName = "Windows 8";
-        else if (ua.match(/windows nt 6.1/i)) osName = "Windows 7";
         else if (ua.match(/macintosh|mac os x/i)) osName = "Mac OS";
         else if (ua.match(/linux/i)) osName = "Linux";
         else if (ua.match(/android/i)) osName = "Android";
         else if (ua.match(/iphone/i)) osName = "iPhone";
-        else if (ua.match(/ipad/i)) osName = "iPad";
 
-        let deviceModel = "";
-        if (/android/i.test(ua)) {
-            const match = ua.match(/Android\s[0-9\.]+(?:;\s([^;]+))?/);
-            if (match && match[1] && !match[1].includes('Build')) {
-                deviceModel = ` (${match[1].split('Build')[0].trim()})`;
-            }
-        } else if (/iphone/i.test(ua)) {
-            deviceModel = " (Apple iPhone)";
-        } else if (/ipad/i.test(ua)) {
-            deviceModel = " (Apple iPad)";
-        }
-
-        return `${osName}${deviceModel} - ${browserName}`;
+        return `${osName} - ${browserName}`;
     };
 
     const fetchLocationData = () => {
@@ -183,7 +151,7 @@ const EmployeeAttendanceCom = () => {
                     }
                 },
                 (error) => {
-                    reject('Location access is strictly required to punch in/out. Please enable location permissions in your browser settings.');
+                    reject('Location access is strictly required to punch in/out.');
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
@@ -191,10 +159,19 @@ const EmployeeAttendanceCom = () => {
     };
 
     const handleCheckIn = async () => {
+        // --- 1 PM Hard Cut-off Logic ---
+        const now = new Date();
+        const currentHour = now.getHours();
+
+        if (currentHour >= 13) {
+            alert(`It is currently past 1:00 PM. \n\nYour shift type (${shiftDetails?.shift_type || 'Unknown'}) does not allow new logins this late into the day. \n\nYou have been marked as Absent. Please raise a request with HR or your Manager for manual correction.`);
+            return;
+        }
+
         try {
             const locationData = await fetchLocationData(); 
             const deviceData = getDeviceInfo();
-            const todayDate = new Date().toLocaleDateString('en-CA');
+            const todayDate = now.toLocaleDateString('en-CA');
             await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
                 employeeId: user.employee_id,
                 todayDate: todayDate,
@@ -207,9 +184,7 @@ const EmployeeAttendanceCom = () => {
         }
     };
 
-    const initiateCheckOut = () => {
-        setIsEodModalOpen(true);
-    };
+    const initiateCheckOut = () => setIsEodModalOpen(true);
 
     const executeCheckOut = async () => {
         if (!eodInput.trim()) return alert("EOD Update is required to clock out.");
@@ -217,11 +192,11 @@ const EmployeeAttendanceCom = () => {
         try {
             const locationData = await fetchLocationData(); 
             const deviceData = getDeviceInfo();
-            const todayDate = new Date().toLocaleDateString('en-CA');
+            const recordToClose = activeSession; // Target the active session (Even if it's from yesterday)
 
             await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
                 employeeId: user.employee_id,
-                todayDate: todayDate,
+                todayDate: new Date(recordToClose.date).toLocaleDateString('en-CA'),
                 locationData: locationData,
                 deviceInfo: deviceData,
                 eodUpdate: eodInput
@@ -330,33 +305,30 @@ const EmployeeAttendanceCom = () => {
         if (activeTab === 'today') {
             const todayStr = new Date().toLocaleDateString('en-CA');
             dataToDisplay = groupedFullHistory.filter(g => g.dateStr === todayStr);
-        } else if (activeTab === 'timesheet') {
-            dataToDisplay = groupedFullHistory;
+        } else if (activeTab === 'timesheet' || activeTab === 'history') {
+            // For general timesheet and history, limit to last 10 items initially unless filtered
+            dataToDisplay = groupedFullHistory.slice(0, 10);
+            
+            if (activeTab === 'history' && (historyFilterMonth !== 'All' || historyFilterStatus !== 'All')) {
+                dataToDisplay = groupedFullHistory.filter(g => {
+                    const gMonth = `${new Date(g.date).toLocaleString('en-US', { month: 'long' })} ${new Date(g.date).getFullYear()}`;
+                    const matchMonth = historyFilterMonth === 'All' || gMonth === historyFilterMonth;
+                    const matchStatus = historyFilterStatus === 'All' || g.status === historyFilterStatus;
+                    return matchMonth && matchStatus;
+                });
+            }
         } else if (activeTab === 'monthly' && selectedMonthYear) {
             dataToDisplay = groupedFullHistory.filter(g => {
                 const d = new Date(g.date);
                 return `${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}` === selectedMonthYear;
             });
-        } else if (activeTab === 'history') {
-            dataToDisplay = groupedFullHistory.filter(g => {
-                const gMonth = `${new Date(g.date).toLocaleString('en-US', { month: 'long' })} ${new Date(g.date).getFullYear()}`;
-                const matchMonth = historyFilterMonth === 'All' || gMonth === historyFilterMonth;
-                const matchStatus = historyFilterStatus === 'All' || g.status === historyFilterStatus;
-                return matchMonth && matchStatus;
-            });
         }
         return dataToDisplay;
     };
 
-    const toggleAccordion = (idStr) => {
-        setExpandedDates(prev => prev.includes(idStr) ? prev.filter(d => d !== idStr) : [...prev, idStr]);
-    };
-
-    const formatTime = (timestamp) => {
-        if (!timestamp) return '—';
-        return new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    };
-
+    const toggleAccordion = (idStr) => setExpandedDates(prev => prev.includes(idStr) ? prev.filter(d => d !== idStr) : [...prev, idStr]);
+    const formatTime = (timestamp) => !timestamp ? '—' : new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const format12Hour = (time24) => {
         if (!time24) return '—';
         const [hourString, minute] = time24.split(':');
@@ -366,24 +338,20 @@ const EmployeeAttendanceCom = () => {
         return `${hour < 10 ? '0' + hour : hour}:${minute} ${ampm}`;
     };
 
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    };
-
     const tabsNav = [
         { id: 'today', label: "Today's Logs", icon: FaCalendarDay },
-        { id: 'history', label: 'Full History', icon: FaHistory },
+        { id: 'history', label: 'Last 10 Days', icon: FaHistory },
         { id: 'monthly', label: 'Monthly Report', icon: FaCalendarAlt },
         { id: 'timesheet', label: 'Timesheet & EOD', icon: FaTasks },
     ];
 
     return (
-        <div className="space-y-6 sm:space-y-8 pb-8 relative">
+        <div className="space-y-6 sm:space-y-8 pb-8 relative w-full overflow-hidden">
             <style>
                 {`
                     @keyframes pulse-clock {
                         0% { opacity: 1; transform: scale(1); }
-                        50% { opacity: 0.7; transform: scale(1.02); }
+                        50% { opacity: 0.8; transform: scale(1.01); }
                         100% { opacity: 1; transform: scale(1); }
                     }
                     .animate-clock { animation: pulse-clock 2s infinite ease-in-out; }
@@ -405,7 +373,7 @@ const EmployeeAttendanceCom = () => {
                         <div className="p-5 sm:p-6">
                             <div className="mb-4 sm:mb-5 bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4">
                                 <h3 className="text-xs sm:text-sm font-bold text-[#010a1f] mb-1.5">Shift Summary Guidelines</h3>
-                                <p className="text-[11px] sm:text-xs text-slate-600 mb-2 sm:mb-3">Please provide a clear update of your work today before clocking out:</p>
+                                <p className="text-[11px] sm:text-xs text-slate-600 mb-2 sm:mb-3">Please provide a clear update of your work before clocking out:</p>
                                 <ul className="list-disc pl-5 text-[11px] sm:text-xs text-slate-600 space-y-1 sm:space-y-1.5 marker:text-[#0437cc]">
                                     <li><strong>Completed Tasks:</strong> What did you successfully finish?</li>
                                     <li><strong>Pending Work:</strong> What carries over to the next shift?</li>
@@ -458,6 +426,19 @@ const EmployeeAttendanceCom = () => {
                 </div>
             )}
 
+            {/* Warning Banner if they forgot to clock out yesterday */}
+            {isPendingOldCheckout && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4 sm:p-5 flex gap-3 items-start shadow-sm">
+                    <FaExclamationTriangle className="text-red-600 mt-0.5 shrink-0 text-lg" />
+                    <div>
+                        <p className="text-sm font-bold text-red-800">Pending Session Detected</p>
+                        <p className="text-xs sm:text-sm text-red-700 mt-1">
+                            You have an open shift originating from <strong>{formatDate(activeSession.date)} at {formatTime(activeSession.clock_in)}</strong>. You must clock out and submit an EOD report for that session before you can initiate a new check-in today.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
@@ -481,7 +462,7 @@ const EmployeeAttendanceCom = () => {
                         disabled={!isClockedIn}
                         className={`w-full sm:w-auto shadow-sm border-none ${!isClockedIn ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 focus:ring-red-600'}`}
                     >
-                        Clock Out
+                        {isPendingOldCheckout ? 'Resolve Pending Checkout' : 'Clock Out'}
                     </Button>
                 </div>
             </div>
@@ -530,7 +511,7 @@ const EmployeeAttendanceCom = () => {
 
                                     {shiftDetails.shift_type === 'Flexible' ? (
                                         <p className="text-[11px] sm:text-xs text-green-700 font-semibold flex items-center gap-1.5">
-                                            <FaFingerprint /> Target: Complete {targetHours} Hrs Anytime
+                                            <FaFingerprint /> Target: Complete {targetHours} Hrs before 1 PM
                                         </p>
                                     ) : (
                                         <div className="space-y-1.5">
@@ -560,9 +541,35 @@ const EmployeeAttendanceCom = () => {
                                     <FaClock className="text-2xl sm:text-3xl" />
                                 </div>
                                 <p className="text-xs sm:text-sm font-medium text-slate-500 uppercase tracking-wider mb-1">Total Worked</p>
-                                <h3 className={`text-3xl sm:text-4xl font-bold tracking-tight ${isClockedIn ? 'text-[#0437cc] animate-clock' : 'text-[#010a1f]'}`}>
-                                    {runningTime} <span className="text-base sm:text-lg text-slate-400 font-medium">Hrs</span>
-                                </h3>
+                                
+                                {/* React Countdown Display */}
+                                {isClockedIn && !isPendingOldCheckout ? (
+                                    <Countdown
+                                        ref={countdownRef}
+                                        date={Date.now() + targetMs - completedMsToday - (new Date() - new Date(activeSession.clock_in))}
+                                        renderer={({ hours, minutes, seconds }) => {
+                                            const totalSecsPassed = Math.floor((completedMsToday + (new Date() - new Date(activeSession.clock_in))) / 1000);
+                                            const h = Math.floor(totalSecsPassed / 3600);
+                                            const m = Math.floor((totalSecsPassed % 3600) / 60);
+                                            const s = Math.floor(totalSecsPassed % 60);
+                                            
+                                            return (
+                                                <h3 className={`text-3xl sm:text-4xl font-bold tracking-tight text-[#0437cc] animate-clock`}>
+                                                    {String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')} 
+                                                    <span className="text-base sm:text-lg text-slate-400 font-medium ml-1">Hrs</span>
+                                                </h3>
+                                            )
+                                        }}
+                                        overtime={true}
+                                    />
+                                ) : (
+                                    <h3 className={`text-3xl sm:text-4xl font-bold tracking-tight text-[#010a1f]`}>
+                                        {String(Math.floor(completedMsToday / 3600000)).padStart(2, '0')}:
+                                        {String(Math.floor((completedMsToday % 3600000) / 60000)).padStart(2, '0')}:
+                                        {String(Math.floor((completedMsToday % 60000) / 1000)).padStart(2, '0')}
+                                        <span className="text-base sm:text-lg text-slate-400 font-medium ml-1">Hrs</span>
+                                    </h3>
+                                )}
 
                                 <div className="w-full bg-slate-100 h-2 rounded-full mt-4 overflow-hidden">
                                     <div
@@ -611,7 +618,7 @@ const EmployeeAttendanceCom = () => {
                         <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 gap-4 bg-slate-50/50">
                             <div>
                                 <h2 className="text-base sm:text-lg font-bold text-[#010a1f]">
-                                    {activeTab === 'monthly' ? 'Monthly Records' : activeTab === 'timesheet' ? 'Timesheet & EOD Logs' : activeTab === 'today' ? "Today's Logs" : 'Full History'}
+                                    {activeTab === 'monthly' ? 'Monthly Records' : activeTab === 'timesheet' ? 'Timesheet Logs' : activeTab === 'today' ? "Today's Logs" : 'History (Last 10 Days)'}
                                 </h2>
                                 <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
                                     {activeTab === 'timesheet' ? 'Review your daily shift summaries and EOD updates.' : 'Click a date row to view multiple sessions'}

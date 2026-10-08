@@ -3,7 +3,8 @@ import axios from 'axios';
 import {
     FaCalendarCheck, FaInfoCircle, FaSearch, FaFilter,
     FaUserCheck, FaUserTimes, FaUserClock, FaLaptopHouse, FaHistory,
-    FaBuilding, FaSitemap, FaClock, FaEye, FaTimes, FaDesktop, FaMobileAlt, FaMapMarkerAlt, FaMoneyBillWave
+    FaBuilding, FaSitemap, FaClock, FaEye, FaTimes, FaDesktop, 
+    FaMobileAlt, FaMapMarkerAlt, FaMoneyBillWave, FaUmbrellaBeach, FaExclamationCircle
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Select from '../../../components/common/Select';
@@ -11,7 +12,7 @@ import Input from '../../../components/common/Input';
 
 const SuperAdminAttendanceOverviewCom = () => {
     const [attendanceData, setAttendanceData] = useState([]);
-    const [metrics, setMetrics] = useState({ present: 0, absent: 0, onLeave: 0, wfh: 0, total: 0 });
+    const [metrics, setMetrics] = useState({ present: 0, absent: 0, pendingApproval: 0, onLeave: 0, wfh: 0, total: 0 });
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
 
@@ -57,7 +58,7 @@ const SuperAdminAttendanceOverviewCom = () => {
 
             // 2. Fetch the Attendance Logs for the selected date
             let records = [];
-            let metricsData = { present: 0, absent: 0, onLeave: 0, wfh: 0, total: employees.length };
+            let metricsData = { present: 0, absent: 0, pendingApproval: 0, onLeave: 0, wfh: 0, total: employees.length };
 
             try {
                 // If you have a dedicated overview endpoint, it will map here
@@ -67,19 +68,21 @@ const SuperAdminAttendanceOverviewCom = () => {
                 records = response.data.records || [];
                 if (response.data.metrics) metricsData = response.data.metrics;
             } catch (err) {
-                // FALLBACK ALGORITHM: If the API isn't wired yet, we map the Real Employees against simulated logic
-                // to calculate the Live Prorated Salary exactly as requested.
+                // FALLBACK ALGORITHM: Simulated logic mapping real employees to status logic (including the new Pending Approval rule)
                 records = employees.map((emp, index) => {
-                    // Simulated status for visual testing
                     const isPresent = index % 3 !== 0;
                     const isWfh = index % 5 === 0;
 
                     let status = isPresent ? (isWfh ? 'WFH' : 'Present') : 'Absent';
+                    
+                    // Simulate "Absent (Pending Approval)" for employees who missed the 1PM cutoff
+                    if (status === 'Absent' && index % 2 !== 0) status = 'Absent (Pending Approval)';
                     if (index % 7 === 0) status = 'On Leave';
 
                     // Increment Metrics
                     if (status === 'Present') metricsData.present++;
                     if (status === 'Absent') metricsData.absent++;
+                    if (status === 'Absent (Pending Approval)') metricsData.pendingApproval++;
                     if (status === 'On Leave') metricsData.onLeave++;
                     if (status === 'WFH') metricsData.wfh++;
 
@@ -157,7 +160,7 @@ const SuperAdminAttendanceOverviewCom = () => {
         setSearchTerm('');
     };
 
-    // Client-side execution of all filters (Search + Cascading Org)
+    // Client-side execution of all filters
     const filteredRecords = attendanceData.filter(record => {
         const matchSearch = `${record.first_name} ${record.last_name} ${record.employee_id}`.toLowerCase().includes(searchTerm.toLowerCase());
         const matchCompany = filterCompany === 'All' ? true : record.company === filterCompany;
@@ -179,10 +182,11 @@ const SuperAdminAttendanceOverviewCom = () => {
 
     const getStatusStyle = (status) => {
         switch (status) {
-            case 'Present': return 'text-teal-700 bg-[#eef8f8] border-teal-100';
-            case 'Absent': return 'text-red-700 bg-red-50 border-red-100';
-            case 'On Leave': return 'text-orange-700 bg-orange-50 border-orange-100';
-            case 'WFH': return 'text-blue-700 bg-blue-50 border-blue-100';
+            case 'Present': return 'text-teal-700 bg-teal-50 border-teal-200';
+            case 'Absent': return 'text-red-700 bg-red-50 border-red-200';
+            case 'Absent (Pending Approval)': return 'text-orange-700 bg-orange-50 border-orange-300';
+            case 'On Leave': return 'text-purple-700 bg-purple-50 border-purple-200';
+            case 'WFH': return 'text-blue-700 bg-blue-50 border-blue-200';
             default: return 'text-slate-600 bg-slate-50 border-slate-200';
         }
     };
@@ -231,53 +235,56 @@ const SuperAdminAttendanceOverviewCom = () => {
     };
 
     return (
-        <div className="space-y-8 pb-8 relative">
+        <div className="space-y-6 sm:space-y-8 pb-8 relative w-full overflow-hidden">
 
             {/* Detailed Log Modal */}
             {viewLog && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
                             <div>
-                                <h2 className="text-lg font-bold text-[#010a1f] flex items-center gap-2">
+                                <h2 className="text-base sm:text-lg font-bold text-[#010a1f] flex items-center gap-2">
                                     <FaHistory className="text-[#0437cc]" /> Daily Log: {viewLog.first_name} {viewLog.last_name}
                                 </h2>
-                                <p className="text-xs font-semibold text-slate-500 mt-1">Date: {new Date(filterDate).toLocaleDateString()}</p>
+                                <p className="text-[11px] sm:text-xs font-semibold text-slate-500 mt-1">Date: {new Date(filterDate).toLocaleDateString()}</p>
                             </div>
                             <button onClick={() => setViewLog(null)} className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
                                 <FaTimes />
                             </button>
                         </div>
-                        <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                        <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
                             {!viewLog.daily_logs || viewLog.daily_logs.length === 0 ? (
-                                <p className="text-sm text-slate-500 text-center py-8 font-semibold">No active sessions found for this date.</p>
+                                <div className="text-center py-10">
+                                    <FaClock className="text-4xl text-slate-200 mx-auto mb-3" />
+                                    <p className="text-sm text-slate-500 font-semibold">No active sessions found for this date.</p>
+                                </div>
                             ) : (
                                 viewLog.daily_logs.map((log, idx) => (
-                                    <div key={idx} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                                    <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
                                         <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
-                                            <span className="font-bold text-[#010a1f] bg-slate-100 px-3 py-1 rounded-md text-xs uppercase tracking-wider">Session {idx + 1}</span>
+                                            <span className="font-bold text-[#010a1f] bg-slate-100 px-3 py-1 rounded-md text-[10px] sm:text-xs uppercase tracking-wider">Session {idx + 1}</span>
                                             {log.late_minutes > 0 ? (
                                                 <span className="text-[10px] bg-red-100 border border-red-200 text-red-700 font-bold px-2.5 py-1 rounded">Late {log.late_minutes} Mins</span>
                                             ) : (
                                                 <span className="text-[10px] bg-green-100 border border-green-200 text-green-700 font-bold px-2.5 py-1 rounded">On Time</span>
                                             )}
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                                             {/* Clock In Data */}
                                             <div className="space-y-3 bg-slate-50/50 p-4 rounded-xl border border-slate-100 shadow-inner">
                                                 <div>
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Check In Time</p>
-                                                    <p className="text-sm font-bold text-[#0437cc]">{formatTime(log.clock_in)}</p>
+                                                    <p className="text-[13px] sm:text-sm font-bold text-[#0437cc]">{formatTime(log.clock_in)}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1.5"><FaMapMarkerAlt className="text-slate-300" /> Location</p>
-                                                    <p className="text-[11px] font-medium text-slate-600 leading-snug">{log.clock_in_location || 'Not Recorded'}</p>
+                                                    <p className="text-[11px] sm:text-xs font-medium text-slate-600 leading-snug">{log.clock_in_location || 'Not Recorded'}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
                                                         {log.clock_in_device?.includes('iOS') || log.clock_in_device?.includes('Android') ? <FaMobileAlt className="text-slate-300" /> : <FaDesktop className="text-slate-300" />} Device
                                                     </p>
-                                                    <p className="text-[11px] font-medium text-slate-600">{log.clock_in_device || 'Not Recorded'}</p>
+                                                    <p className="text-[11px] sm:text-xs font-medium text-slate-600">{log.clock_in_device || 'Not Recorded'}</p>
                                                 </div>
                                             </div>
 
@@ -286,22 +293,22 @@ const SuperAdminAttendanceOverviewCom = () => {
                                                 <div>
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Check Out Time</p>
                                                     {log.clock_out ? (
-                                                        <p className="text-sm font-bold text-slate-700">{formatTime(log.clock_out)}</p>
+                                                        <p className="text-[13px] sm:text-sm font-bold text-slate-700">{formatTime(log.clock_out)}</p>
                                                     ) : (
-                                                        <p className="text-sm font-bold text-green-600 animate-pulse flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Working...</p>
+                                                        <p className="text-[13px] sm:text-sm font-bold text-green-600 animate-pulse flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Working...</p>
                                                     )}
                                                 </div>
                                                 {log.clock_out && (
                                                     <>
                                                         <div>
                                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1.5"><FaMapMarkerAlt className="text-slate-300" /> Location</p>
-                                                            <p className="text-[11px] font-medium text-slate-600 leading-snug">{log.clock_out_location || 'Not Recorded'}</p>
+                                                            <p className="text-[11px] sm:text-xs font-medium text-slate-600 leading-snug">{log.clock_out_location || 'Not Recorded'}</p>
                                                         </div>
                                                         <div>
                                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
                                                                 {log.clock_out_device?.includes('iOS') || log.clock_out_device?.includes('Android') ? <FaMobileAlt className="text-slate-300" /> : <FaDesktop className="text-slate-300" />} Device
                                                             </p>
-                                                            <p className="text-[11px] font-medium text-slate-600">{log.clock_out_device || 'Not Recorded'}</p>
+                                                            <p className="text-[11px] sm:text-xs font-medium text-slate-600">{log.clock_out_device || 'Not Recorded'}</p>
                                                         </div>
                                                     </>
                                                 )}
@@ -316,19 +323,19 @@ const SuperAdminAttendanceOverviewCom = () => {
             )}
 
             {/* Sticky Header */}
-            <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/90 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
-                    <h1 className="text-2xl font-bold text-[#010a1f] tracking-tight flex items-center gap-2">
+                    <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight flex items-center gap-2">
                         <FaCalendarCheck className="text-[#0437cc]" /> Attendance Overview
                     </h1>
                 </div>
-                <div className="flex flex-wrap gap-3">
-                    <Button variant="outline" icon={FaFilter} className="border-slate-200 text-slate-600 hover:bg-slate-50" onClick={fetchAttendanceData}>
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <Button variant="outline" icon={FaFilter} className="w-full sm:w-auto border-slate-200 text-slate-600 hover:bg-slate-50" onClick={fetchAttendanceData}>
                         Refresh Data
                     </Button>
                     <Button
                         variant="primary"
-                        className="shadow-md shadow-[#0437cc]/20"
+                        className="w-full sm:w-auto shadow-md shadow-[#0437cc]/20"
                         onClick={handleExport}
                         disabled={isLoading || filteredRecords.length === 0}
                     >
@@ -338,12 +345,12 @@ const SuperAdminAttendanceOverviewCom = () => {
             </div>
 
             {/* Informational Banner */}
-            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex gap-4 items-start shadow-sm">
+            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start shadow-sm">
                 <FaInfoCircle className="text-blue-500 mt-0.5 shrink-0 text-lg" />
                 <div>
-                    <p className="text-sm font-bold text-[#010a1f]">Real-Time Salary & Tracking</p>
-                    <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-                        This module intercepts the raw employee data and the live attendance logs to dynamically calculate the <strong>Estimated Daily Pay</strong> based on hours successfully worked today. Filter records by specific branches or departments below.
+                    <p className="text-sm font-bold text-[#010a1f]">Real-Time Salary & Exception Tracking</p>
+                    <p className="text-[13px] sm:text-sm text-slate-600 mt-1 leading-relaxed">
+                        This module intercepts the raw employee data and live attendance logs. Employees checking in after the 1 PM cutoff automatically flag as <strong>Absent (Pending Approval)</strong>. Estimated daily pay is prorated based on worked hours.
                     </p>
                 </div>
             </div>
@@ -355,57 +362,68 @@ const SuperAdminAttendanceOverviewCom = () => {
                 </div>
             )}
 
-            {/* Attendance Metrics Grid */}
+            {/* Attendance Metrics Grid - Updated to 6 Columns for the new Pending Metric */}
             {!isLoading && (
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                            <FaBuilding className="text-xl" />
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 sm:gap-6">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col justify-center">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                                <FaBuilding className="text-sm" />
+                            </div>
+                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Total Staff</p>
                         </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Staff</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.total}</h3>
-                        </div>
+                        <h3 className="text-2xl sm:text-3xl font-bold text-[#010a1f] pl-1">{metrics.total}</h3>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
-                            <FaUserCheck className="text-xl" />
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col justify-center">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
+                                <FaUserCheck className="text-sm" />
+                            </div>
+                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Present</p>
                         </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Present</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.present}</h3>
-                        </div>
+                        <h3 className="text-2xl sm:text-3xl font-bold text-[#010a1f] pl-1">{metrics.present}</h3>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-500 shrink-0">
-                            <FaUserTimes className="text-xl" />
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col justify-center">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-500 shrink-0">
+                                <FaUserTimes className="text-sm" />
+                            </div>
+                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Absent</p>
                         </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Absent</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.absent}</h3>
-                        </div>
+                        <h3 className="text-2xl sm:text-3xl font-bold text-[#010a1f] pl-1">{metrics.absent}</h3>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
-                            <FaUserClock className="text-xl" />
+                    {/* NEW METRIC: Absent (Pending Approval) */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col justify-center border-b-4 border-b-orange-400">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
+                                <FaExclamationCircle className="text-sm" />
+                            </div>
+                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Appr.</p>
                         </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">On Leave</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.onLeave}</h3>
-                        </div>
+                        <h3 className="text-2xl sm:text-3xl font-bold text-[#010a1f] pl-1">{metrics.pendingApproval}</h3>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-                            <FaLaptopHouse className="text-xl" />
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col justify-center">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+                                <FaUmbrellaBeach className="text-sm" />
+                            </div>
+                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">On Leave</p>
                         </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">WFH</p>
-                            <h3 className="text-2xl font-bold text-[#010a1f]">{metrics.wfh}</h3>
+                        <h3 className="text-2xl sm:text-3xl font-bold text-[#010a1f] pl-1">{metrics.onLeave}</h3>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col justify-center">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                                <FaLaptopHouse className="text-sm" />
+                            </div>
+                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">WFH</p>
                         </div>
+                        <h3 className="text-2xl sm:text-3xl font-bold text-[#010a1f] pl-1">{metrics.wfh}</h3>
                     </div>
                 </div>
             )}
@@ -414,30 +432,30 @@ const SuperAdminAttendanceOverviewCom = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
 
                 {/* Advanced Filters */}
-                <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-                    <div className="flex justify-between items-center mb-4">
+                <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-3">
                         <h2 className="text-sm font-bold text-[#010a1f] flex items-center gap-2"><FaFilter className="text-slate-400" /> Filter Directory</h2>
                         <button
                             onClick={clearFilters}
                             disabled={filterCompany === 'All' && filterBranch === 'All' && filterDepartment === 'All' && !searchTerm}
-                            className="text-xs font-bold text-slate-500 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-red-50"
+                            className="text-xs font-bold text-slate-500 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5 px-3 py-2 rounded-md hover:bg-red-50 border border-slate-200 bg-white sm:border-none sm:bg-transparent"
                         >
                             <FaTimes /> Clear Filters
                         </button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                         <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Select Date</label>
+                            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Select Date</label>
                             <Input
                                 type="date"
                                 name="filterDate"
                                 value={filterDate}
                                 onChange={(e) => setFilterDate(e.target.value)}
-                                className="bg-white"
+                                className="bg-white text-sm"
                             />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Company</label>
+                            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Company</label>
                             <Select
                                 name="filterCompany"
                                 value={filterCompany}
@@ -449,7 +467,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                             />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Branch</label>
+                            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Branch</label>
                             <Select
                                 name="filterBranch"
                                 value={filterBranch}
@@ -462,7 +480,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                             />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Department</label>
+                            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Department</label>
                             <Select
                                 name="filterDepartment"
                                 value={filterDepartment}
@@ -475,7 +493,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                             />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Employee Search</label>
+                            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Employee Search</label>
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <FaSearch className="text-slate-400 text-sm" />
@@ -485,7 +503,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                                     placeholder="Name or ID..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-9 pr-4 py-[10px] border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#0437cc] focus:ring-1 focus:ring-[#0437cc] transition-all bg-white"
+                                    className="w-full pl-9 pr-4 py-[9px] sm:py-[10px] border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#0437cc] focus:ring-1 focus:ring-[#0437cc] transition-all bg-white"
                                 />
                             </div>
                         </div>
@@ -493,7 +511,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                 </div>
 
                 {/* Table Area */}
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto w-full">
                     {isLoading ? (
                         <div className="p-8 text-center text-sm font-semibold text-slate-500">Calculating real-time data...</div>
                     ) : filteredRecords.length === 0 ? (
@@ -501,81 +519,81 @@ const SuperAdminAttendanceOverviewCom = () => {
                             No attendance records match your current filters.
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse">
+                        <table className="w-full text-left border-collapse min-w-[1000px]">
                             <thead>
-                                <tr className="border-b border-slate-100 text-[12px] text-slate-400 uppercase tracking-wider bg-white">
-                                    <th className="px-6 py-4 font-semibold">Employee</th>
-                                    <th className="px-6 py-4 font-semibold">Org Placement</th>
-                                    <th className="px-6 py-4 font-semibold">Time Log</th>
-                                    <th className="px-6 py-4 font-semibold text-right">Est. Daily Pay</th>
-                                    <th className="px-6 py-4 font-semibold text-center">Status</th>
-                                    <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                                <tr className="border-b border-slate-100 text-[11px] sm:text-[12px] text-slate-400 uppercase tracking-wider bg-white">
+                                    <th className="px-5 sm:px-6 py-4 font-semibold whitespace-nowrap">Employee</th>
+                                    <th className="px-5 sm:px-6 py-4 font-semibold whitespace-nowrap">Org Placement</th>
+                                    <th className="px-5 sm:px-6 py-4 font-semibold whitespace-nowrap">Time Log</th>
+                                    <th className="px-5 sm:px-6 py-4 font-semibold text-right whitespace-nowrap">Est. Daily Pay</th>
+                                    <th className="px-5 sm:px-6 py-4 font-semibold text-center whitespace-nowrap">Status</th>
+                                    <th className="px-5 sm:px-6 py-4 font-semibold text-right whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {filteredRecords.map((record, i) => (
                                     <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
-                                        <td className="px-6 py-4">
+                                        <td className="px-5 sm:px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-sm shrink-0 border border-[#0437cc]/20">
+                                                <div className="w-10 h-10 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-sm shrink-0 border border-[#0437cc]/20 shadow-sm">
                                                     {record.first_name?.charAt(0)}{record.last_name?.charAt(0)}
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-[#010a1f]">{record.first_name} {record.last_name}</p>
-                                                    <p className="text-xs font-mono font-semibold text-[#0437cc] mt-0.5">{record.employee_id}</p>
+                                                <div className="min-w-0">
+                                                    <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{record.first_name} {record.last_name}</p>
+                                                    <p className="text-[11px] sm:text-xs font-mono font-semibold text-[#0437cc] mt-0.5 truncate">{record.employee_id}</p>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate max-w-[200px]">
-                                                <FaBuilding className="text-slate-400 text-xs shrink-0" /> <span className="truncate">{record.company}</span>
+                                        <td className="px-5 sm:px-6 py-4">
+                                            <p className="text-[12px] sm:text-[13px] font-semibold text-slate-700 flex items-center gap-1.5 truncate max-w-[200px]">
+                                                <FaBuilding className="text-slate-400 text-[10px] sm:text-xs shrink-0" /> <span className="truncate">{record.company}</span>
                                             </p>
-                                            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate max-w-[200px]">
+                                            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate max-w-[200px]">
                                                 <FaSitemap className="text-slate-400 text-[10px] shrink-0" /> <span className="truncate">{record.department} • {record.branch}</span>
                                             </p>
                                         </td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-5 sm:px-6 py-4">
                                             <div className="space-y-1">
-                                                <p className="text-xs font-medium text-slate-500 flex justify-between w-28">
+                                                <p className="text-[11px] sm:text-xs font-medium text-slate-500 flex justify-between w-28">
                                                     <span>In:</span>
                                                     <span className={`font-bold ${record.first_clock_in ? 'text-slate-700' : 'text-slate-300'}`}>{formatTime(record.first_clock_in)}</span>
                                                 </p>
-                                                <p className="text-xs font-medium text-slate-500 flex justify-between w-28">
+                                                <p className="text-[11px] sm:text-xs font-medium text-slate-500 flex justify-between w-28">
                                                     <span>Out:</span>
                                                     <span className={`font-bold ${record.last_clock_out ? 'text-slate-700' : (record.is_working ? 'text-green-600 animate-pulse' : 'text-slate-300')}`}>
                                                         {record.is_working ? 'Working...' : formatTime(record.last_clock_out)}
                                                     </span>
                                                 </p>
-                                                <p className="text-xs font-bold text-[#0437cc] border-t border-slate-100 pt-1 mt-1 flex justify-between w-28">
+                                                <p className="text-[11px] sm:text-xs font-bold text-[#0437cc] border-t border-slate-100 pt-1 mt-1 flex justify-between w-28">
                                                     <span>Hrs:</span>
                                                     <span>{record.is_working ? 'Working...' : (record.total_hours || '—')}</span>
                                                 </p>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            {record.status === 'Absent' || record.status === 'On Leave' ? (
+                                        <td className="px-5 sm:px-6 py-4 text-right">
+                                            {record.status === 'Absent' || record.status === 'On Leave' || record.status === 'Absent (Pending Approval)' ? (
                                                 <span className="text-sm font-bold text-slate-300">—</span>
                                             ) : (
                                                 <div className="flex flex-col items-end">
-                                                    <span className="text-sm font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200 inline-flex items-center gap-1">
+                                                    <span className="text-[12px] sm:text-sm font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200 inline-flex items-center gap-1.5 whitespace-nowrap">
                                                         <FaMoneyBillWave className="text-[10px] text-green-600" /> {formatCurrency(record.calculated_pay)}
                                                     </span>
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold border ${getStatusStyle(record.status)}`}>
+                                        <td className="px-5 sm:px-6 py-4 text-center">
+                                            <span className={`inline-flex items-center px-2 sm:px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold border whitespace-nowrap ${getStatusStyle(record.status)}`}>
                                                 {record.status}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-5 sm:px-6 py-4 text-right">
                                             <button
                                                 onClick={() => setViewLog(record)}
                                                 className={`p-2 transition-colors rounded ${record.daily_logs && record.daily_logs.length > 0 ? 'text-slate-400 hover:text-[#0437cc] hover:bg-[#0437cc]/10' : 'text-slate-300 cursor-not-allowed'}`}
                                                 disabled={!record.daily_logs || record.daily_logs.length === 0}
                                                 title="View Full Log"
                                             >
-                                                <FaEye className="text-sm" />
+                                                <FaEye className="text-[13px] sm:text-sm" />
                                             </button>
                                         </td>
                                     </tr>

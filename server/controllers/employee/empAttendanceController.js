@@ -19,7 +19,29 @@ export const getAttendanceHistory = async (req, res) => {
 export const clockIn = async (req, res) => {
     try {
         const { employeeId, todayDate, locationData, deviceInfo } = req.body;
+        const now = new Date();
 
+        // 1. Check for Missed Checkout (Forgot to logout on a previous day)
+        // If they have an open session from a previous date, close it using their NEXT check-in time (which is right now)
+        const openSessionQuery = `
+            SELECT id, date FROM emp_attendance 
+            WHERE employee_id = $1 AND clock_out IS NULL AND date < $2
+            ORDER BY clock_in DESC LIMIT 1;
+        `;
+        const openSession = await pool.query(openSessionQuery, [employeeId, todayDate]);
+        
+        if (openSession.rows.length > 0) {
+            const missedRecordId = openSession.rows[0].id;
+            await pool.query(`
+                UPDATE emp_attendance 
+                SET clock_out = CURRENT_TIMESTAMP, 
+                    eod_update = 'Auto-closed at next check-in', 
+                    total_hours = 'Missed Checkout'
+                WHERE id = $1
+            `, [missedRecordId]);
+        }
+
+        // 2. Shift and Grace Time / 1 PM Logic
         const shiftQuery = `
             SELECT s.* FROM sa_work_shifts s
             JOIN sa_employees e ON s.shift_name = e.shift
@@ -28,12 +50,20 @@ export const clockIn = async (req, res) => {
         const shiftRes = await pool.query(shiftQuery, [employeeId]);
         
         let lateMinutes = 0;
-        
-        if (shiftRes.rows.length > 0) {
+        let status = 'Present';
+
+        // Set 1 PM boundary for today
+        const onePM = new Date(now);
+        onePM.setHours(13, 0, 0, 0);
+
+        if (now.getTime() > onePM.getTime()) {
+            // Rule: Both Fixed & Flexible checking in after 1 PM are Absent and need approval
+            status = 'Absent (Pending Approval)';
+        } else if (shiftRes.rows.length > 0) {
             const shift = shiftRes.rows[0];
             
+            // Rule: Fixed shift checked before 1 PM -> check grace time for Late marking
             if (shift.shift_type === 'Fixed' && shift.start_time) {
-                const now = new Date();
                 const [sHrs, sMins] = shift.start_time.split(':').map(Number);
                 
                 const expectedTime = new Date(now);
@@ -46,14 +76,16 @@ export const clockIn = async (req, res) => {
                     lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);
                 }
             }
+            // Flexible shifts checking before 1 PM remain 'Present' without late minutes
         }
 
+        // 3. Insert new clock-in
         const insertQuery = `
             INSERT INTO emp_attendance (employee_id, date, clock_in, clock_in_location, clock_in_device, late_minutes, status)
-            VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, 'Present') RETURNING *;
+            VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6) RETURNING *;
         `;
 
-        const result = await pool.query(insertQuery, [employeeId, todayDate, locationData, deviceInfo, lateMinutes]);
+        const result = await pool.query(insertQuery, [employeeId, todayDate, locationData, deviceInfo, lateMinutes, status]);
         res.status(201).json({ message: 'Clocked in successfully', record: result.rows[0] });
     } catch (error) {
         console.error('Clock In Error:', error);
