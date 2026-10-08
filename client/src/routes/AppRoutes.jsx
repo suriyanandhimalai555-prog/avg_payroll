@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 // Website & Auth
 import Index from '../pages/website/Index';
 import CommonLogin from '../pages/auth/CommonLogin';
+import SuperAdminLogin from '../pages/auth/SuperAdminLogin';
 import ActivateAccount from '../pages/auth/ActivateAccount';
 import ProtectedRoute from './ProtectedRoute';
 
@@ -76,10 +77,24 @@ const AppRoutes = () => {
     return (
         <Routes>
             <Route path="/" element={<Index />} />
+
+            {/* Standard User Login */}
             <Route path="/login" element={<CommonLogin />} />
+
+            {/* Super Admin Secret Portal */}
+            <Route path="/portal/superadmin-secure-auth" element={<SuperAdminLogin />} />
+
             <Route path="/activate-account" element={<ActivateAccount />} />
 
-            <Route path="/superadmin" element={<SuperAdminLayout />}>
+            {/* SUPER ADMIN PROTECTED ROUTES */}
+            <Route
+                path="/superadmin"
+                element={
+                    <ProtectedRoute allowedRoles={['superadmin']}>
+                        <SuperAdminLayout />
+                    </ProtectedRoute>
+                }
+            >
                 <Route index element={<SuperAdminDashboard />} />
                 {/* Org */}
                 <Route path="org/overview" element={<SuperAdminOrganizationOverview />} />

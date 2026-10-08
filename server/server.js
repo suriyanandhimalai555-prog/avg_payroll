@@ -27,6 +27,7 @@ import payrollRoutes from './routes/employee/payrollRoutes.js';
 import reimbursementRoutes from './routes/employee/reimbursementRoutes.js';
 
 // Super Admin Models
+import initializeSASuperAdminModel from './models/superadmin/SASuperAdmin.js';
 import initializeSAEmployeeModel from './models/superadmin/SAEmployee.js';
 import initializeSACompanyProfileModel from './models/superadmin/SACompanyProfile.js';
 import initializeSABranchModel from './models/superadmin/SABranch.js';
@@ -50,6 +51,7 @@ dotenv.config();
 const initializeDatabase = async () => {
     try {
         // Super Admin
+        await initializeSASuperAdminModel();
         await initializeSAEmployeeModel();
         await initializeSACompanyProfileModel();
         await initializeSABranchModel();

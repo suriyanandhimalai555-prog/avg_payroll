@@ -16,10 +16,10 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-// In-Memory OTP Store (Format: { email: { otp, expiry } })
 const otpStore = new Map();
 
 const getTableByRole = (role) => {
+    if (role === 'superadmin') return 'sa_superadmins';
     if (role === 'hr') return 'sa_hr_users';
     if (role === 'manager') return 'sa_managers';
     if (role === 'employee') return 'sa_employees';
@@ -57,7 +57,9 @@ export const login = async (req, res) => {
         let userQuery;
         let values = [identifier];
 
-        if (role === 'hr') {
+        if (role === 'superadmin') {
+            userQuery = `SELECT * FROM sa_superadmins WHERE email = $1`;
+        } else if (role === 'hr') {
             userQuery = `SELECT * FROM sa_hr_users WHERE email = $1`;
         } else if (role === 'manager') {
             userQuery = `SELECT * FROM sa_managers WHERE email = $1`;
@@ -88,6 +90,13 @@ export const login = async (req, res) => {
         }
 
         delete user.password;
+
+        // Standardize payload name output so the frontend doesn't break
+        if (role === 'superadmin') {
+            user.first_name = user.full_name;
+            user.last_name = '';
+        }
+
         const userPayload = { ...user, role: role };
 
         const token = jwt.sign(
@@ -108,8 +117,6 @@ export const login = async (req, res) => {
     }
 };
 
-// --- NEW PASSWORD RESET & OTP MODULES ---
-
 export const requestOtp = async (req, res) => {
     try {
         const { email, role } = req.body;
@@ -117,11 +124,14 @@ export const requestOtp = async (req, res) => {
 
         if (!targetTable) return res.status(400).json({ message: 'Invalid role.' });
 
-        const userRes = await pool.query(`SELECT first_name FROM ${targetTable} WHERE email = $1`, [email]);
+        // Account for different name columns
+        const nameCol = role === 'superadmin' ? 'full_name' : 'first_name';
+        const userRes = await pool.query(`SELECT ${nameCol} as fname FROM ${targetTable} WHERE email = $1`, [email]);
+
         if (userRes.rows.length === 0) return res.status(404).json({ message: 'No account found with this email.' });
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
-        const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes from now
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiry = Date.now() + 10 * 60 * 1000;
 
         otpStore.set(email, { otp, expiry });
 
@@ -135,7 +145,7 @@ export const requestOtp = async (req, res) => {
                         <h2 style="color: #ffffff; margin: 0;">Password Reset Request</h2>
                     </div>
                     <div style="padding: 30px; background-color: #ffffff; text-align: center;">
-                        <p style="color: #475569; font-size: 16px;">Hello ${userRes.rows[0].first_name},</p>
+                        <p style="color: #475569; font-size: 16px;">Hello ${userRes.rows[0].fname},</p>
                         <p style="color: #475569; font-size: 16px;">Your One-Time Password (OTP) to reset your account password is:</p>
                         <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #f77704;">
                             ${otp}
@@ -168,7 +178,6 @@ export const verifyOtp = async (req, res) => {
             return res.status(400).json({ message: 'Incorrect OTP. Please try again.' });
         }
 
-        // Keep OTP in store so `resetPassword` can do a final check, but mark it as verified
         otpStore.set(email, { ...storedRecord, verified: true });
         res.status(200).json({ message: 'OTP verified successfully.' });
     } catch (error) {
@@ -181,7 +190,6 @@ export const resetPassword = async (req, res) => {
         const { email, role, newPassword } = req.body;
         const targetTable = getTableByRole(role);
 
-        // Security Check: Ensure OTP was verified first
         const storedRecord = otpStore.get(email);
         if (!storedRecord || !storedRecord.verified) {
             return res.status(403).json({ message: 'Unauthorized reset request. Please verify OTP first.' });
@@ -191,8 +199,6 @@ export const resetPassword = async (req, res) => {
         const hashedPwd = await bcrypt.hash(newPassword, salt);
 
         await pool.query(`UPDATE ${targetTable} SET password = $1 WHERE email = $2`, [hashedPwd, email]);
-
-        // Clean up OTP session
         otpStore.delete(email);
 
         res.status(200).json({ message: 'Password has been reset successfully.' });

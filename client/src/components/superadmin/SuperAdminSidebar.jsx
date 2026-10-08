@@ -112,7 +112,7 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
         localStorage.removeItem('user');
         
         // 3. Redirect to Login
-        navigate('/login');
+        navigate('/portal/superadmin-secure-auth');
     };
 
     return (

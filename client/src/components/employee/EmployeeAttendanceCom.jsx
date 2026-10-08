@@ -169,7 +169,7 @@ const EmployeeAttendanceCom = () => {
         }
 
         try {
-            const locationData = await fetchLocationData(); 
+            const locationData = await fetchLocationData();
             const deviceData = getDeviceInfo();
             const todayDate = now.toLocaleDateString('en-CA');
             await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
@@ -190,7 +190,7 @@ const EmployeeAttendanceCom = () => {
         if (!eodInput.trim()) return alert("EOD Update is required to clock out.");
         setIsSubmittingEod(true);
         try {
-            const locationData = await fetchLocationData(); 
+            const locationData = await fetchLocationData();
             const deviceData = getDeviceInfo();
             const recordToClose = activeSession; // Target the active session (Even if it's from yesterday)
 
