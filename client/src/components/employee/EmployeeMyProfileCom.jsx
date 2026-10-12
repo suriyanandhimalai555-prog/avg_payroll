@@ -5,7 +5,7 @@ import {
     FaUserEdit, FaLock, FaBuilding, FaBriefcase,
     FaMoneyCheck, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt,
     FaFileAlt, FaTimes, FaSitemap, FaMoneyBillWave,
-    FaFileInvoiceDollar, FaChartLine, FaPlusCircle, FaMinusCircle
+    FaFileInvoiceDollar, FaChartLine, FaPlusCircle, FaMinusCircle, FaUniversity
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -98,10 +98,13 @@ const EmployeeMyProfileCom = () => {
                     status: data.status || "Unknown"
                 },
                 salary: {
+                    ctc: data.ctc || 0,
+                    monthlySalary: data.monthly_salary || 0,
                     basic: data.basic_salary || 0,
                     hra: data.hra || 0,
                     conveyance: data.conveyance || 0,
                     medical: data.medical || 0,
+                    specialAllowance: data.special_allowance || 0,
                     otherAllowances: data.other_allowances || 0,
 
                     epf: data.epf || 0,
@@ -112,9 +115,11 @@ const EmployeeMyProfileCom = () => {
                     leaves: data.leaves || 0
                 },
                 bank: {
-                    bankName: data.bank_name,
-                    accountNumber: data.account_number,
-                    ifsc: data.ifsc
+                    uanNo: data.uan_no || 'PENDING',
+                    bankName: data.bank_name || 'Not Provided',
+                    accountHolder: data.account_holder || 'Not Provided',
+                    accountNumber: data.account_number || 'Not Provided',
+                    ifsc: data.ifsc || 'Not Provided'
                 },
                 emergency: {
                     name: data.emergency_name || "Not Provided",
@@ -125,7 +130,7 @@ const EmployeeMyProfileCom = () => {
 
             setEditForm({
                 personal: { phone: data.phone, address: data.address, dob: formatDateForInput(data.dob), gender: data.gender },
-                bank: { bank_name: data.bank_name, account_number: data.account_number, ifsc: data.ifsc },
+                bank: { uan_no: data.uan_no, bank_name: data.bank_name, account_holder: data.account_holder, account_number: data.account_number, ifsc: data.ifsc },
                 emergency: { emergency_name: data.emergency_name || '', emergency_relationship: data.emergency_relationship || '', emergency_phone: data.emergency_phone || '' }
             });
 
@@ -218,20 +223,20 @@ const EmployeeMyProfileCom = () => {
         return <div className="flex items-center justify-center min-h-[50vh] text-sm text-slate-500 font-semibold animate-pulse">Loading Profile Data...</div>;
     }
 
-    const liveGross = parseNum(profileData.salary.basic) + parseNum(profileData.salary.hra) + parseNum(profileData.salary.conveyance) + parseNum(profileData.salary.medical) + parseNum(profileData.salary.otherAllowances);
+    const liveGross = parseNum(profileData.salary.basic) + parseNum(profileData.salary.hra) + parseNum(profileData.salary.conveyance) + parseNum(profileData.salary.medical) + parseNum(profileData.salary.specialAllowance) + parseNum(profileData.salary.otherAllowances);
     const liveDeductions = parseNum(profileData.salary.epf) + parseNum(profileData.salary.esi) + parseNum(profileData.salary.healthInsurance) + parseNum(profileData.salary.pt) + parseNum(profileData.salary.tds) + parseNum(profileData.salary.leaves);
     const liveNet = liveGross - liveDeductions;
 
-    const inputStyles = "w-full bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 text-sm font-medium text-[#010a1f] outline-none focus:border-[#0437cc] focus:ring-1 focus:ring-[#0437cc] focus:bg-white transition-all";
+    const inputStyles = "w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-medium text-[#010a1f] outline-none focus:border-[#0437cc] focus:ring-1 focus:ring-[#0437cc] transition-all";
 
     return (
-        <div className="space-y-6 sm:space-y-8 pb-8 relative w-full overflow-hidden">
+        <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden">
 
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div className="min-w-0">
                     <h1 className="text-xl md:text-2xl font-bold text-[#010a1f] tracking-tight truncate">My Profile</h1>
-                    <p className="text-xs sm:text-sm text-slate-500 mt-1 truncate">View and manage your personal, employment, and financial information.</p>
+                    <p className="text-[11px] sm:text-xs md:text-sm text-slate-500 mt-1 truncate">View and manage your personal, employment, and financial information.</p>
                 </div>
                 <div className="flex w-full md:w-auto shrink-0">
                     <Button variant="outline" icon={FaFileAlt} className="w-full md:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm text-sm py-2">
@@ -286,21 +291,21 @@ const EmployeeMyProfileCom = () => {
                             </div>
                         )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Full Name</p>
-                            <p className="text-sm font-medium text-[#010a1f] truncate">{profileData.personal.fullName}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Name</p>
+                            <p className="text-sm font-bold text-[#010a1f] truncate">{profileData.personal.fullName}</p>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Date of Birth</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Date of Birth</p>
                             {isEditing.personal ? (
                                 <input type="date" name="dob" value={editForm.personal.dob} onChange={(e) => handleInputChange('personal', e)} className={inputStyles} />
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] truncate">{profileData.personal.dob}</p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.personal.dob}</p>
                             )}
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Gender</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gender</p>
                             {isEditing.personal ? (
                                 <select name="gender" value={editForm.personal.gender} onChange={(e) => handleInputChange('personal', e)} className={inputStyles}>
                                     <option value="Male">Male</option>
@@ -308,27 +313,27 @@ const EmployeeMyProfileCom = () => {
                                     <option value="Other">Other</option>
                                 </select>
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] truncate">{profileData.personal.gender}</p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.personal.gender}</p>
                             )}
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Phone</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone</p>
                             {isEditing.personal ? (
                                 <input type="tel" name="phone" value={editForm.personal.phone} onChange={(e) => handleInputChange('personal', e)} className={inputStyles} />
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] flex items-center gap-1.5 truncate"><FaPhoneAlt className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.personal.phone}</span></p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate"><FaPhoneAlt className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.personal.phone}</span></p>
                             )}
                         </div>
-                        <div className="sm:col-span-2 min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Email</p>
-                            <p className="text-sm font-medium text-slate-500 flex items-center gap-1.5 bg-slate-50 border border-slate-100 rounded px-2.5 py-1.5 truncate"><FaEnvelope className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.personal.email}</span></p>
+                        <div className="sm:col-span-2 bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email</p>
+                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate"><FaEnvelope className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.personal.email}</span></p>
                         </div>
-                        <div className="sm:col-span-2 min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Address</p>
+                        <div className="sm:col-span-2 bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Address</p>
                             {isEditing.personal ? (
                                 <textarea name="address" rows="2" value={editForm.personal.address} onChange={(e) => handleInputChange('personal', e)} className={inputStyles}></textarea>
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] flex items-start gap-1.5 break-words"><FaMapMarkerAlt className="text-slate-300 shrink-0 mt-1" /> <span>{profileData.personal.address}</span></p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-start gap-1.5 break-words"><FaMapMarkerAlt className="text-slate-300 shrink-0 mt-0.5" /> <span>{profileData.personal.address}</span></p>
                             )}
                         </div>
                     </div>
@@ -342,48 +347,46 @@ const EmployeeMyProfileCom = () => {
                             <span className="bg-slate-100 text-slate-500 text-[9px] md:text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 shrink-0"><FaLock className="text-[8px]" /> Read Only</span>
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10 flex-1">
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">ID <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-2.5 py-1 rounded border border-slate-100 truncate w-full">{profileData.personal.employeeId}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 relative z-10 flex-1">
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">ID <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-bold text-slate-700 truncate">{profileData.personal.employeeId}</p>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Type <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-2.5 py-1 rounded border border-slate-100 truncate w-full">{profileData.employment.employmentType}</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Type <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.employmentType}</p>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Company <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-2.5 py-1 rounded border border-slate-100 truncate w-full">{profileData.employment.company}</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Company <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.company}</p>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Branch <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-2.5 py-1 rounded border border-slate-100 truncate w-full">{profileData.employment.branch}</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Branch <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.branch}</p>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Department <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-2.5 py-1 rounded border border-slate-100 truncate w-full">{profileData.employment.department}</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Department <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.department}</p>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Designation <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-2.5 py-1 rounded border border-slate-100 truncate w-full">{profileData.employment.designation}</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Designation <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{profileData.employment.designation}</p>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Location <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 px-2.5 py-1 rounded border border-slate-100 truncate w-full">{profileData.employment.location}</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Location <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.location}</p>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Shift <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-sm font-medium text-[#0437cc] bg-blue-50 px-2.5 py-1 rounded border border-blue-100 truncate w-full">{profileData.employment.shift}</p>
+                        <div className="bg-blue-50/50 border border-blue-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-blue-500 uppercase tracking-wider mb-1 flex items-center gap-1">Shift <FaLock className="text-blue-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-bold text-[#0437cc] truncate">{profileData.employment.shift}</p>
                         </div>
-                        <div className="sm:col-span-2 border-t border-slate-100 pt-3 mt-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="min-w-0">
-                                <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Joining Date <FaLock className="text-slate-300 text-[8px]" /></p>
-                                <p className="text-sm font-medium text-slate-700 truncate">{profileData.employment.joiningDate}</p>
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Reporting Manager <FaLock className="text-slate-300 text-[8px]" /></p>
-                                <p className="text-sm font-bold text-slate-700 truncate">{profileData.employment.reportingManager}</p>
-                            </div>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Joining Date <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.joiningDate}</p>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Reporting Manager <FaLock className="text-slate-300 text-[8px]" /></p>
+                            <p className="text-[13px] sm:text-sm font-bold text-slate-700 truncate">{profileData.employment.reportingManager}</p>
                         </div>
                     </div>
                 </div>
@@ -396,73 +399,81 @@ const EmployeeMyProfileCom = () => {
                             <span className="bg-slate-100 text-slate-500 text-[9px] md:text-[10px] font-bold px-2 py-0.5 rounded hidden sm:flex items-center gap-1"><FaLock className="text-[8px]" /> Read Only</span>
                         </div>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 relative z-10">
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 relative z-10">
                         {/* Earnings */}
-                        <div className="bg-green-50/50 p-4 rounded-xl border border-green-100 flex flex-col">
+                        <div className="bg-green-50/50 p-4 sm:p-5 rounded-xl border border-green-100 flex flex-col">
                             <h3 className="text-xs md:text-[13px] font-bold text-green-700 uppercase tracking-wider mb-3 border-b border-green-100 pb-2 flex items-center gap-1.5">
                                 <FaPlusCircle /> Earnings
                             </h3>
                             <div className="space-y-2.5 flex-1">
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
+                                    <span className="text-slate-600 font-medium truncate pr-2">CTC (Annual)</span>
+                                    <span className="font-bold text-[#0437cc] shrink-0">{formatCurrency(profileData.salary.ctc)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">Basic Salary</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.basic)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">HRA</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.hra)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">Conveyance</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.conveyance)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">Medical</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.medical)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
+                                    <span className="text-slate-600 font-medium truncate pr-2">Special Allowance</span>
+                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.specialAllowance)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">Other</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.otherAllowances)}</span>
                                 </div>
                             </div>
-                            <div className="pt-2.5 mt-3 border-t border-green-200 flex justify-between items-center">
+                            <div className="pt-2.5 mt-4 border-t border-green-200 flex justify-between items-center">
                                 <span className="text-xs md:text-sm font-bold text-green-800">Gross</span>
                                 <span className="text-sm md:text-base font-black text-green-700">{formatCurrency(liveGross)}</span>
                             </div>
                         </div>
 
                         {/* Deductions */}
-                        <div className="bg-red-50/50 p-4 rounded-xl border border-red-100 flex flex-col">
+                        <div className="bg-red-50/50 p-4 sm:p-5 rounded-xl border border-red-100 flex flex-col">
                             <h3 className="text-xs md:text-[13px] font-bold text-red-600 uppercase tracking-wider mb-3 border-b border-red-100 pb-2 flex items-center gap-1.5">
                                 <FaMinusCircle /> Deductions
                             </h3>
                             <div className="space-y-2.5 flex-1">
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">EPF</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.epf)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">ESI</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.esi)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Insurance</span>
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
+                                    <span className="text-slate-600 font-medium truncate pr-2">Health Insurance</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.healthInsurance)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">PT</span>
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
+                                    <span className="text-slate-600 font-medium truncate pr-2">Professional Tax</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.pt)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">TDS</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.tds)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs md:text-sm">
+                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">Leaves</span>
                                     <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.leaves)}</span>
                                 </div>
                             </div>
-                            <div className="pt-2.5 mt-3 border-t border-red-200 flex justify-between items-center">
+                            <div className="pt-2.5 mt-4 border-t border-red-200 flex justify-between items-center">
                                 <span className="text-xs md:text-sm font-bold text-red-800">Total Deductions</span>
                                 <span className="text-sm md:text-base font-black text-red-600">- {formatCurrency(liveDeductions)}</span>
                             </div>
@@ -473,7 +484,7 @@ const EmployeeMyProfileCom = () => {
                 {/* Bank Information */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col h-full">
                     <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                        <h2 className="text-sm md:text-base font-bold text-[#010a1f] flex items-center gap-1.5"><FaMoneyCheck className="text-[#0437cc]" /> Bank Info</h2>
+                        <h2 className="text-sm md:text-base font-bold text-[#010a1f] flex items-center gap-1.5"><FaUniversity className="text-[#0437cc]" /> Bank & Statutory Info</h2>
                         {!isEditing.bank ? (
                             <button onClick={() => toggleEdit('bank')} className="text-xs font-semibold text-[#0437cc] hover:underline">Edit</button>
                         ) : (
@@ -483,29 +494,45 @@ const EmployeeMyProfileCom = () => {
                             </div>
                         )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-                        <div className="sm:col-span-2 min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Bank Name</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
+                        <div className="sm:col-span-2 bg-blue-50/50 border border-blue-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-blue-600 uppercase tracking-wider mb-1">UAN NO (Universal Account Number)</p>
+                            {isEditing.bank ? (
+                                <input type="text" name="uan_no" value={editForm.bank.uan_no} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} placeholder="12-digit UAN" />
+                            ) : (
+                                <p className="text-[13px] sm:text-sm md:text-base font-bold text-[#0437cc] truncate tracking-wide">{profileData.bank.uanNo}</p>
+                            )}
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Account Holder Name</p>
+                            {isEditing.bank ? (
+                                <input type="text" name="account_holder" value={editForm.bank.account_holder} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />
+                            ) : (
+                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{profileData.bank.accountHolder}</p>
+                            )}
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Bank Name</p>
                             {isEditing.bank ? (
                                 <input type="text" name="bank_name" value={editForm.bank.bank_name} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] truncate">{profileData.bank.bankName}</p>
+                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{profileData.bank.bankName}</p>
                             )}
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Acc Number</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Account Number</p>
                             {isEditing.bank ? (
                                 <input type="text" name="account_number" value={editForm.bank.account_number} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] truncate">{profileData.bank.accountNumber}</p>
+                                <p className="text-[13px] sm:text-sm font-mono font-bold text-slate-700 truncate">{profileData.bank.accountNumber}</p>
                             )}
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">IFSC</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">IFSC Code</p>
                             {isEditing.bank ? (
                                 <input type="text" name="ifsc" value={editForm.bank.ifsc} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] truncate">{profileData.bank.ifsc}</p>
+                                <p className="text-[13px] sm:text-sm font-mono font-bold text-slate-700 truncate">{profileData.bank.ifsc}</p>
                             )}
                         </div>
                     </div>
@@ -524,29 +551,29 @@ const EmployeeMyProfileCom = () => {
                             </div>
                         )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-                        <div className="sm:col-span-2 min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Name</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
+                        <div className="sm:col-span-2 bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Name</p>
                             {isEditing.emergency ? (
                                 <input type="text" name="emergency_name" value={editForm.emergency.emergency_name} onChange={(e) => handleInputChange('emergency', e)} className={inputStyles} />
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] truncate">{profileData.emergency.name}</p>
+                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{profileData.emergency.name}</p>
                             )}
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Relation</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Relation</p>
                             {isEditing.emergency ? (
                                 <input type="text" name="emergency_relationship" value={editForm.emergency.emergency_relationship} onChange={(e) => handleInputChange('emergency', e)} className={inputStyles} />
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] truncate">{profileData.emergency.relationship}</p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.emergency.relationship}</p>
                             )}
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Phone</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone</p>
                             {isEditing.emergency ? (
                                 <input type="tel" name="emergency_phone" value={editForm.emergency.emergency_phone} onChange={(e) => handleInputChange('emergency', e)} className={inputStyles} />
                             ) : (
-                                <p className="text-sm font-medium text-[#010a1f] flex items-center gap-1.5 truncate"><FaPhoneAlt className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.emergency.phone}</span></p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate"><FaPhoneAlt className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.emergency.phone}</span></p>
                             )}
                         </div>
                     </div>

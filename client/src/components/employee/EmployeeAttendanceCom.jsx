@@ -16,6 +16,7 @@ const EmployeeAttendanceCom = () => {
 
     // Data States
     const [loading, setLoading] = useState(true);
+    const [isActionLoading, setIsActionLoading] = useState(false); // Prevents Rapid Double Clicks
     const [todayLogs, setTodayLogs] = useState([]);
     const [fullHistory, setFullHistory] = useState([]);
     const [shiftDetails, setShiftDetails] = useState(null);
@@ -159,7 +160,8 @@ const EmployeeAttendanceCom = () => {
     };
 
     const handleCheckIn = async () => {
-        // --- 1 PM Hard Cut-off Logic ---
+        if (isActionLoading) return; // Block rapid secondary clicks
+
         const now = new Date();
         const currentHour = now.getHours();
 
@@ -168,6 +170,7 @@ const EmployeeAttendanceCom = () => {
             return;
         }
 
+        setIsActionLoading(true);
         try {
             const locationData = await fetchLocationData();
             const deviceData = getDeviceInfo();
@@ -178,9 +181,11 @@ const EmployeeAttendanceCom = () => {
                 locationData: locationData,
                 deviceInfo: deviceData
             });
-            fetchAttendanceData();
+            await fetchAttendanceData();
         } catch (error) {
             alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
+        } finally {
+            setIsActionLoading(false);
         }
     };
 
@@ -188,11 +193,14 @@ const EmployeeAttendanceCom = () => {
 
     const executeCheckOut = async () => {
         if (!eodInput.trim()) return alert("EOD Update is required to clock out.");
+        if (isActionLoading) return;
+
         setIsSubmittingEod(true);
+        setIsActionLoading(true);
         try {
             const locationData = await fetchLocationData();
             const deviceData = getDeviceInfo();
-            const recordToClose = activeSession; // Target the active session (Even if it's from yesterday)
+            const recordToClose = activeSession;
 
             await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
                 employeeId: user.employee_id,
@@ -204,11 +212,12 @@ const EmployeeAttendanceCom = () => {
 
             setIsEodModalOpen(false);
             setEodInput('');
-            fetchAttendanceData();
+            await fetchAttendanceData();
         } catch (error) {
             alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking out');
         } finally {
             setIsSubmittingEod(false);
+            setIsActionLoading(false);
         }
     };
 
@@ -306,7 +315,6 @@ const EmployeeAttendanceCom = () => {
             const todayStr = new Date().toLocaleDateString('en-CA');
             dataToDisplay = groupedFullHistory.filter(g => g.dateStr === todayStr);
         } else if (activeTab === 'timesheet' || activeTab === 'history') {
-            // For general timesheet and history, limit to last 10 items initially unless filtered
             dataToDisplay = groupedFullHistory.slice(0, 10);
 
             if (activeTab === 'history' && (historyFilterMonth !== 'All' || historyFilterStatus !== 'All')) {
@@ -389,8 +397,8 @@ const EmployeeAttendanceCom = () => {
                             ></textarea>
 
                             <div className="pt-3 sm:pt-4">
-                                <Button variant="danger" fullWidth onClick={executeCheckOut} disabled={isSubmittingEod || !eodInput.trim()} className="py-2.5 shadow-md shadow-red-500/20 text-sm">
-                                    {isSubmittingEod ? 'Finalizing...' : 'Submit EOD & Clock Out'}
+                                <Button variant="danger" fullWidth onClick={executeCheckOut} disabled={isSubmittingEod || isActionLoading || !eodInput.trim()} className="py-2.5 shadow-md shadow-red-500/20 text-sm">
+                                    {isSubmittingEod || isActionLoading ? 'Finalizing...' : 'Submit EOD & Clock Out'}
                                 </Button>
                             </div>
                         </div>
@@ -430,9 +438,9 @@ const EmployeeAttendanceCom = () => {
             {isPendingOldCheckout && (
                 <div className="bg-red-50 border border-red-200 rounded-2xl p-3 sm:p-4 flex gap-2 sm:gap-3 items-start shadow-sm">
                     <FaExclamationTriangle className="text-red-600 mt-0.5 shrink-0 text-base sm:text-lg" />
-                    <div>
-                        <p className="text-xs sm:text-sm font-bold text-red-800">Pending Session Detected</p>
-                        <p className="text-[10px] sm:text-xs text-red-700 mt-1">
+                    <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-bold text-red-800 truncate">Pending Session Detected</p>
+                        <p className="text-[10px] sm:text-xs text-red-700 mt-1 leading-relaxed">
                             You have an open shift originating from <strong>{formatDate(activeSession.date)} at {formatTime(activeSession.clock_in)}</strong>. You must clock out and submit an EOD report for that session before you can initiate a new check-in today.
                         </p>
                     </div>
@@ -450,17 +458,17 @@ const EmployeeAttendanceCom = () => {
                         variant="outline"
                         icon={FaSignInAlt}
                         onClick={handleCheckIn}
-                        disabled={isClockedIn}
-                        className={`w-full sm:w-auto shadow-sm text-sm py-2 ${isClockedIn ? 'border-slate-200 text-slate-400 bg-slate-50' : 'border-green-500 text-green-600 hover:bg-green-500 hover:text-white'}`}
+                        disabled={isClockedIn || isActionLoading}
+                        className={`w-full sm:w-auto shadow-sm text-sm py-2 transition-all ${isClockedIn ? 'border-slate-200 text-slate-400 bg-slate-50' : 'border-green-500 text-green-600 hover:bg-green-500 hover:text-white'}`}
                     >
-                        {isClockedIn ? 'Shift Active' : (hasWorkedToday ? 'Resume Shift' : 'Clock In')}
+                        {isActionLoading ? 'Processing...' : (isClockedIn ? 'Shift Active' : (hasWorkedToday ? 'Resume Shift' : 'Clock In'))}
                     </Button>
                     <Button
                         variant="primary"
                         icon={FaSignOutAlt}
                         onClick={initiateCheckOut}
-                        disabled={!isClockedIn}
-                        className={`w-full sm:w-auto shadow-sm border-none text-sm py-2 ${!isClockedIn ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 focus:ring-red-600'}`}
+                        disabled={!isClockedIn || isActionLoading}
+                        className={`w-full sm:w-auto shadow-sm border-none text-sm py-2 transition-all ${!isClockedIn ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 focus:ring-red-600'}`}
                     >
                         {isPendingOldCheckout ? 'Resolve Pending Checkout' : 'Clock Out'}
                     </Button>
@@ -667,9 +675,9 @@ const EmployeeAttendanceCom = () => {
                             )}
                         </div>
 
-                        <div className="overflow-x-auto flex-1 w-full">
+                        <div className="overflow-x-auto flex-1 w-full custom-scrollbar">
                             {loading ? (
-                                <div className="p-8 text-center text-sm font-semibold text-slate-500">Loading records...</div>
+                                <div className="p-6 sm:p-8 text-center text-xs sm:text-sm font-semibold text-slate-500">Loading records...</div>
                             ) : activeTab === 'timesheet' ? (
                                 // TIMESHEET TAB SPECIFIC VIEW (With Accordion)
                                 <div className="p-3 sm:p-5">
@@ -796,7 +804,7 @@ const EmployeeAttendanceCom = () => {
                                                             </p>
                                                         </td>
                                                         <td className="px-3 sm:px-4 py-3 text-center">
-                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${group.status === 'Present' ? 'text-teal-700 bg-[#eef8f8] border border-teal-100' : 'text-[#e86b4d] bg-[#fdf0ed] border border-[#fdf0ed]'
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${group.status === 'Present' ? 'text-teal-700 bg-[#eef8f8] border border-teal-100' : group.status.includes('Pending') ? 'text-orange-700 bg-orange-50 border border-orange-100' : 'text-red-700 bg-red-50 border border-red-100'
                                                                 }`}>
                                                                 {group.status}
                                                             </span>

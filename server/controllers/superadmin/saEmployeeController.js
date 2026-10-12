@@ -4,8 +4,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Explicitly configured for Hostinger Webmail
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
+    host: 'smtp.hostinger.com',
     port: 465,
     secure: true,
     auth: {
@@ -20,8 +21,8 @@ export const createEmployee = async (req, res) => {
     try {
         const data = req.body;
 
-        if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.department) {
-            return res.status(400).json({ message: "Missing required employee details. Please complete all fields." });
+        if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.department || !data.uanNo) {
+            return res.status(400).json({ message: "Missing required employee details including UAN NO. Please complete all mandatory fields." });
         }
 
         const currentYear = new Date().getFullYear();
@@ -42,27 +43,28 @@ export const createEmployee = async (req, res) => {
 
         const generatedEmployeeId = `AVG-${currentYear}-${String(newSequence).padStart(3, '0')}`;
 
-        // Explicitly passing '0' to legacy columns: allowances, pf, other_deductions
         const insertQuery = `
             INSERT INTO sa_employees (
                 first_name, last_name, email, phone, dob, gender, address,
                 employee_id, joining_date, company, branch, department, designation, manager, emp_type, location, shift, status,
-                basic_salary, hra, conveyance, medical, other_allowances, allowances, epf, pf, esi, health_insurance, pt, tds, leaves, other_deductions,
-                bank_name, account_holder, account_number, ifsc, permissions
+                ctc, monthly_salary, basic_salary, hra, conveyance, medical, special_allowance, other_allowances, allowances, 
+                epf, pf, esi, health_insurance, pt, tds, leaves, other_deductions,
+                uan_no, bank_name, account_holder, account_number, ifsc, permissions
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21, $22, $23, 0, $24, 0, $25, $26, $27, $28, $29, 0,
-                $30, $31, $32, $33, $34
+                $19, $20, $21, $22, $23, $24, $25, $26, 0,
+                $27, 0, $28, $29, $30, $31, $32, 0,
+                $33, $34, $35, $36, $37, $38
             ) RETURNING *;
         `;
 
         const values = [
             data.firstName, data.lastName, data.email, data.phone, data.dob, data.gender, data.address,
             generatedEmployeeId, data.joiningDate, data.company, data.branch, data.department, data.designation, data.manager, data.empType, data.location, data.shift, data.status,
-            parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.otherAllowances),
+            parseNum(data.ctc), parseNum(data.monthlySalary), parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.specialAllowance), parseNum(data.otherAllowances),
             parseNum(data.epf), parseNum(data.esi), parseNum(data.healthInsurance), parseNum(data.pt), parseNum(data.tds), parseNum(data.leaves),
-            data.bankName, data.accountHolder, data.accountNumber, data.ifsc,
-            JSON.stringify(data.permissions)
+            data.uanNo, data.bankName, data.accountHolder, data.accountNumber, data.ifsc,
+            JSON.stringify(data.permissions || {})
         ];
 
         const result = await pool.query(insertQuery, values);
@@ -70,7 +72,7 @@ export const createEmployee = async (req, res) => {
 
         try {
             const encodedEmail = encodeURIComponent(data.email);
-            const activationLink = `${process.env.FRONTEND_URL}/activate-account?email=${encodedEmail}`;
+            const activationLink = `${process.env.FRONTEND_URL}/activate-account?email=${encodedEmail}&role=employee`;
 
             const mailOptions = {
                 from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,
@@ -133,19 +135,51 @@ export const updateEmployee = async (req, res) => {
                 first_name = $1, last_name = $2, phone = $3, dob = $4, gender = $5, address = $6,
                 joining_date = $7, company = $8, branch = $9, department = $10, designation = $11, manager = $12, emp_type = $13, 
                 location = $14, shift = $15, status = $16, 
-                basic_salary = $17, hra = $18, conveyance = $19, medical = $20, other_allowances = $21, allowances = 0,
-                epf = $22, pf = 0, esi = $23, health_insurance = $24, pt = $25, tds = $26, leaves = $27, other_deductions = 0, 
-                bank_name = $28, account_holder = $29, account_number = $30, ifsc = $31, permissions = $32
-            WHERE id = $33 RETURNING *;
+                ctc = $17, monthly_salary = $18, basic_salary = $19, hra = $20, conveyance = $21, medical = $22, special_allowance = $23, other_allowances = $24, allowances = 0,
+                epf = $25, pf = 0, esi = $26, health_insurance = $27, pt = $28, tds = $29, leaves = $30, other_deductions = 0, 
+                uan_no = $31, bank_name = $32, account_holder = $33, account_number = $34, ifsc = $35, permissions = $36
+            WHERE id = $37 RETURNING *;
         `;
 
+        // Apply strict fallbacks to support both React components safely
         const values = [
-            data.firstName, data.lastName, data.phone, data.dob, data.gender, data.address,
-            data.joiningDate, data.company, data.branch, data.department, data.designation, data.manager, data.empType,
-            data.location, data.shift, data.status,
-            parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.otherAllowances),
-            parseNum(data.epf), parseNum(data.esi), parseNum(data.healthInsurance), parseNum(data.pt), parseNum(data.tds), parseNum(data.leaves),
-            data.bankName, data.accountHolder, data.accountNumber, data.ifsc, JSON.stringify(data.permissions), id
+            data.firstName || data.first_name, 
+            data.lastName || data.last_name, 
+            data.phone, 
+            data.dob, 
+            data.gender, 
+            data.address,
+            data.joiningDate || data.joining_date, 
+            data.company, 
+            data.branch, 
+            data.department, 
+            data.designation, 
+            data.manager, 
+            data.empType || data.emp_type,
+            data.location, 
+            data.shift, 
+            data.status,
+            parseNum(data.ctc), 
+            parseNum(data.monthlySalary ?? data.monthly_salary), 
+            parseNum(data.basic ?? data.basic_salary), 
+            parseNum(data.hra), 
+            parseNum(data.conveyance), 
+            parseNum(data.medical), 
+            parseNum(data.specialAllowance ?? data.special_allowance), 
+            parseNum(data.otherAllowances ?? data.other_allowances),
+            parseNum(data.epf), 
+            parseNum(data.esi), 
+            parseNum(data.healthInsurance ?? data.health_insurance), 
+            parseNum(data.pt), 
+            parseNum(data.tds), 
+            parseNum(data.leaves),
+            data.uanNo || data.uan_no, 
+            data.bankName || data.bank_name, 
+            data.accountHolder || data.account_holder, 
+            data.accountNumber || data.account_number, 
+            data.ifsc, 
+            JSON.stringify(data.permissions || {}), 
+            id
         ];
 
         const result = await pool.query(updateQuery, values);

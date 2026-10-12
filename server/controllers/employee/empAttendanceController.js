@@ -21,15 +21,25 @@ export const clockIn = async (req, res) => {
         const { employeeId, todayDate, locationData, deviceInfo } = req.body;
         const now = new Date();
 
+        // 0. STRICT DOUBLE CHECK-IN PREVENTION
+        // Block request if the user already has an open session for today
+        const doubleCheckQuery = `
+            SELECT id FROM emp_attendance 
+            WHERE employee_id = $1 AND date = $2 AND clock_out IS NULL;
+        `;
+        const doubleCheckRes = await pool.query(doubleCheckQuery, [employeeId, todayDate]);
+        if (doubleCheckRes.rows.length > 0) {
+            return res.status(400).json({ message: 'You already have an active clock-in session. Please wait for the system to sync.' });
+        }
+
         // 1. Check for Missed Checkout (Forgot to logout on a previous day)
-        // If they have an open session from a previous date, close it using their NEXT check-in time (which is right now)
         const openSessionQuery = `
             SELECT id, date FROM emp_attendance 
             WHERE employee_id = $1 AND clock_out IS NULL AND date < $2
             ORDER BY clock_in DESC LIMIT 1;
         `;
         const openSession = await pool.query(openSessionQuery, [employeeId, todayDate]);
-        
+
         if (openSession.rows.length > 0) {
             const missedRecordId = openSession.rows[0].id;
             await pool.query(`
@@ -48,7 +58,7 @@ export const clockIn = async (req, res) => {
             WHERE e.employee_id = $1;
         `;
         const shiftRes = await pool.query(shiftQuery, [employeeId]);
-        
+
         let lateMinutes = 0;
         let status = 'Present';
 
@@ -61,22 +71,21 @@ export const clockIn = async (req, res) => {
             status = 'Absent (Pending Approval)';
         } else if (shiftRes.rows.length > 0) {
             const shift = shiftRes.rows[0];
-            
+
             // Rule: Fixed shift checked before 1 PM -> check grace time for Late marking
             if (shift.shift_type === 'Fixed' && shift.start_time) {
                 const [sHrs, sMins] = shift.start_time.split(':').map(Number);
-                
+
                 const expectedTime = new Date(now);
                 expectedTime.setHours(sHrs, sMins, 0, 0);
-                
+
                 const graceMs = (shift.grace_time || 0) * 60000;
                 const allowedTimeMs = expectedTime.getTime() + graceMs;
-                
+
                 if (now.getTime() > allowedTimeMs) {
                     lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);
                 }
             }
-            // Flexible shifts checking before 1 PM remain 'Present' without late minutes
         }
 
         // 3. Insert new clock-in
@@ -140,12 +149,31 @@ export const updateEodDetails = async (req, res) => {
             WHERE id = $2 RETURNING *;
         `;
         const result = await pool.query(updateQuery, [eodUpdate, recordId]);
-        
+
         if (result.rows.length === 0) return res.status(404).json({ message: 'Session not found.' });
 
         res.status(200).json({ message: 'EOD report updated successfully', record: result.rows[0] });
     } catch (error) {
         console.error('Update EOD Error:', error);
         res.status(500).json({ message: 'Error updating EOD details' });
+    }
+};
+
+export const approveAttendance = async (req, res) => {
+    try {
+        const { recordId } = req.params;
+        const updateQuery = `
+            UPDATE emp_attendance 
+            SET status = 'Present' 
+            WHERE id = $1 RETURNING *;
+        `;
+        const result = await pool.query(updateQuery, [recordId]);
+
+        if (result.rows.length === 0) return res.status(404).json({ message: 'Session not found.' });
+
+        res.status(200).json({ message: 'Attendance approved successfully', record: result.rows[0] });
+    } catch (error) {
+        console.error('Approve Attendance Error:', error);
+        res.status(500).json({ message: 'Error approving attendance' });
     }
 };

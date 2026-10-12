@@ -4,36 +4,44 @@ const initializeSAHrUserModel = async () => {
     const createTableQuery = `
         CREATE TABLE IF NOT EXISTS sa_hr_users (
             id SERIAL PRIMARY KEY,
+            hr_id VARCHAR(50) UNIQUE NOT NULL,
             first_name VARCHAR(100) NOT NULL,
             last_name VARCHAR(100) NOT NULL,
             email VARCHAR(255) UNIQUE NOT NULL,
             phone VARCHAR(20) NOT NULL,
-            dob DATE,
-            gender VARCHAR(20),
+            dob DATE NOT NULL,
+            gender VARCHAR(20) NOT NULL,
+            joining_date DATE NOT NULL,
             company VARCHAR(255) NOT NULL,
             branch VARCHAR(255) NOT NULL,
             department VARCHAR(100),
             designation VARCHAR(100),
+            md VARCHAR(100),
             status VARCHAR(50) DEFAULT 'Active',
             
             -- Salary Breakdown Columns
+            ctc NUMERIC NOT NULL DEFAULT 0,
+            monthly_salary NUMERIC NOT NULL DEFAULT 0,
             basic_salary NUMERIC NOT NULL DEFAULT 0,
             hra NUMERIC NOT NULL DEFAULT 0,
             conveyance NUMERIC NOT NULL DEFAULT 0,
             medical NUMERIC NOT NULL DEFAULT 0,
+            special_allowance NUMERIC DEFAULT 0,
             other_allowances NUMERIC NOT NULL DEFAULT 0,
             
             epf NUMERIC NOT NULL DEFAULT 0,
-            esi NUMERIC NOT NULL DEFAULT 0,
-            health_insurance NUMERIC NOT NULL DEFAULT 0,
-            pt NUMERIC NOT NULL DEFAULT 0,
-            tds NUMERIC NOT NULL DEFAULT 0,
-            leaves NUMERIC NOT NULL DEFAULT 0,
+            esi NUMERIC DEFAULT 0,
+            health_insurance NUMERIC DEFAULT 0,
+            pt NUMERIC DEFAULT 0,
+            tds NUMERIC DEFAULT 0,
+            leaves NUMERIC DEFAULT 0,
             
+            uan_no VARCHAR(100) NOT NULL,
             bank_name VARCHAR(150) NOT NULL,
             account_holder VARCHAR(150) NOT NULL,
             account_number VARCHAR(100) NOT NULL,
             ifsc VARCHAR(50) NOT NULL,
+            
             password VARCHAR(255),
             permissions JSONB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -41,18 +49,22 @@ const initializeSAHrUserModel = async () => {
     `;
 
     const alterTableQueries = `
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS hr_id VARCHAR(50) UNIQUE;
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS joining_date DATE;
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS md VARCHAR(100);
+        
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS dob DATE;
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS gender VARCHAR(20);
-        ALTER TABLE sa_hr_users ALTER COLUMN gender DROP NOT NULL;
         
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS company VARCHAR(255);
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS branch VARCHAR(255);
-        
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS department VARCHAR(100);
-        ALTER TABLE sa_hr_users ALTER COLUMN department DROP NOT NULL;
-        
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS designation VARCHAR(100);
-        ALTER TABLE sa_hr_users ALTER COLUMN designation DROP NOT NULL;
+        
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS ctc NUMERIC NOT NULL DEFAULT 0;
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC NOT NULL DEFAULT 0;
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS special_allowance NUMERIC DEFAULT 0;
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS uan_no VARCHAR(100) NOT NULL DEFAULT 'PENDING';
         
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS conveyance NUMERIC DEFAULT 0;
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS medical NUMERIC DEFAULT 0;
@@ -76,6 +88,10 @@ const initializeSAHrUserModel = async () => {
     try {
         await pool.query(createTableQuery);
         await pool.query(alterTableQueries);
+        
+        // Ensure legacy rows get a dummy hr_id so queries don't crash
+        await pool.query(`UPDATE sa_hr_users SET hr_id = 'LEGACY-' || id WHERE hr_id IS NULL;`);
+        
         console.log('SAHrUser table checked/updated successfully.');
     } catch (error) {
         console.error('Error updating SAHrUser table:', error);

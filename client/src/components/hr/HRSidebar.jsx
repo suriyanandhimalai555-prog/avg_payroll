@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-    FaTachometerAlt, FaBuilding, FaUsers, FaUserTie,
+    FaTachometerAlt, FaBuilding, FaUsers,
     FaMoneyCheckAlt, FaCalendarCheck, FaFileInvoiceDollar,
     FaHandHoldingUsd, FaChartBar, FaCogs, FaHistory,
-    FaUserCircle, FaSignOutAlt, FaChevronDown, FaTimes, FaShieldAlt, FaPlaneDeparture, FaBullhorn, FaUserPlus
+    FaUserCircle, FaSignOutAlt, FaChevronDown, FaTimes,
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 
@@ -36,6 +36,7 @@ const HRSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIsDeskt
     // Granular menu items based strictly on nested boolean flags
     const rawMenuItems = [
         { title: 'Dashboard', icon: FaTachometerAlt, path: '/hr', show: true },
+        { title: 'Profile', icon: FaUserCircle, path: '/hr/profile', show: true },
         {
             title: 'Organization', icon: FaBuilding,
             subItems: [
@@ -96,8 +97,7 @@ const HRSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIsDeskt
                 { name: 'System Settings', path: '/hr/settings/system', show: p.settings?.system }
             ]
         },
-        { title: 'Audit Logs', icon: FaHistory, path: '/hr/audit-logs', show: p.auditLogs },
-        { title: 'Profile', icon: FaUserCircle, path: '/hr/profile', show: true },
+        { title: 'Audit Logs', icon: FaHistory, path: '/hr/audit-logs', show: p.auditLogs }
     ];
 
     // Filter Logic: Evaluate subItems visibility first, then hide empty parents

@@ -24,6 +24,8 @@ const initializeSAEmployeeModel = async () => {
             status VARCHAR(50) DEFAULT 'Pending Activation',
             
             -- Salary Breakdown Columns
+            ctc NUMERIC NOT NULL DEFAULT 0,
+            monthly_salary NUMERIC NOT NULL DEFAULT 0,
             basic_salary NUMERIC NOT NULL DEFAULT 0,
             hra NUMERIC NOT NULL DEFAULT 0,
             allowances NUMERIC DEFAULT 0,
@@ -32,13 +34,16 @@ const initializeSAEmployeeModel = async () => {
             pt NUMERIC DEFAULT 0,
             other_deductions NUMERIC DEFAULT 0,
             
-            conveyance NUMERIC DEFAULT 0,
-            medical NUMERIC DEFAULT 0,
-            other_allowances NUMERIC DEFAULT 0,
-            epf NUMERIC DEFAULT 0,
+            conveyance NUMERIC NOT NULL DEFAULT 0,
+            medical NUMERIC NOT NULL DEFAULT 0,
+            special_allowance NUMERIC DEFAULT 0,
+            other_allowances NUMERIC NOT NULL DEFAULT 0,
+            epf NUMERIC NOT NULL DEFAULT 0,
             health_insurance NUMERIC DEFAULT 0,
             tds NUMERIC DEFAULT 0,
             leaves NUMERIC DEFAULT 0,
+            
+            uan_no VARCHAR(100) NOT NULL,
             
             bank_name VARCHAR(150) NOT NULL,
             account_holder VARCHAR(150) NOT NULL,
@@ -69,10 +74,15 @@ const initializeSAEmployeeModel = async () => {
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS branch VARCHAR(255);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS permissions JSONB;
         
-        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS conveyance NUMERIC DEFAULT 0;
-        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS medical NUMERIC DEFAULT 0;
-        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS other_allowances NUMERIC DEFAULT 0;
-        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS epf NUMERIC DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS ctc NUMERIC NOT NULL DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC NOT NULL DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS special_allowance NUMERIC DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS uan_no VARCHAR(100) NOT NULL DEFAULT 'PENDING';
+        
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS conveyance NUMERIC NOT NULL DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS medical NUMERIC NOT NULL DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS other_allowances NUMERIC NOT NULL DEFAULT 0;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS epf NUMERIC NOT NULL DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS health_insurance NUMERIC DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS tds NUMERIC DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS leaves NUMERIC DEFAULT 0;

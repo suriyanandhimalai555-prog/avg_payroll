@@ -55,6 +55,7 @@ import SuperAdminProfile from '../pages/superadmin/SuperAdminProfile';
 // HR 
 import HRLayout from '../layouts/HRLayout';
 import HRDashboard from '../pages/hr/HRDashboard';
+import HRProfile from '../pages/hr/HRProfile';
 
 // Manager
 import ManagerLayout from '../layouts/ManagerLayout';
@@ -154,6 +155,7 @@ const AppRoutes = () => {
                 }
             >
                 <Route index element={<HRDashboard />} />
+                <Route path="profile" element={<HRProfile />} />
 
             </Route>
 
