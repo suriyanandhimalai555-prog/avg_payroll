@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: avgpayroll-backend
+  namespace: avgpayroll
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: avgpayroll-backend
+  template:
+    metadata:
+      labels:
+        app: avgpayroll-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-backend:sha-83ef41e8419846503d2cf551c02c078f540097b9
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 5000
+          envFrom:
+            - secretRef:
+                name: avgpayroll-backend-env
+          env:
+            - name: PORT
+              value: "5000"
+            - name: WORKERS
+              value: "1"
+            - name: RUN_DB_INITIALIZERS
+              value: "false"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: avgpayroll-backend
+  namespace: avgpayroll
+spec:
+  type: ClusterIP
+  selector:
+    app: avgpayroll-backend
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
