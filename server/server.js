@@ -100,12 +100,22 @@ if (cluster.isPrimary) {
     const app = express();
 
     app.use(cors({
-        origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5173/'],
+        origin: [
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            'https://avgpayroll.com',
+            'https://www.avgpayroll.com'
+        ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
         credentials: true,
         optionsSuccessStatus: 200
     }));
+
+    // Kubernetes health check; does not query the database.
+    app.get('/healthz', (req, res) => {
+        res.status(200).json({ status: 'ok' });
+    });
 
     // Limit set to 50mb to handle high-res receipt uploads
     app.use(express.json({ limit: '50mb' }));
