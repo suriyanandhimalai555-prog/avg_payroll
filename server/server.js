@@ -121,8 +121,12 @@ if (cluster.isPrimary) {
         optionsSuccessStatus: 200
     }));
 
+    app.get("/", (req, res) => {
+        res.status(200).send("AVG Payroll Backend is running");
+    });
+
     // Kubernetes health check; does not query the database.
-    app.get('/healthz', (req, res) => {
+    app.get('/health', (req, res) => {
         res.status(200).json({ status: 'ok' });
     });
 
