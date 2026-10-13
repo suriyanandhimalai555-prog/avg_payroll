@@ -2,9 +2,22 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FaUsers, FaInfoCircle, FaSearch, FaUser, FaMoneyCheckAlt,
-    FaEye, FaSitemap, FaBriefcase, FaFileInvoiceDollar, FaFilter, FaIdBadge, FaTimes, FaHistory, FaClock, FaPlusCircle, FaMinusCircle, FaCheckCircle, FaUniversity, FaPhoneAlt
+    FaEye, FaSitemap, FaBriefcase, FaFileInvoiceDollar, FaFilter, 
+    FaIdBadge, FaTimes, FaHistory, FaClock, FaPlusCircle, FaMinusCircle, 
+    FaCheckCircle, FaUniversity, FaPhoneAlt, FaLaptop, FaMobileAlt, FaKey, FaBox
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
+
+// Helper for asset icons
+const getAssetIcon = (type) => {
+    switch (type) {
+        case 'Laptop': return <FaLaptop className="text-blue-500" />;
+        case 'Mobile Phone': return <FaMobileAlt className="text-purple-500" />;
+        case 'ID Card': return <FaIdBadge className="text-teal-500" />;
+        case 'Access Key': return <FaKey className="text-orange-500" />;
+        default: return <FaBox className="text-slate-500" />;
+    }
+};
 
 const SuperAdminEmployeeManagementCom = () => {
     const [employees, setEmployees] = useState([]);
@@ -22,6 +35,15 @@ const SuperAdminEmployeeManagementCom = () => {
     // Dossier Modal States
     const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
     const [viewEmployee, setViewEmployee] = useState(null);
+
+    // Assets Modal States
+    const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+    const [selectedEmpForAssets, setSelectedEmpForAssets] = useState(null);
+    const [empAssets, setEmpAssets] = useState([]);
+    const [loadingAssets, setLoadingAssets] = useState(false);
+    
+    // Fullscreen Image Viewer State
+    const [fullScreenImage, setFullScreenImage] = useState(null);
 
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
 
@@ -131,7 +153,6 @@ const SuperAdminEmployeeManagementCom = () => {
             setAttendanceRecords(res.data.history || []);
         } catch (err) {
             console.error("Failed to fetch attendance", err);
-            // MOCK DATA FOR VISUALIZATION IF API FAILS
             const today = new Date();
             const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
 
@@ -163,6 +184,44 @@ const SuperAdminEmployeeManagementCom = () => {
         setIsDossierModalOpen(true);
     };
 
+    const handleViewAssets = async (emp) => {
+        setSelectedEmpForAssets(emp);
+        setIsAssetModalOpen(true);
+        setLoadingAssets(true);
+        try {
+            const targetId = emp.employee_id || emp._displayId;
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${targetId}`);
+            
+            // Format array properly just like EmployeeAssetsCom
+            const parsedAssets = res.data.map(asset => {
+                let photos = asset.asset_photos || [];
+                if (typeof photos === 'string') photos = JSON.parse(photos);
+                if (photos.length === 0 && asset.asset_photo) photos = [asset.asset_photo]; // Fallback
+
+                return { ...asset, parsedPhotos: photos };
+            });
+
+            setEmpAssets(parsedAssets || []);
+        } catch (err) {
+            console.error("Failed to fetch assets", err);
+            // Mock Data for visualization if API fails or is empty
+            setEmpAssets([
+                { 
+                    id: 1, 
+                    asset_type: 'Laptop', 
+                    brand_model: 'Apple MacBook Pro 14"', 
+                    serial_number: 'C02XG543JGH', 
+                    condition: 'Working', 
+                    assigned_date: '2025-01-15', 
+                    remarks: 'Standard issue', 
+                    parsedPhotos: [] 
+                }
+            ]);
+        } finally {
+            setLoadingAssets(false);
+        }
+    };
+
     // Unified Search Filter
     const filteredEmployees = employees.filter(emp => {
         const searchString = `${emp.first_name} ${emp.last_name} ${emp._displayId} ${emp.department || 'All Departments'} ${emp.designation} ${emp._roleType} ${emp.branch} ${emp.company}`.toLowerCase();
@@ -188,6 +247,112 @@ const SuperAdminEmployeeManagementCom = () => {
 
     return (
         <div className="space-y-4 md:space-y-6 pb-8 w-full overflow-hidden relative">
+
+            {/* FULLSCREEN IMAGE VIEWER */}
+            {fullScreenImage && (
+                <div 
+                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-200" 
+                    onClick={() => setFullScreenImage(null)}
+                >
+                    <button 
+                        onClick={() => setFullScreenImage(null)} 
+                        className="absolute top-4 right-4 sm:top-6 sm:right-6 text-white/70 hover:text-white transition-colors bg-black/50 hover:bg-black/80 rounded-full p-2"
+                    >
+                        <FaTimes className="text-xl sm:text-2xl" />
+                    </button>
+                    <img 
+                        src={fullScreenImage} 
+                        alt="Expanded Asset" 
+                        className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
+                        onClick={(e) => e.stopPropagation()} 
+                    />
+                </div>
+            )}
+
+            {/* View Assets Modal */}
+            {isAssetModalOpen && selectedEmpForAssets && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+                            <div className="min-w-0">
+                                <h2 className="text-base sm:text-lg font-bold text-[#010a1f] flex items-center gap-2 truncate">
+                                    <FaLaptop className="text-teal-600 shrink-0" /> <span className="truncate">Assigned Company Assets</span>
+                                </h2>
+                                <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mt-1 truncate">Viewing products for: <span className="text-[#0437cc]">{selectedEmpForAssets.first_name} {selectedEmpForAssets.last_name}</span> ({selectedEmpForAssets._displayId})</p>
+                            </div>
+                            <button onClick={() => setIsAssetModalOpen(false)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors shrink-0">
+                                <FaTimes />
+                            </button>
+                        </div>
+                        <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                            {loadingAssets ? (
+                                <div className="py-12 text-center text-xs sm:text-sm font-semibold text-slate-500 flex flex-col items-center justify-center">
+                                    <FaBox className="text-2xl sm:text-3xl text-slate-300 animate-bounce mb-3" />
+                                    Loading assigned assets...
+                                </div>
+                            ) : empAssets.length === 0 ? (
+                                <div className="py-12 text-center text-xs sm:text-sm font-semibold text-slate-400 flex flex-col items-center justify-center">
+                                    <FaBox className="text-2xl sm:text-3xl text-slate-200 mb-3" />
+                                    No assets have been declared or assigned to this employee.
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                                    {empAssets.map((asset, idx) => (
+                                        <div key={idx} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col shadow-sm">
+                                            
+                                            {/* Header */}
+                                            <div className="flex items-center gap-3 mb-4 border-b border-slate-200 pb-3">
+                                                <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 text-lg">
+                                                    {getAssetIcon(asset.asset_type)}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">{asset.brand_model}</h3>
+                                                    <p className="text-[11px] sm:text-xs font-semibold text-slate-500 mt-0.5">{asset.asset_type}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Thumbnail Gallery (if photos exist) */}
+                                            {asset.parsedPhotos && asset.parsedPhotos.length > 0 && (
+                                                <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-3 mb-3 border-b border-slate-100">
+                                                    {asset.parsedPhotos.map((photo, pIdx) => (
+                                                        <div 
+                                                            key={pIdx} 
+                                                            onClick={() => setFullScreenImage(photo)}
+                                                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border border-slate-200 bg-white overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-[#0437cc] transition-all group relative"
+                                                        >
+                                                            <img src={photo} alt="Asset" className="w-full h-full object-cover" />
+                                                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                <FaEye className="text-white text-lg drop-shadow-md" />
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Details Data */}
+                                            <div className="space-y-2.5 flex-1 text-[11px] sm:text-xs">
+                                                <div className="flex justify-between items-center"><span className="text-slate-500 font-bold uppercase tracking-wider text-[9px] sm:text-[10px]">Serial Number</span><span className="font-mono font-bold text-[#0437cc]">{asset.serial_number}</span></div>
+                                                <div className="flex justify-between items-center"><span className="text-slate-500 font-bold uppercase tracking-wider text-[9px] sm:text-[10px]">Received On</span><span className="font-semibold text-slate-700">{formatDate(asset.assigned_date)}</span></div>
+                                                <div className="flex justify-between items-center"><span className="text-slate-500 font-bold uppercase tracking-wider text-[9px] sm:text-[10px]">Condition</span>
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${asset.condition === 'Working' ? 'text-teal-700 bg-teal-50 border border-teal-100' : asset.condition === 'Needs Repair' ? 'text-orange-700 bg-orange-50 border border-orange-100' : 'text-red-700 bg-red-50 border border-red-100'}`}>
+                                                        {asset.condition}
+                                                    </span>
+                                                </div>
+                                                {asset.remarks && (
+                                                    <div className="mt-3 pt-3 border-t border-slate-100">
+                                                        <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px] sm:text-[10px] block mb-1.5">Remarks</span>
+                                                        <p className="text-slate-600 font-medium break-words italic bg-white border border-slate-100 p-2.5 rounded-lg">"{asset.remarks}"</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* View Attendance & Logs Modal */}
             {isAttendanceModalOpen && selectedEmp && (
@@ -542,6 +707,13 @@ const SuperAdminEmployeeManagementCom = () => {
                                         </td>
                                         <td className="px-4 sm:px-6 py-3 sm:py-4 text-right whitespace-nowrap">
                                             <div className="flex gap-1 sm:gap-1.5 justify-end">
+                                                <button
+                                                    onClick={() => handleViewAssets(emp)}
+                                                    className="p-1.5 sm:p-2 text-slate-400 hover:text-teal-600 transition-colors rounded hover:bg-teal-50"
+                                                    title="View Assigned Assets"
+                                                >
+                                                    <FaLaptop className="text-xs sm:text-sm" />
+                                                </button>
                                                 <button
                                                     onClick={() => handleViewDossier(emp)}
                                                     className="p-1.5 sm:p-2 text-slate-400 hover:text-[#f77704] transition-colors rounded hover:bg-[#f77704]/10"

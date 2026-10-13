@@ -257,8 +257,94 @@ const EmployeeDashboardCom = () => {
         { title: 'Pending Leaves', value: alerts.filter(a => a.status === 'Pending').length.toString(), icon: FaClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-100', border: 'border-l-indigo-500' },
     ];
 
+    // Custom Design-Based Shimmer specifically mapped to the Dashboard Structure
     if (loading) {
-        return <div className="p-8 text-center text-slate-500 font-semibold">Loading Dashboard Data...</div>;
+        return (
+            <div className="space-y-6 sm:space-y-8 pb-8 relative w-full overflow-hidden animate-pulse">
+                {/* Page Header Shimmer */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="space-y-2 w-full sm:w-1/3">
+                        <div className="h-6 sm:h-8 bg-slate-200 rounded-md w-3/4"></div>
+                        <div className="h-3 sm:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                    </div>
+                    <div className="h-10 sm:h-12 bg-slate-200 rounded-lg w-full sm:w-32 shrink-0"></div>
+                </div>
+
+                {/* Top Cards Grid Shimmer */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-5 md:gap-6">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col gap-3 sm:gap-4 border-l-4 border-slate-200">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-slate-200 shrink-0"></div>
+                            <div className="space-y-2">
+                                <div className="h-6 sm:h-8 bg-slate-200 rounded-md w-3/4"></div>
+                                <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Main Content Layout Shimmer */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Side (Spans 2 columns) - Weekly Overview Shimmer */}
+                    <div className="lg:col-span-2 space-y-6 flex flex-col">
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 md:p-8 flex flex-col flex-1 min-h-[350px]">
+                            <div className="mb-6 flex justify-between items-center border-b border-slate-100 pb-4">
+                                <div className="space-y-2 w-1/2 md:w-1/3">
+                                    <div className="h-5 bg-slate-200 rounded-md w-1/2"></div>
+                                    <div className="h-3 bg-slate-200 rounded-md w-3/4"></div>
+                                </div>
+                                <div className="h-8 w-24 bg-slate-200 rounded-md"></div>
+                            </div>
+                            <div className="flex-1 flex items-end gap-2 sm:gap-3 md:gap-4 h-full">
+                                {[1, 2, 3, 4, 5].map((i) => (
+                                    <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+                                        <div className="w-full bg-slate-200 rounded-lg h-28 sm:h-36 md:h-40"></div>
+                                        <div className="h-3 bg-slate-200 rounded w-3/4 mt-2"></div>
+                                        <div className="h-3 bg-slate-200 rounded w-1/2 mt-1"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Side Column - Quick Actions & Notifications Shimmer */}
+                    <div className="space-y-6 flex flex-col h-full">
+                        {/* Quick Actions Shimmer */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6">
+                            <div className="h-5 bg-slate-200 rounded-md w-1/2 mb-5"></div>
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                                {[1, 2, 3, 4].map((i) => (
+                                    <div key={i} className="h-20 sm:h-24 bg-slate-50 border border-slate-100 rounded-xl flex flex-col items-center justify-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-slate-200"></div>
+                                        <div className="h-2 bg-slate-200 rounded w-1/2 mt-1"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Recent Alerts Shimmer */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex-1">
+                            <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
+                                <div className="h-5 bg-slate-200 rounded-md w-1/2"></div>
+                                <div className="h-5 bg-slate-200 rounded-full w-16"></div>
+                            </div>
+                            <div className="space-y-4">
+                                {[1, 2, 3].map((i) => (
+                                    <div key={i} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-200 shrink-0"></div>
+                                        <div className="space-y-2 flex-1 pt-1">
+                                            <div className="h-3 bg-slate-200 rounded w-3/4"></div>
+                                            <div className="h-2 bg-slate-200 rounded w-full"></div>
+                                            <div className="h-2 bg-slate-200 rounded w-5/6"></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -363,9 +449,9 @@ const EmployeeDashboardCom = () => {
                                         <div className="text-center w-full min-w-0">
                                             <p className="text-[11px] sm:text-xs md:text-sm font-bold text-[#010a1f] truncate">{day.day}</p>
                                             <span className={`inline-block mt-1 px-1 sm:px-1.5 md:px-2 py-0.5 rounded text-[8px] sm:text-[9px] md:text-[10px] font-bold truncate max-w-full ${day.status === 'Present' ? 'bg-green-100 text-green-700' :
-                                                    day.status === 'Late' ? 'bg-orange-100 text-orange-700' :
-                                                        day.status === 'Off' ? 'bg-slate-200 text-slate-600' :
-                                                            'bg-red-100 text-red-700'
+                                                day.status === 'Late' ? 'bg-orange-100 text-orange-700' :
+                                                    day.status === 'Off' ? 'bg-slate-200 text-slate-600' :
+                                                        'bg-red-100 text-red-700'
                                                 }`}>
                                                 {day.status}
                                             </span>
@@ -420,8 +506,8 @@ const EmployeeDashboardCom = () => {
                                     <div key={i} className="p-3 sm:p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-3 relative transition-all hover:bg-slate-100/50">
                                         {alert.status === 'Pending' && <div className="absolute top-3 right-3 w-2 h-2 rounded-full bg-[#0437cc] animate-pulse"></div>}
                                         <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${alert.status === 'Approved' ? 'bg-green-100 text-green-600' :
-                                                alert.status === 'Rejected' ? 'bg-red-100 text-red-600' :
-                                                    'bg-orange-100 text-orange-600'
+                                            alert.status === 'Rejected' ? 'bg-red-100 text-red-600' :
+                                                'bg-orange-100 text-orange-600'
                                             }`}>
                                             {alert.status === 'Approved' ? <FaCheckCircle className="text-[14px] sm:text-base" /> : alert.status === 'Rejected' ? <FaTimesCircle className="text-[14px] sm:text-base" /> : <FaClock className="text-[14px] sm:text-base" />}
                                         </div>

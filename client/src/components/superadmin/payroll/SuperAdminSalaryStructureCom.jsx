@@ -102,13 +102,13 @@ const SuperAdminSalaryStructureCom = () => {
 
                 return {
                     id: user.id,
-                    // Keep explicit references to raw first_name/last_name to fix the not-null violation
                     originalData: {
                         ...user,
                         firstName: user.first_name || user.firstName,
                         lastName: user.last_name || user.lastName
                     },
                     userName: `${user.first_name || user.firstName} ${user.last_name || user.lastName}`,
+                    profilePhoto: user.profile_photo || null,
                     role: user.mappedRole,
                     company: user.company,
                     branch: user.branch,
@@ -126,7 +126,7 @@ const SuperAdminSalaryStructureCom = () => {
                     medical: parseNum(user.medical),
                     specialAllowance: parseNum(user.special_allowance),
                     otherAllowances: parseNum(user.other_allowances),
-                    
+
                     epf: parseNum(user.epf),
                     esi: parseNum(user.esi),
                     healthInsurance: parseNum(user.health_insurance),
@@ -239,7 +239,7 @@ const SuperAdminSalaryStructureCom = () => {
             else if (editingUser.role === 'Employee') endpoint = `/api/sa-employees/${editingUser.id}`;
 
             const payload = {
-                ...editingUser.originalData, 
+                ...editingUser.originalData,
                 ctc: formData.ctc,
                 monthly_salary: formData.monthlySalary,
                 basic_salary: formData.basic,
@@ -314,9 +314,17 @@ const SuperAdminSalaryStructureCom = () => {
 
                             {/* User Context */}
                             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 border-b border-slate-100 pb-4 sm:pb-6 text-center sm:text-left">
-                                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-xl sm:text-2xl border border-[#0437cc]/20 shrink-0">
-                                    {viewStructure.userName?.charAt(0)}
-                                </div>
+                                {viewStructure.profilePhoto ? (
+                                    <img
+                                        src={viewStructure.profilePhoto}
+                                        alt={viewStructure.userName}
+                                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border border-[#0437cc]/20 shrink-0 shadow-sm"
+                                    />
+                                ) : (
+                                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-xl sm:text-2xl border border-[#0437cc]/20 shrink-0">
+                                        {viewStructure.userName?.charAt(0)}
+                                    </div>
+                                )}
                                 <div className="min-w-0 flex-1 w-full sm:w-auto">
                                     <h3 className="text-lg sm:text-xl font-bold text-[#010a1f] break-words">{viewStructure.userName}</h3>
                                     <p className="text-[11px] sm:text-xs font-mono text-[#0437cc] font-bold mt-0.5">{viewStructure.role}</p>
@@ -563,9 +571,17 @@ const SuperAdminSalaryStructureCom = () => {
                                         <tr key={i} className={`hover:bg-slate-50/50 transition-colors group ${isEditing && editingUser?.id === struct.id && editingUser?.role === struct.role ? 'bg-blue-50/50' : ''}`}>
                                             <td className="px-4 sm:px-6 py-3 sm:py-4">
                                                 <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 border border-[#0437cc]/20">
-                                                        {struct.userName?.charAt(0)}
-                                                    </div>
+                                                    {struct.profilePhoto ? (
+                                                        <img
+                                                            src={struct.profilePhoto}
+                                                            alt={struct.userName}
+                                                            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover shrink-0 border border-[#0437cc]/20 shadow-sm"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 border border-[#0437cc]/20">
+                                                            {struct.userName?.charAt(0)}
+                                                        </div>
+                                                    )}
                                                     <div className="min-w-0">
                                                         <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{struct.userName}</p>
                                                         <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${struct.role === 'HR' ? 'text-teal-600' : struct.role === 'Manager' ? 'text-orange-500' : 'text-[#0437cc]'}`}>

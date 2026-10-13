@@ -219,8 +219,78 @@ const EmployeeMyProfileCom = () => {
 
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
 
+    // Custom Design-Based Shimmer specifically mapped to the Profile Structure
     if (loading || !profileData) {
-        return <div className="flex items-center justify-center min-h-[50vh] text-sm text-slate-500 font-semibold animate-pulse">Loading Profile Data...</div>;
+        return (
+            <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden animate-pulse">
+                {/* Header Shimmer */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="space-y-2 w-full md:w-1/3">
+                        <div className="h-6 md:h-8 bg-slate-200 rounded-md w-3/4"></div>
+                        <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                    </div>
+                    <div className="h-10 bg-slate-200 rounded-lg w-full md:w-40 shrink-0 mt-2 md:mt-0"></div>
+                </div>
+
+                {/* Top Summary Card Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col md:flex-row items-center gap-4 md:gap-6">
+                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-slate-200 shrink-0"></div>
+                    <div className="flex-1 w-full space-y-3 flex flex-col items-center md:items-start">
+                        <div className="h-6 sm:h-8 bg-slate-200 rounded-md w-1/2 md:w-1/3"></div>
+                        <div className="flex gap-2 w-full justify-center md:justify-start">
+                            <div className="h-6 bg-slate-200 rounded-md w-24"></div>
+                            <div className="h-6 bg-slate-200 rounded-md w-24"></div>
+                            <div className="h-6 bg-slate-200 rounded-md w-24"></div>
+                        </div>
+                    </div>
+                    <div className="w-full md:w-40 h-16 bg-slate-200 rounded-xl shrink-0 mt-2 md:mt-0"></div>
+                </div>
+
+                {/* Profile Grids Shimmer */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                    {/* Personal Information */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col h-full">
+                        <div className="h-5 bg-slate-200 rounded-md w-1/3 mb-4"></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
+                            {[...Array(4)].map((_, i) => (
+                                <div key={i} className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl">
+                                    <div className="h-3 bg-slate-200 rounded-md w-1/2 mb-2"></div>
+                                    <div className="h-4 bg-slate-200 rounded-md w-3/4"></div>
+                                </div>
+                            ))}
+                            {[...Array(2)].map((_, i) => (
+                                <div key={i + 4} className="sm:col-span-2 bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl">
+                                    <div className="h-3 bg-slate-200 rounded-md w-1/4 mb-2"></div>
+                                    <div className="h-4 bg-slate-200 rounded-md w-full"></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Employment Information */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col h-full">
+                        <div className="h-5 bg-slate-200 rounded-md w-1/3 mb-4"></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
+                            {[...Array(10)].map((_, i) => (
+                                <div key={i} className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl">
+                                    <div className="h-3 bg-slate-200 rounded-md w-1/2 mb-2"></div>
+                                    <div className="h-4 bg-slate-200 rounded-md w-3/4"></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    {/* Salary Information */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 lg:col-span-2">
+                        <div className="h-5 bg-slate-200 rounded-md w-1/4 mb-4"></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                            <div className="bg-slate-50 border border-slate-100 p-4 sm:p-5 rounded-xl h-64"></div>
+                            <div className="bg-slate-50 border border-slate-100 p-4 sm:p-5 rounded-xl h-64"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     const liveGross = parseNum(profileData.salary.basic) + parseNum(profileData.salary.hra) + parseNum(profileData.salary.conveyance) + parseNum(profileData.salary.medical) + parseNum(profileData.salary.specialAllowance) + parseNum(profileData.salary.otherAllowances);

@@ -1,13 +1,46 @@
-import React, { useState, useEffect } from 'react';
-// import axios from 'axios'; // Uncomment when ready for real-time data
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import axios from 'axios';
+import Cropper from 'react-easy-crop';
 import {
     FaUserCircle, FaInfoCircle, FaCheck, FaTimes,
-    FaLock, FaDesktop, FaCamera, FaSave, FaShieldAlt
+    FaDesktop, FaCamera, FaSave
 } from 'react-icons/fa';
-import Button from '../common/Button';
-import Input from '../common/Input';
+import Button from '../../components/common/Button';
+import Input from '../../components/common/Input';
+import { useAuth } from '../../context/AuthContext';
 
-// FieldWrapper defined OUTSIDE to prevent input focus loss while typing
+// Helper functions for image cropping
+const createImage = (url) =>
+    new Promise((resolve, reject) => {
+        const image = new Image();
+        image.addEventListener('load', () => resolve(image));
+        image.addEventListener('error', (error) => reject(error));
+        image.src = url;
+    });
+
+const getCroppedImg = async (imageSrc, pixelCrop) => {
+    const image = await createImage(imageSrc);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+
+    ctx.drawImage(
+        image,
+        pixelCrop.x,
+        pixelCrop.y,
+        pixelCrop.width,
+        pixelCrop.height,
+        0,
+        0,
+        pixelCrop.width,
+        pixelCrop.height
+    );
+
+    return canvas.toDataURL('image/jpeg');
+};
+
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full">
         {children}
@@ -16,84 +49,64 @@ const FieldWrapper = ({ error, children }) => (
 );
 
 const SuperAdminProfileCom = () => {
-    // Reusable Initial States
-    const INITIAL_PROFILE_STATE = {
-        name: 'Ranjith',
-        email: 'ranjith@avgprimetech.com',
-        phone: '+91 98765 43210',
+    const { user, login } = useAuth();
+    const fileInputRef = useRef(null);
+
+    const [profileData, setProfileData] = useState({
+        name: '',
+        email: '',
+        phone: '',
+        profilePhoto: '',
         role: 'Super Admin'
-    };
-
-    const INITIAL_PASSWORD_STATE = {
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-    };
-
-    const [profileData, setProfileData] = useState(INITIAL_PROFILE_STATE);
-    const [passwordData, setPasswordData] = useState(INITIAL_PASSWORD_STATE);
+    });
+    
     const [activeSessions, setActiveSessions] = useState([]);
-
     const [profileErrors, setProfileErrors] = useState({});
-    const [passwordErrors, setPasswordErrors] = useState({});
-
     const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
-    const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-
-    // Notification States
     const [successMsg, setSuccessMsg] = useState('');
     const [apiError, setApiError] = useState('');
 
-    // Fetch existing Settings & Sessions
-    const fetchProfileData = async () => {
-        setIsLoading(true);
-        setApiError('');
-        try {
-            // ==========================================
-            // FUTURE REAL-TIME DATA FETCH
-            // ==========================================
-            // const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/profile`);
-            // if (response.data) setProfileData(response.data.profile);
-            // setActiveSessions(response.data.sessions || []);
-
-            // ==========================================
-            // TEMPORARY DUMMY DATA FOR VISUALIZATION
-            // ==========================================
-            setTimeout(() => {
-                setProfileData(INITIAL_PROFILE_STATE);
-                setActiveSessions([
-                    {
-                        id: 1,
-                        device: 'MacBook Pro 16" - Chrome Browser',
-                        ip: '192.168.1.105',
-                        location: 'Bengaluru, India',
-                        lastActive: 'Active Now',
-                        isCurrent: true
-                    },
-                    {
-                        id: 2,
-                        device: 'iPhone 14 Pro - Safari Browser',
-                        ip: '192.168.1.202',
-                        location: 'Bengaluru, India',
-                        lastActive: '2 hours ago',
-                        isCurrent: false
-                    }
-                ]);
-                setIsLoading(false);
-            }, 600);
-        } catch (error) {
-            console.error('Failed to load profile data', error);
-            setApiError('Failed to load profile. Please try again later.');
-            setIsLoading(false);
-        }
-    };
+    // Photo Crop Modal States
+    const [photoModalOpen, setPhotoModalOpen] = useState(false);
+    const [selectedPhoto, setSelectedPhoto] = useState(null);
+    const [crop, setCrop] = useState({ x: 0, y: 0 });
+    const [zoomLevel, setZoomLevel] = useState(1);
+    const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
     useEffect(() => {
-        fetchProfileData();
-    }, []);
+        if (user) {
+            setProfileData({
+                name: user.full_name || user.first_name || 'Super Admin',
+                email: user.email || '',
+                phone: user.phone || '',
+                profilePhoto: user.profile_photo || '',
+                role: 'Super Admin'
+            });
 
-    // Handlers
+            // Mocking active sessions visually
+            setActiveSessions([
+                {
+                    id: 1,
+                    device: 'MacBook Pro 16" - Chrome Browser',
+                    ip: '192.168.1.105',
+                    location: 'Bengaluru, India',
+                    lastActive: 'Active Now',
+                    isCurrent: true
+                },
+                {
+                    id: 2,
+                    device: 'iPhone 14 Pro - Safari Browser',
+                    ip: '192.168.1.202',
+                    location: 'Bengaluru, India',
+                    lastActive: '2 hours ago',
+                    isCurrent: false
+                }
+            ]);
+            setIsLoading(false);
+        }
+    }, [user]);
+
     const handleProfileChange = (e) => {
         const { name, value } = e.target;
         setProfileData(prev => ({ ...prev, [name]: value }));
@@ -101,79 +114,77 @@ const SuperAdminProfileCom = () => {
         if (apiError) setApiError('');
     };
 
-    const handlePasswordChange = (e) => {
-        const { name, value } = e.target;
-        setPasswordData(prev => ({ ...prev, [name]: value }));
-        if (passwordErrors[name]) setPasswordErrors(prev => ({ ...prev, [name]: '' }));
-        if (apiError) setApiError('');
+    // Triggered when a file is selected
+    const handlePhotoFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) {
+                setApiError("Image size must be less than 2MB");
+                setTimeout(() => setApiError(''), 4000);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setSelectedPhoto(reader.result);
+                setZoomLevel(1);
+                setCrop({ x: 0, y: 0 });
+                setPhotoModalOpen(true);
+            };
+            reader.readAsDataURL(file);
+        }
+        e.target.value = null; 
     };
 
-    // Validations
+    const onCropComplete = useCallback((croppedArea, croppedAreaPixels) => {
+        setCroppedAreaPixels(croppedAreaPixels);
+    }, []);
+
+    // Saves the cropped image to local state (will be submitted to DB on "Save Profile")
+    const handlePhotoCropSave = async () => {
+        try {
+            const finalCroppedBase64 = await getCroppedImg(selectedPhoto, croppedAreaPixels);
+            setProfileData(prev => ({ ...prev, profilePhoto: finalCroppedBase64 }));
+            setPhotoModalOpen(false);
+        } catch (error) {
+            console.error("Error cropping photo", error);
+            setApiError("Failed to apply image crop.");
+            setTimeout(() => setApiError(''), 4000);
+        }
+    };
+
     const validateProfile = () => {
         let newErrors = {};
-        if (!profileData.name.trim()) newErrors.name = 'Name is required';
-        if (!profileData.email.trim()) newErrors.email = 'Email is required';
-        else if (!/\S+@\S+\.\S+/.test(profileData.email)) newErrors.email = 'Invalid email format';
-        if (!profileData.phone.trim()) newErrors.phone = 'Phone is required';
-
+        if (!profileData.name || !profileData.name.trim()) newErrors.name = 'Name is required';
+        if (!profileData.phone || !profileData.phone.trim()) newErrors.phone = 'Phone number is required';
         setProfileErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
-    const validatePassword = () => {
-        let newErrors = {};
-        if (!passwordData.currentPassword) newErrors.currentPassword = 'Required';
-        if (!passwordData.newPassword) newErrors.newPassword = 'Required';
-        else if (passwordData.newPassword.length < 8) newErrors.newPassword = 'Must be at least 8 characters';
-        if (passwordData.newPassword !== passwordData.confirmPassword) {
-            newErrors.confirmPassword = 'Passwords do not match';
-        }
-
-        setPasswordErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    // Submits
     const handleProfileSubmit = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault(); // Safely prevent default behavior
         setSuccessMsg('');
         setApiError('');
 
         if (!validateProfile()) return;
-
         setIsSubmittingProfile(true);
+
         try {
-            // Simulated API Call
-            setTimeout(() => {
-                setSuccessMsg('Personal profile information updated successfully.');
-                setTimeout(() => setSuccessMsg(''), 5000);
-                setIsSubmittingProfile(false);
-            }, 1000);
+            const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/auth/profile`, {
+                email: user.email,
+                role: 'superadmin',
+                fullName: profileData.name,
+                phone: profileData.phone,
+                profilePhoto: profileData.profilePhoto
+            });
+
+            login(response.data.user, sessionStorage.getItem('token') || localStorage.getItem('token'));
+            
+            setSuccessMsg('Personal profile information updated successfully.');
+            setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
-            setApiError('Failed to update profile.');
+            setApiError(error.response?.data?.message || 'Failed to update profile.');
+        } finally {
             setIsSubmittingProfile(false);
-        }
-    };
-
-    const handlePasswordSubmit = async (e) => {
-        e.preventDefault();
-        setSuccessMsg('');
-        setApiError('');
-
-        if (!validatePassword()) return;
-
-        setIsSubmittingPassword(true);
-        try {
-            // Simulated API Call
-            setTimeout(() => {
-                setSuccessMsg('Security password successfully changed.');
-                setPasswordData(INITIAL_PASSWORD_STATE);
-                setTimeout(() => setSuccessMsg(''), 5000);
-                setIsSubmittingPassword(false);
-            }, 1000);
-        } catch (error) {
-            setApiError('Failed to update password.');
-            setIsSubmittingPassword(false);
         }
     };
 
@@ -184,7 +195,7 @@ const SuperAdminProfileCom = () => {
     };
 
     return (
-        <div className="space-y-8 pb-8">
+        <div className="space-y-8 pb-8 relative">
             {/* Sticky Header */}
             <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-slate-100">
                 <div>
@@ -200,12 +211,12 @@ const SuperAdminProfileCom = () => {
                 <div>
                     <p className="text-sm font-bold text-[#010a1f]">Root Administrator Account</p>
                     <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-                        This section manages your personal Super Admin credentials. Ensure your contact information is up to date and your password adheres to strong security protocols. You can also monitor and revoke active login sessions to prevent unauthorized access.
+                        This section manages your personal Super Admin credentials. Ensure your contact information is up to date. You can also monitor and revoke active login sessions to prevent unauthorized access.
                     </p>
                 </div>
             </div>
 
-            {/* Conditional Success/Error Banners */}
+            {/* Notifications */}
             {successMsg && (
                 <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl font-medium text-sm flex items-center gap-2">
                     <FaCheck className="shrink-0" /> {successMsg}
@@ -225,36 +236,65 @@ const SuperAdminProfileCom = () => {
             ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
 
-                    {/* Left Column: Profile Form & Password Form */}
+                    {/* Left Column: Profile Form */}
                     <div className="xl:col-span-2 space-y-8">
-
-                        {/* Profile Info Form */}
                         <form className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden" onSubmit={handleProfileSubmit}>
                             <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <FaUserCircle className="text-[#0437cc] text-lg" />
                                     <h2 className="text-base font-bold text-[#010a1f]">Personal Information</h2>
                                 </div>
-                                <Button variant="primary" size="sm" icon={FaSave} className="shadow-md shadow-[#0437cc]/20" disabled={isSubmittingProfile}>
+                                {/* Bulletproofed the Save button by explicitly making it type="submit" AND attaching the onClick */}
+                                <Button 
+                                    type="submit"
+                                    onClick={handleProfileSubmit}
+                                    variant="primary" 
+                                    size="sm" 
+                                    icon={FaSave} 
+                                    className="shadow-md shadow-[#0437cc]/20" 
+                                    disabled={isSubmittingProfile}
+                                >
                                     {isSubmittingProfile ? 'Saving...' : 'Save Profile'}
                                 </Button>
                             </div>
 
                             <div className="p-6">
-                                {/* Profile Photo Upload Simulation */}
+                                {/* Profile Photo Upload */}
                                 <div className="flex items-center gap-6 mb-8">
-                                    <div className="relative group cursor-pointer">
-                                        <div className="w-24 h-24 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center text-3xl font-bold border-2 border-[#0437cc]/20 overflow-hidden">
-                                            {profileData.name.charAt(0)}
-                                        </div>
+                                    <div 
+                                        className="relative group cursor-pointer"
+                                        onClick={() => fileInputRef.current.click()}
+                                    >
+                                        {profileData.profilePhoto ? (
+                                            <img 
+                                                src={profileData.profilePhoto} 
+                                                alt="Profile" 
+                                                className="w-24 h-24 rounded-full object-cover border-2 border-[#0437cc]/20 shadow-sm"
+                                            />
+                                        ) : (
+                                            <div className="w-24 h-24 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center text-3xl font-bold border-2 border-[#0437cc]/20 overflow-hidden shadow-sm">
+                                                {profileData.name.charAt(0)}
+                                            </div>
+                                        )}
                                         <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                             <FaCamera className="text-white text-xl" />
                                         </div>
+                                        <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            ref={fileInputRef} 
+                                            onChange={handlePhotoFileChange} 
+                                            className="hidden" 
+                                        />
                                     </div>
                                     <div>
                                         <h3 className="text-lg font-bold text-[#010a1f]">{profileData.name}</h3>
                                         <p className="text-sm font-semibold text-slate-500">{profileData.role}</p>
-                                        <button type="button" className="text-xs font-bold text-[#0437cc] hover:underline mt-2">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => fileInputRef.current.click()}
+                                            className="text-xs font-bold text-[#0437cc] hover:underline mt-2"
+                                        >
                                             Change Photo
                                         </button>
                                     </div>
@@ -270,13 +310,14 @@ const SuperAdminProfileCom = () => {
                                         />
                                     </FieldWrapper>
 
-                                    <FieldWrapper error={profileErrors.email}>
+                                    <FieldWrapper error={null}>
                                         <Input
-                                            label="Email Address"
+                                            label="Email Address (Locked)"
                                             type="email"
                                             name="email"
                                             value={profileData.email}
-                                            onChange={handleProfileChange}
+                                            disabled={true}
+                                            className="bg-slate-50 text-slate-500 cursor-not-allowed"
                                         />
                                     </FieldWrapper>
 
@@ -286,6 +327,7 @@ const SuperAdminProfileCom = () => {
                                             name="phone"
                                             value={profileData.phone}
                                             onChange={handleProfileChange}
+                                            placeholder="+91 98765 43210"
                                         />
                                     </FieldWrapper>
 
@@ -299,56 +341,6 @@ const SuperAdminProfileCom = () => {
                                         />
                                     </FieldWrapper>
                                 </div>
-                            </div>
-                        </form>
-
-                        {/* Change Password Form */}
-                        <form className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden" onSubmit={handlePasswordSubmit}>
-                            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <FaLock className="text-[#f77704] text-lg" />
-                                    <h2 className="text-base font-bold text-[#010a1f]">Change Password</h2>
-                                </div>
-                                <Button variant="outline" size="sm" icon={FaShieldAlt} className="border-[#f77704] text-[#f77704] hover:bg-[#f77704] hover:text-white" disabled={isSubmittingPassword}>
-                                    {isSubmittingPassword ? 'Updating...' : 'Update Password'}
-                                </Button>
-                            </div>
-
-                            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="md:col-span-2">
-                                    <FieldWrapper error={passwordErrors.currentPassword}>
-                                        <Input
-                                            label="Current Password"
-                                            type="password"
-                                            name="currentPassword"
-                                            placeholder="Enter current password"
-                                            value={passwordData.currentPassword}
-                                            onChange={handlePasswordChange}
-                                        />
-                                    </FieldWrapper>
-                                </div>
-
-                                <FieldWrapper error={passwordErrors.newPassword}>
-                                    <Input
-                                        label="New Password"
-                                        type="password"
-                                        name="newPassword"
-                                        placeholder="Minimum 8 characters"
-                                        value={passwordData.newPassword}
-                                        onChange={handlePasswordChange}
-                                    />
-                                </FieldWrapper>
-
-                                <FieldWrapper error={passwordErrors.confirmPassword}>
-                                    <Input
-                                        label="Confirm New Password"
-                                        type="password"
-                                        name="confirmPassword"
-                                        placeholder="Retype new password"
-                                        value={passwordData.confirmPassword}
-                                        onChange={handlePasswordChange}
-                                    />
-                                </FieldWrapper>
                             </div>
                         </form>
                     </div>
@@ -382,6 +374,7 @@ const SuperAdminProfileCom = () => {
                                                 </div>
                                                 {!session.isCurrent && (
                                                     <button
+                                                        type="button"
                                                         onClick={() => handleRevokeSession(session.id)}
                                                         className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition-colors"
                                                     >
@@ -396,6 +389,59 @@ const SuperAdminProfileCom = () => {
                         </div>
                     </div>
 
+                </div>
+            )}
+
+            {/* Hidden Photo Crop/Adjust Modal */}
+            {photoModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#010a1f]/80 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-w-sm w-full relative animate-in zoom-in-95 duration-200">
+                        <button type="button" onClick={() => setPhotoModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors p-2 bg-slate-100 rounded-full z-10">
+                            <FaTimes />
+                        </button>
+
+                        <h2 className="text-lg sm:text-xl font-bold text-[#010a1f] mb-2 text-center">Adjust Profile Photo</h2>
+                        <p className="text-[11px] sm:text-xs text-slate-500 text-center mb-6">Drag and zoom to perfectly frame your avatar.</p>
+
+                        <div className="flex justify-center mb-6">
+                            <div className="w-40 h-40 sm:w-48 sm:h-48 rounded-full overflow-hidden border-4 border-slate-100 shadow-inner relative bg-slate-50">
+                                <Cropper
+                                    image={selectedPhoto}
+                                    crop={crop}
+                                    zoom={zoomLevel}
+                                    aspect={1}
+                                    cropShape="round"
+                                    showGrid={false}
+                                    onCropChange={setCrop}
+                                    onCropComplete={onCropComplete}
+                                    onZoomChange={setZoomLevel}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="mb-6 px-2 sm:px-4">
+                            <label className="text-[11px] sm:text-xs font-bold text-slate-500 flex justify-between mb-2">
+                                <span>Zoom Adjust</span>
+                                <span className="text-[#0437cc]">{Math.round(zoomLevel * 100)}%</span>
+                            </label>
+                            <input
+                                type="range"
+                                min="1" max="3" step="0.1"
+                                value={zoomLevel}
+                                onChange={(e) => setZoomLevel(e.target.value)}
+                                className="w-full accent-[#0437cc] h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer relative z-10"
+                            />
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3 relative z-10">
+                            <Button type="button" variant="ghost" fullWidth onClick={() => setPhotoModalOpen(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 order-2 sm:order-1 text-sm py-2">
+                                Cancel
+                            </Button>
+                            <Button type="button" variant="primary" fullWidth onClick={handlePhotoCropSave} className="shadow-lg shadow-[#0437cc]/25 order-1 sm:order-2 text-sm py-2">
+                                Apply Photo
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

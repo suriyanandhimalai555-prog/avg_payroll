@@ -4,7 +4,15 @@ import dotenv from 'dotenv';
 import cluster from 'cluster';
 import os from 'os';
 
-// Super Admin Routes
+// Load environment variables immediately
+dotenv.config();
+
+// Environment Variable Safety Check
+if (!process.env.JWT_SECRET) {
+    console.error('FATAL ERROR: JWT_SECRET is not defined in the .env file. Shutting down to prevent insecure authentication.');
+    process.exit(1);
+}
+
 import authRoutes from './routes/authRoutes.js';
 import saEmployeeRoutes from './routes/superadmin/saEmployeeRoutes.js';
 import saCompanyProfileRoutes from './routes/superadmin/saCompanyProfileRoutes.js';
@@ -18,15 +26,15 @@ import saLeavePolicyRoutes from './routes/superadmin/saLeavePolicyRoutes.js';
 import saAttendanceRoutes from './routes/superadmin/saAttendanceRoutes.js';
 import saHrUserRoutes from './routes/superadmin/saHrUserRoutes.js';
 import saManagerRoutes from './routes/superadmin/saManagerRoutes.js';
+import saReimbursementRoutes from './routes/superadmin/saReimbursementRoutes.js';
 
-// Employee Routes
 import employeeProfileRoutes from './routes/employee/empProfileRoutes.js';
 import empAttendanceRoutes from './routes/employee/empAttendanceRoutes.js';
 import empLeaveRoutes from './routes/employee/empLeaveRoutes.js';
-import payrollRoutes from './routes/employee/payrollRoutes.js';
-import reimbursementRoutes from './routes/employee/reimbursementRoutes.js';
+import empPayrollRoutes from './routes/employee/empPayrollRoutes.js';
+import empReimbursementRoutes from './routes/employee/empReimbursementRoutes.js';
+import empAssetRoutes from './routes/employee/empAssetRoutes.js';
 
-// Super Admin Models
 import initializeSASuperAdminModel from './models/superadmin/SASuperAdmin.js';
 import initializeSAEmployeeModel from './models/superadmin/SAEmployee.js';
 import initializeSACompanyProfileModel from './models/superadmin/SACompanyProfile.js';
@@ -40,17 +48,13 @@ import initializeSALeavePolicyModel from './models/superadmin/SALeavePolicy.js';
 import initializeSAHrUserModel from './models/superadmin/SAHrUser.js';
 import initializeSAManagerModel from './models/superadmin/SAManager.js';
 
-// Employee Models
 import initializeAttendanceModel from './models/employee/EmpAttendance.js';
 import initializeLeaveModels from './models/employee/EmpLeave.js';
-import initializeReimbursementModels from './models/employee/Reimbursement.js';
+import initializeReimbursementModels from './models/employee/EmpReimbursement.js';
+import initializeEmpAssetModel from './models/employee/EmpAsset.js';
 
-dotenv.config();
-
-// Wrap initializations in an async function to enforce strict sequential execution
 const initializeDatabase = async () => {
     try {
-        // Super Admin
         await initializeSASuperAdminModel();
         await initializeSAEmployeeModel();
         await initializeSACompanyProfileModel();
@@ -63,11 +67,11 @@ const initializeDatabase = async () => {
         await initializeSALeavePolicyModel();
         await initializeSAHrUserModel();
         await initializeSAManagerModel();
-        
-        // Employee
+
         await initializeAttendanceModel();
         await initializeLeaveModels();
         await initializeReimbursementModels();
+        await initializeEmpAssetModel();
 
         console.log('All database models initialized sequentially.');
     } catch (error) {
@@ -75,46 +79,35 @@ const initializeDatabase = async () => {
     }
 };
 
-// --- CLUSTER MODE FOR SCALABILITY ---
 const numCPUs = os.cpus().length;
 const PORT = process.env.PORT || 5000;
 
 if (cluster.isPrimary) {
     console.log(`Primary Master Process ${process.pid} is running.`);
-    
-    // We strictly initialize the DB once on the Primary process to prevent table-locking race conditions
     initializeDatabase().then(() => {
         console.log(`Database ready. Forking traffic across ${numCPUs} CPU cores...`);
-        
-        // Fork workers for every CPU core
-        for (let i = 0; i < numCPUs; i++) {
-            cluster.fork();
-        }
-
-        // Auto-Heal: If a worker crashes, spawn a new one instantly
-        cluster.on('exit', (worker, code, signal) => {
+        for (let i = 0; i < numCPUs; i++) cluster.fork();
+        cluster.on('exit', (worker) => {
             console.warn(`Worker ${worker.process.pid} died. Restarting automatically...`);
             cluster.fork();
         });
     });
-
 } else {
-    // --- WORKER PROCESS EXECUTION ---
     const app = express();
 
     app.use(cors({
-        origin: true,
+        origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5173/'],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
-        credentials: true
+        allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+        credentials: true,
+        optionsSuccessStatus: 200
     }));
 
-    app.use(express.json({ limit: '10mb' }));
-    app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+    // Limit set to 50mb to handle high-res receipt uploads
+    app.use(express.json({ limit: '50mb' }));
+    app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-    // Routes
     app.use('/api/auth', authRoutes);
-    // Super Admin Routes
     app.use('/api/sa-employees', saEmployeeRoutes);
     app.use('/api/sa-company-profile', saCompanyProfileRoutes);
     app.use('/api/sa-branches', saBranchRoutes);
@@ -127,12 +120,14 @@ if (cluster.isPrimary) {
     app.use('/api/sa-attendance', saAttendanceRoutes);
     app.use('/api/sa-hr-users', saHrUserRoutes);
     app.use('/api/sa-managers', saManagerRoutes);
-    // Employee Routes
+    app.use('/api/sa-reimbursements', saReimbursementRoutes);
+
     app.use('/api/employee-profile', employeeProfileRoutes);
     app.use('/api/attendance', empAttendanceRoutes);
     app.use('/api/leave', empLeaveRoutes);
-    app.use('/api/payroll', payrollRoutes);
-    app.use('/api/reimbursements', reimbursementRoutes);
+    app.use('/api/payroll', empPayrollRoutes);
+    app.use('/api/reimbursements', empReimbursementRoutes);
+    app.use('/api/assets', empAssetRoutes);
 
     app.listen(PORT, () => {
         console.log(`Worker ${process.pid} running and listening on port ${PORT}`);

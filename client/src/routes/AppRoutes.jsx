@@ -65,6 +65,7 @@ import ManagerDashboard from '../pages/manager/ManagerDashboard';
 import EmployeeLayout from '../layouts/EmployeeLayout';
 import EmployeeDashboard from '../pages/employee/EmployeeDashboard';
 import EmployeeMyProfile from '../pages/employee/EmployeeMyProfile';
+import EmployeeAssets from '../pages/employee/EmployeeAssets';
 import EmployeeAttendance from '../pages/employee/EmployeeAttendance';
 import EmployeeLeaveManagement from '../pages/employee/EmployeeLeaveManagement';
 import EmployeePayroll from '../pages/employee/EmployeePayroll';
@@ -182,6 +183,7 @@ const AppRoutes = () => {
             >
                 <Route index element={<EmployeeDashboard />} />
                 <Route path="profile" element={<EmployeeMyProfile />} />
+                <Route path="assets" element={<EmployeeAssets />} />
                 <Route path="attendance" element={<EmployeeAttendance />} />
                 <Route path="leave" element={<EmployeeLeaveManagement />} />
                 <Route path="payroll" element={<EmployeePayroll />} />

@@ -183,6 +183,100 @@ const EmployeeLeaveManagementCom = () => {
         return <FaClock className="text-orange-500" />;
     };
 
+    // Custom Design-Based Shimmer specifically mapped to the Leave Structure
+    if (loading) {
+        return (
+            <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden animate-pulse">
+                
+                {/* Header Shimmer */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="space-y-2 w-full md:w-1/3">
+                        <div className="h-6 md:h-8 bg-slate-200 rounded-md w-3/4"></div>
+                        <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                    </div>
+                </div>
+
+                {/* Tabs Shimmer */}
+                <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100 pb-1">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="h-10 w-28 sm:w-32 bg-slate-200 rounded-lg shrink-0"></div>
+                    ))}
+                </div>
+
+                {/* Main Content Grid Shimmer */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                    
+                    {/* Left Side: Apply Leave Form Shimmer */}
+                    <div className="lg:col-span-2 space-y-4 md:space-y-6">
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-200 shrink-0"></div>
+                                <div className="space-y-2 w-1/2">
+                                    <div className="h-5 bg-slate-200 rounded-md w-3/4"></div>
+                                    <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
+                                </div>
+                            </div>
+                            <div className="p-4 sm:p-5 space-y-4 sm:space-y-5">
+                                <div className="space-y-2">
+                                    <div className="h-4 bg-slate-200 rounded-md w-1/4"></div>
+                                    <div className="h-10 bg-slate-200 rounded-lg w-full"></div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+                                    <div className="space-y-2">
+                                        <div className="h-4 bg-slate-200 rounded-md w-1/3"></div>
+                                        <div className="h-10 bg-slate-200 rounded-lg w-full"></div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="h-4 bg-slate-200 rounded-md w-1/3"></div>
+                                        <div className="h-10 bg-slate-200 rounded-lg w-full"></div>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="h-4 bg-slate-200 rounded-md w-1/4"></div>
+                                    <div className="h-24 bg-slate-200 rounded-lg w-full"></div>
+                                </div>
+                                <div className="pt-3 border-t border-slate-100 flex justify-end">
+                                    <div className="w-full sm:w-32 h-10 bg-slate-200 rounded-lg"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Side: Leave Balance & Info Shimmer */}
+                    <div className="space-y-4 md:space-y-6 flex flex-col h-full">
+                        {/* Balance Card Shimmer */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col h-64">
+                            <div className="mb-4 border-b border-slate-100 pb-2.5">
+                                <div className="h-5 bg-slate-200 rounded-md w-1/2"></div>
+                            </div>
+                            <div className="space-y-4 flex-1">
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="space-y-2">
+                                        <div className="flex justify-between">
+                                            <div className="h-3 bg-slate-200 rounded-md w-1/3"></div>
+                                            <div className="h-3 bg-slate-200 rounded-md w-1/4"></div>
+                                        </div>
+                                        <div className="w-full h-2 bg-slate-200 rounded-full"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Approval Flow Card Shimmer */}
+                        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-5 h-32 shrink-0">
+                            <div className="h-4 bg-slate-200 rounded-md w-1/3 mb-4"></div>
+                            <div className="space-y-3">
+                                <div className="h-3 bg-slate-200 rounded-md w-2/3"></div>
+                                <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4 md:space-y-6 pb-8 w-full overflow-hidden">
 
@@ -360,9 +454,7 @@ const EmployeeLeaveManagementCom = () => {
                                 <p className="text-[10px] md:text-[11px] text-slate-400 mt-0.5">Track the status of your applications</p>
                             </div>
                             <div className="overflow-x-auto flex-1 w-full custom-scrollbar">
-                                {loading ? (
-                                    <div className="p-6 text-center text-[13px] text-slate-500">Loading requests...</div>
-                                ) : requests.length === 0 ? (
+                                {requests.length === 0 ? (
                                     <div className="p-6 text-center text-[13px] font-semibold text-slate-400">No leave requests found.</div>
                                 ) : (
                                     <table className="w-full text-left border-collapse min-w-[600px]">
@@ -431,9 +523,7 @@ const EmployeeLeaveManagementCom = () => {
                                 <FaChartPie className="text-[#0437cc]" /> Detailed Balance Report
                             </h2>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 flex-1">
-                                {loading ? (
-                                    <p className="text-[13px] text-slate-400 col-span-full">Loading balances...</p>
-                                ) : balances.map((leave, i) => {
+                                {balances.map((leave, i) => {
                                     const used = parseFloat(leave.used_days);
                                     const isUnlimited = leave.total_days === 'Unlimited';
                                     const total = isUnlimited ? '∞' : parseFloat(leave.total_days);
@@ -487,9 +577,7 @@ const EmployeeLeaveManagementCom = () => {
                                 </span>
                             </div>
                             <div className="overflow-y-auto flex-1 max-h-[400px] md:max-h-[500px] custom-scrollbar p-4 sm:p-5">
-                                {loading ? (
-                                    <div className="text-center text-[13px] font-semibold text-slate-500">Fetching live holidays...</div>
-                                ) : holidays.length === 0 ? (
+                                {holidays.length === 0 ? (
                                     <div className="text-center text-[13px] font-semibold text-slate-400">No holidays found for this year.</div>
                                 ) : (
                                     <div className="space-y-2.5 sm:space-y-3">
@@ -531,9 +619,7 @@ const EmployeeLeaveManagementCom = () => {
                         </div>
 
                         <div className="space-y-4 relative z-10 flex-1">
-                            {loading ? (
-                                <p className="text-[13px] text-slate-400">Loading balances...</p>
-                            ) : balances.map((leave, i) => {
+                            {balances.map((leave, i) => {
                                 const used = parseFloat(leave.used_days);
                                 const isUnlimited = leave.total_days === 'Unlimited';
                                 const total = isUnlimited ? 100 : parseFloat(leave.total_days);

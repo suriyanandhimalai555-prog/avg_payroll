@@ -278,12 +278,77 @@ const EmployeePayrollCom = () => {
         }
     };
 
+    // Custom Design-Based Shimmer specifically mapped to the Payroll Structure
     if (loading || !payrollData) {
         return (
-            <div className="min-h-[400px] flex items-center justify-center w-full">
-                <div className="text-center space-y-3 animate-pulse">
-                    <FaMoneyCheckAlt className="text-4xl text-slate-300 mx-auto" />
-                    <p className="text-sm text-slate-500 font-semibold">Calculating exact payroll from attendance logs...</p>
+            <div className="space-y-4 md:space-y-6 pb-8 w-full overflow-hidden animate-pulse">
+                {/* Header Shimmer */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="space-y-2 w-full md:w-1/3">
+                        <div className="h-6 md:h-8 bg-slate-200 rounded-md w-3/4"></div>
+                        <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                    </div>
+                    <div className="h-10 bg-slate-200 rounded-lg w-full sm:w-48 shrink-0 mt-2 sm:mt-0"></div>
+                </div>
+
+                {/* Tabs Shimmer */}
+                <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100 pb-1">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="h-10 w-32 sm:w-36 bg-slate-200 rounded-lg shrink-0"></div>
+                    ))}
+                </div>
+
+                {/* Main Content Grid Shimmer */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                    {/* Left Side: Salary Details Shimmer */}
+                    <div className="lg:col-span-2 space-y-4 md:space-y-6">
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden h-full flex flex-col">
+                            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between bg-slate-50/50">
+                                <div className="space-y-2 w-1/3">
+                                    <div className="h-5 bg-slate-200 rounded-md w-full"></div>
+                                    <div className="h-3 bg-slate-200 rounded-md w-2/3"></div>
+                                </div>
+                                <div className="h-6 w-16 bg-slate-200 rounded-md"></div>
+                            </div>
+                            <div className="p-4 sm:p-5 flex-1 flex flex-col">
+                                <div className="mb-5 md:mb-6 h-20 bg-slate-200 rounded-xl w-full"></div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6 flex-1">
+                                    <div className="bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-100 h-64"></div>
+                                    <div className="bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-100 h-64"></div>
+                                </div>
+                                <div className="mt-5 md:mt-6 lg:mt-8 h-20 bg-slate-200 rounded-xl w-full"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Side: Payslips & Tax Shimmer */}
+                    <div className="space-y-4 md:space-y-6 flex flex-col h-full">
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 h-64 flex flex-col">
+                            <div className="space-y-2 mb-4 border-b border-slate-100 pb-3">
+                                <div className="h-4 bg-slate-200 rounded-md w-1/2"></div>
+                                <div className="h-3 bg-slate-200 rounded-md w-1/3"></div>
+                            </div>
+                            <div className="space-y-3 flex-1">
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="flex justify-between items-center p-2.5 border border-slate-100 rounded-lg">
+                                        <div className="flex gap-2 items-center w-full">
+                                            <div className="w-8 h-8 rounded-full bg-slate-200"></div>
+                                            <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
+                                        </div>
+                                        <div className="w-6 h-6 rounded bg-slate-200"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-5 h-32 shrink-0">
+                            <div className="h-4 bg-slate-200 rounded-md w-1/3 mb-3"></div>
+                            <div className="space-y-2 mb-4">
+                                <div className="h-2 bg-slate-200 rounded-md w-full"></div>
+                                <div className="h-2 bg-slate-200 rounded-md w-5/6"></div>
+                            </div>
+                            <div className="h-8 bg-slate-200 rounded-md w-full"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         );

@@ -1,5 +1,5 @@
 import express from 'express';
-import { getPayrollData } from '../../controllers/employee/payrollController.js';
+import { getPayrollData } from '../../controllers/employee/empPayrollController.js';
 
 const router = express.Router();
 

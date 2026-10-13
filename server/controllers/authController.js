@@ -91,7 +91,6 @@ export const login = async (req, res) => {
 
         delete user.password;
 
-        // Standardize payload name output so the frontend doesn't break
         if (role === 'superadmin') {
             user.first_name = user.full_name;
             user.last_name = '';
@@ -99,9 +98,14 @@ export const login = async (req, res) => {
 
         const userPayload = { ...user, role: role };
 
+        if (!process.env.JWT_SECRET) {
+            console.error("CRITICAL: JWT_SECRET is missing from the environment variables.");
+            return res.status(500).json({ message: 'Internal server configuration error.' });
+        }
+
         const token = jwt.sign(
             { id: user.id, role: role, email: user.email },
-            process.env.JWT_SECRET || 'fallback_secret',
+            process.env.JWT_SECRET,
             { expiresIn: '1d' }
         );
 
@@ -124,7 +128,6 @@ export const requestOtp = async (req, res) => {
 
         if (!targetTable) return res.status(400).json({ message: 'Invalid role.' });
 
-        // Account for different name columns
         const nameCol = role === 'superadmin' ? 'full_name' : 'first_name';
         const userRes = await pool.query(`SELECT ${nameCol} as fname FROM ${targetTable} WHERE email = $1`, [email]);
 
@@ -226,5 +229,36 @@ export const changePassword = async (req, res) => {
         res.status(200).json({ message: 'Password updated successfully.' });
     } catch (error) {
         res.status(500).json({ message: 'Server error while changing password.' });
+    }
+};
+
+export const updateProfile = async (req, res) => {
+    try {
+        const { email, role, fullName, phone, profilePhoto } = req.body;
+        const targetTable = getTableByRole(role);
+
+        if (!targetTable) return res.status(400).json({ message: 'Invalid role.' });
+
+        if (role === 'superadmin') {
+            const result = await pool.query(
+                `UPDATE sa_superadmins SET full_name = $1, phone = $2, profile_photo = $3 WHERE email = $4 RETURNING *`,
+                [fullName, phone, profilePhoto, email]
+            );
+
+            if (result.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
+
+            const user = result.rows[0];
+            delete user.password;
+            
+            user.first_name = user.full_name;
+            user.last_name = '';
+
+            return res.status(200).json({ message: 'Profile updated successfully.', user: { ...user, role } });
+        } else {
+            return res.status(400).json({ message: 'Profile update for this role is handled in dedicated module.' });
+        }
+    } catch (error) {
+        console.error('Update Profile Error:', error);
+        res.status(500).json({ message: 'Server error while updating profile.' });
     }
 };

@@ -1,9 +1,8 @@
-import React, { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
 import {
     FaUserEdit, FaLock, FaBuilding, FaBriefcase,
-    FaPhoneAlt, FaEnvelope, FaMapMarkerAlt,
-    FaFileAlt, FaTimes, FaSitemap,
+    FaPhoneAlt, FaMapMarkerAlt, FaTimes,
     FaFileInvoiceDollar, FaPlusCircle, FaMinusCircle, FaUniversity, FaIdBadge,
     FaHeartbeat, FaVenusMars, FaCalendarAlt
 } from 'react-icons/fa';

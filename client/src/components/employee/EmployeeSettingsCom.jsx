@@ -14,6 +14,7 @@ const EmployeeSettingsCom = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
+    const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('account');
     const [pwdFlow, setPwdFlow] = useState('standard'); // 'standard', 'otp_verify', 'reset'
 
@@ -31,8 +32,10 @@ const EmployeeSettingsCom = () => {
     const [sessions, setSessions] = useState([]);
     const [isRevoking, setIsRevoking] = useState(false);
 
-    // Initialize Sessions dynamically based on actual device
+    // Initialize Sessions dynamically based on actual device and resolve loading
     useEffect(() => {
+        if (!user) return; // Wait for user context
+
         const getDeviceInfo = () => {
             const ua = navigator.userAgent;
             let browser = "Web Browser";
@@ -83,7 +86,9 @@ const EmployeeSettingsCom = () => {
                 isCurrent: false
             }
         ]);
-    }, []);
+
+        setLoading(false);
+    }, [user]);
 
     const handlePasswordChange = (e) => setPasswords(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
@@ -176,7 +181,65 @@ const EmployeeSettingsCom = () => {
         { id: 'notifications', label: 'Notification Preferences', icon: FaBell },
     ];
 
-    if (!user) return null;
+    // Custom Design-Based Shimmer explicitly matched to Settings Layout
+    if (loading || !user) {
+        return (
+            <div className="space-y-4 md:space-y-6 pb-8 w-full overflow-hidden animate-pulse">
+                {/* Header Shimmer */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="space-y-2 w-full md:w-1/3">
+                        <div className="h-6 md:h-8 bg-slate-200 rounded-md w-3/4"></div>
+                        <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                    </div>
+                </div>
+
+                <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
+                    {/* Sidebar Nav Shimmer */}
+                    <div className="w-full lg:w-64 xl:w-72 shrink-0">
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-2.5 sm:p-3 flex flex-row lg:flex-col gap-2 overflow-hidden">
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} className="h-10 sm:h-12 bg-slate-200 rounded-xl w-full"></div>
+                            ))}
+                            <div className="hidden lg:block h-px bg-slate-100 my-2 mx-2"></div>
+                            <div className="h-10 sm:h-12 bg-slate-200 rounded-xl w-full"></div>
+                        </div>
+                    </div>
+
+                    {/* Main Content Area Shimmer (Modeled after Account Summary) */}
+                    <div className="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-200 shrink-0"></div>
+                            <div className="space-y-2 w-1/2">
+                                <div className="h-5 bg-slate-200 rounded-md w-1/2"></div>
+                                <div className="h-3 bg-slate-200 rounded-md w-3/4"></div>
+                            </div>
+                        </div>
+                        <div className="p-4 sm:p-5 lg:p-6 space-y-6">
+                            <div className="flex items-center gap-4 border-b border-slate-100 pb-5">
+                                <div className="w-16 h-16 rounded-full bg-slate-200 shrink-0"></div>
+                                <div className="space-y-2 w-1/2">
+                                    <div className="h-5 bg-slate-200 rounded-md w-3/4"></div>
+                                    <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
+                                    <div className="h-4 bg-slate-200 rounded-full w-16 mt-2"></div>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {[1, 2, 3, 4].map(i => (
+                                    <div key={i} className="space-y-1">
+                                        <div className="h-3 bg-slate-200 rounded w-1/3"></div>
+                                        <div className="h-10 bg-slate-200 rounded-lg w-full"></div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="pt-4 border-t border-slate-100 flex justify-center">
+                                <div className="h-10 bg-slate-200 rounded-lg w-32"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-4 md:space-y-6 pb-8 w-full overflow-hidden">

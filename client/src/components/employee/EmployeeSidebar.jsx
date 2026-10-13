@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
     FaTachometerAlt, FaUserEdit, FaCalendarCheck, FaPlaneDeparture,
     FaMoneyCheckAlt, FaFileInvoiceDollar, FaHandHoldingUsd, FaFolderOpen,
-    FaBell, FaCogs, FaSignOutAlt, FaTimes
+    FaBell, FaCogs, FaSignOutAlt, FaTimes, FaLaptop
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 
@@ -20,6 +20,7 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
         { title: 'Attendance', icon: FaCalendarCheck, path: '/employee/attendance', show: p.core?.attendance },
         { title: 'Leave', icon: FaPlaneDeparture, path: '/employee/leave', show: p.core?.leave },
         { title: 'Payroll', icon: FaMoneyCheckAlt, path: '/employee/payroll', show: p.finance?.payroll },
+        { title: 'Assigned Assets', icon: FaLaptop, path: '/employee/assets', show: true },
         { title: 'Reimbursements', icon: FaFileInvoiceDollar, path: '/employee/reimbursements', show: p.finance?.reimbursements },
         { title: 'Loans & Advances', icon: FaHandHoldingUsd, path: '/employee/loans', show: p.finance?.loans },
         { title: 'Documents', icon: FaFolderOpen, path: '/employee/documents', show: p.core?.documents },

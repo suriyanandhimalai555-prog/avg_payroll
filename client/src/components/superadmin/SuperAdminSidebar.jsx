@@ -6,6 +6,7 @@ import {
     FaHandHoldingUsd, FaChartBar, FaCogs, FaHistory,
     FaUserCircle, FaSignOutAlt, FaChevronDown, FaTimes
 } from 'react-icons/fa';
+import { useAuth } from '../../context/AuthContext';
 
 // Defined outside to prevent unnecessary re-creations on render
 const menuItems = [
@@ -79,13 +80,14 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
     const [openSubmenu, setOpenSubmenu] = useState('');
     const location = useLocation();
     const navigate = useNavigate();
+    const { user } = useAuth(); // Retrieve actual logged in user data
 
     // Automatically expand the active submenu based on the current URL route and close others
     useEffect(() => {
         const activeParent = menuItems.find(item =>
             item.subItems?.some(sub => location.pathname.includes(sub.path))
         );
-        
+
         if (activeParent) {
             setOpenSubmenu(activeParent.title);
         } else {
@@ -107,10 +109,10 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
         // 1. Clear access token/session
         localStorage.removeItem('token');
         sessionStorage.clear();
-        
+
         // 2. Clear user state
         localStorage.removeItem('user');
-        
+
         // 3. Redirect to Login
         navigate('/portal/superadmin-secure-auth');
     };
@@ -121,10 +123,10 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
         >
             {/* Brand Header with Logo */}
             <div className={`relative flex items-center h-20 border-b border-slate-100 shrink-0 bg-slate-50 transition-all duration-300 ${isDesktopCollapsed ? 'md:justify-center md:px-0 px-6' : 'justify-between px-6'}`}>
-                
+
                 {/* Wrapped Logo in Link to redirect to Dashboard */}
-                <Link 
-                    to="/superadmin" 
+                <Link
+                    to="/superadmin"
                     onClick={() => { if (window.innerWidth < 768) toggleMobileSidebar() }}
                     className="flex items-center overflow-hidden cursor-pointer"
                 >
@@ -189,9 +191,9 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
                                     <NavLink
                                         to={item.path}
                                         end={item.path === '/superadmin'}
-                                        onClick={() => { 
+                                        onClick={() => {
                                             setOpenSubmenu(''); // Ensure submenus close when navigating to top level 
-                                            if (window.innerWidth < 768) toggleMobileSidebar(); 
+                                            if (window.innerWidth < 768) toggleMobileSidebar();
                                         }}
                                         className={({ isActive }) =>
                                             `w-full flex items-center py-3 rounded-lg transition-all duration-200 overflow-hidden ${isDesktopCollapsed ? 'md:px-0 md:justify-center px-4' : 'px-4'} ${isActive ? 'bg-[#0437cc] text-white shadow-md shadow-[#0437cc]/20' : 'text-slate-600 hover:bg-slate-50 hover:text-[#0437cc]'}`
@@ -220,20 +222,31 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
                 </ul>
             </nav>
 
-            {/* Footer Profile & Logout */}
+            {/* Footer Profile & Logout (Real-time updates via useAuth) */}
             <div className="p-4 border-t border-slate-100 shrink-0 bg-slate-50 transition-all duration-300">
                 <div className={`flex items-center mb-4 ${isDesktopCollapsed ? 'md:justify-center' : 'px-2'}`}>
-                    <div className="flex items-center">
-                        <FaUserCircle className="text-slate-400 text-3xl shrink-0" />
-                        <div className={`overflow-hidden transition-all duration-300 ${isDesktopCollapsed ? 'md:max-w-0 md:opacity-0' : 'max-w-[150px] opacity-100 pl-3'}`}>
-                            <p className="text-[#010a1f] text-sm font-semibold truncate">Super Admin</p>
-                            <p className="text-xs text-slate-500 truncate">admin@avg.com</p>
+                    <div className="flex items-center min-w-0">
+                        {user?.profile_photo ? (
+                            <img
+                                src={user.profile_photo}
+                                alt="Profile"
+                                className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-200"
+                            />
+                        ) : (
+                            <FaUserCircle className="text-slate-400 text-3xl shrink-0" />
+                        )}
+                        <div className={`overflow-hidden transition-all duration-300 min-w-0 ${isDesktopCollapsed ? 'md:max-w-0 md:opacity-0' : 'max-w-[150px] opacity-100 pl-3'}`}>
+                            <p className="text-[#010a1f] text-sm font-semibold truncate">
+                                {user?.full_name || user?.first_name || 'Super Admin'}
+                            </p>
+                            <p className="text-[10px] text-slate-500 truncate">
+                                {user?.email || 'admin@avg.com'}
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                {/* Handled Logout functionality properly here */}
-                <button 
+                <button
                     onClick={handleLogout}
                     className={`flex items-center justify-center py-2.5 rounded-lg bg-white border border-slate-200 text-red-600 hover:bg-red-50 hover:border-red-200 transition-all duration-300 shadow-sm ${isDesktopCollapsed ? 'md:w-10 md:h-10 md:p-0 w-full' : 'w-full'}`}
                 >

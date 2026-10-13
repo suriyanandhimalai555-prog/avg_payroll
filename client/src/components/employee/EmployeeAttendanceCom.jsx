@@ -353,6 +353,89 @@ const EmployeeAttendanceCom = () => {
         { id: 'timesheet', label: 'Timesheet & EOD', icon: FaTasks },
     ];
 
+    // Custom Design-Based Shimmer for Attendance Module
+    if (loading) {
+        return (
+            <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden animate-pulse">
+                
+                {/* Header Shimmer */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="space-y-2 w-full md:w-1/3">
+                        <div className="h-6 md:h-8 bg-slate-200 rounded-md w-3/4"></div>
+                        <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full md:w-auto mt-2 md:mt-0">
+                        <div className="h-10 bg-slate-200 rounded-lg w-full sm:w-32 shrink-0"></div>
+                        <div className="h-10 bg-slate-200 rounded-lg w-full sm:w-32 shrink-0"></div>
+                    </div>
+                </div>
+
+                {/* Tabs Shimmer */}
+                <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100 pb-1">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="h-10 w-28 sm:w-36 bg-slate-200 rounded-lg shrink-0"></div>
+                    ))}
+                </div>
+
+                {/* Main Content Grid Shimmer */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                    
+                    {/* Left Side: Today's Status Card */}
+                    <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col gap-4 min-h-[400px]">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <div className="h-5 bg-slate-200 rounded-md w-1/2"></div>
+                            <div className="h-5 bg-slate-200 rounded-md w-1/4"></div>
+                        </div>
+                        <div className="h-20 bg-slate-200 rounded-xl w-full"></div>
+                        <div className="flex-1 flex flex-col items-center justify-center gap-3 mt-4">
+                            <div className="w-14 h-14 rounded-full bg-slate-200"></div>
+                            <div className="h-3 bg-slate-200 rounded-md w-1/3 mt-2"></div>
+                            <div className="h-8 bg-slate-200 rounded-md w-1/2"></div>
+                            <div className="h-2 w-full bg-slate-200 rounded-full mt-3"></div>
+                            <div className="flex justify-between w-full mt-2">
+                                <div className="h-3 bg-slate-200 rounded-md w-1/3"></div>
+                                <div className="h-3 bg-slate-200 rounded-md w-1/3"></div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mt-4">
+                            <div className="h-16 bg-slate-200 rounded-xl w-full"></div>
+                            <div className="h-16 bg-slate-200 rounded-xl w-full"></div>
+                        </div>
+                    </div>
+
+                    {/* Right Side: Logs / Timesheet Area */}
+                    <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                        <div className="p-4 sm:p-5 flex justify-between items-center border-b border-slate-100 bg-slate-50/50">
+                            <div className="space-y-2 w-1/2">
+                                <div className="h-5 bg-slate-200 rounded-md w-1/2"></div>
+                                <div className="h-3 bg-slate-200 rounded-md w-3/4"></div>
+                            </div>
+                            <div className="h-8 bg-slate-200 rounded-md w-1/4"></div>
+                        </div>
+                        <div className="flex-1 p-0">
+                            <div className="px-4 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between">
+                                <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                                <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                                <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                                <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                                <div className="h-4 bg-slate-200 rounded w-1/12"></div>
+                            </div>
+                            {[1, 2, 3, 4, 5].map((i) => (
+                                <div key={i} className="flex justify-between items-center p-4 border-b border-slate-50">
+                                    <div className="h-4 bg-slate-200 rounded-md w-1/6"></div>
+                                    <div className="h-4 bg-slate-200 rounded-md w-1/6"></div>
+                                    <div className="h-4 bg-slate-200 rounded-md w-1/6"></div>
+                                    <div className="h-4 bg-slate-200 rounded-md w-1/6"></div>
+                                    <div className="h-6 bg-slate-200 rounded-md w-1/12"></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden">
             <style>
@@ -676,9 +759,7 @@ const EmployeeAttendanceCom = () => {
                         </div>
 
                         <div className="overflow-x-auto flex-1 w-full custom-scrollbar">
-                            {loading ? (
-                                <div className="p-6 sm:p-8 text-center text-xs sm:text-sm font-semibold text-slate-500">Loading records...</div>
-                            ) : activeTab === 'timesheet' ? (
+                            {activeTab === 'timesheet' ? (
                                 // TIMESHEET TAB SPECIFIC VIEW (With Accordion)
                                 <div className="p-3 sm:p-5">
                                     {getDisplayedHistory().length === 0 ? (

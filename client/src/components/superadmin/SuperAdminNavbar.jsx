@@ -1,16 +1,21 @@
 import { FaBell, FaSearch, FaBars, FaAlignLeft } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const SuperAdminNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktopCollapsed }) => {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+
     return (
         <header className="h-20 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between px-4 md:px-6 shrink-0 z-10 w-full transition-all duration-300">
 
             {/* Left side - Search & Toggles */}
-            <div className="flex items-center gap-4 md:gap-6 flex-1">
+            <div className="flex items-center gap-4 md:gap-6 flex-1 min-w-0">
 
                 {/* Mobile Toggle Button */}
                 <button
                     onClick={toggleMobileSidebar}
-                    className="md:hidden p-2 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100 rounded-lg transition-colors"
+                    className="md:hidden p-2 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100 rounded-lg transition-colors shrink-0"
                 >
                     <FaBars className="text-xl" />
                 </button>
@@ -18,7 +23,7 @@ const SuperAdminNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktop
                 {/* Desktop Toggle Button */}
                 <button
                     onClick={toggleDesktopSidebar}
-                    className="hidden md:block p-2 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100 rounded-lg transition-colors"
+                    className="hidden md:block p-2 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100 rounded-lg transition-colors shrink-0"
                 >
                     <FaAlignLeft className={`text-xl transition-transform duration-300 ${isDesktopCollapsed ? 'rotate-180' : ''}`} />
                 </button>
@@ -34,7 +39,7 @@ const SuperAdminNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktop
             </div>
 
             {/* Right side - Quick Actions & Profile */}
-            <div className="flex items-center gap-4 md:gap-6">
+            <div className="flex items-center gap-4 md:gap-6 shrink-0">
 
                 {/* Quick Date Display */}
                 <div className="hidden lg:block text-sm font-medium text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
@@ -47,18 +52,23 @@ const SuperAdminNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktop
                     <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-[#f77704] rounded-full border-2 border-white"></span>
                 </button>
 
-                {/* Profile Dropdown Trigger */}
-                <div className="flex items-center gap-3 md:pl-4 md:border-l border-slate-200 cursor-pointer group">
-                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-[#0437cc]/20 p-0.5 group-hover:border-[#0437cc] transition-all">
+                {/* Profile Dropdown Trigger (Click to go to Profile) */}
+                <div
+                    onClick={() => navigate('/superadmin/profile')}
+                    className="flex items-center gap-3 md:pl-4 md:border-l border-slate-200 cursor-pointer group"
+                >
+                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-[#0437cc]/20 p-0.5 group-hover:border-[#0437cc] transition-all shrink-0">
                         <img
-                            src="https://ui-avatars.com/api/?name=Super+Admin&background=0437cc&color=fff"
+                            src={user?.profile_photo || `https://ui-avatars.com/api/?name=${user?.full_name || user?.first_name || 'Super+Admin'}&background=0437cc&color=fff`}
                             alt="Admin Profile"
                             className="w-full h-full rounded-full object-cover"
                         />
                     </div>
-                    <div className="hidden sm:block">
-                        <p className="text-sm font-bold text-[#010a1f]">Super Admin</p>
-                        <p className="text-xs text-slate-500">System Administrator</p>
+                    <div className="hidden sm:block min-w-0">
+                        <p className="text-sm font-bold text-[#010a1f] group-hover:text-[#0437cc] transition-colors truncate max-w-[150px]">
+                            {user?.full_name || user?.first_name || 'Super Admin'}
+                        </p>
+                        <p className="text-xs text-slate-500 truncate max-w-[150px]">System Administrator</p>
                     </div>
                 </div>
 
