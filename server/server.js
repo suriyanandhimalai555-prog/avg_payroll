@@ -79,7 +79,11 @@ const initializeDatabase = async () => {
     }
 };
 
-const numCPUs = os.cpus().length;
+//const numCPUs = os.cpus().length;
+const numCPUs = Math.max(
+    1,
+    Number.parseInt(process.env.WORKERS || '1', 10)
+);
 const PORT = process.env.PORT || 5000;
 
 if (cluster.isPrimary) {

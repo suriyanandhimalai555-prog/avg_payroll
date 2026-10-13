@@ -1,0 +1,8 @@
+node_modules
+.env
+.env.*
+!.env.example
+*.pre-docker
+.git
+npm-debug.log*
+*.pre-production
