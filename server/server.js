@@ -88,14 +88,23 @@ const PORT = process.env.PORT || 5000;
 
 if (cluster.isPrimary) {
     console.log(`Primary Master Process ${process.pid} is running.`);
-    initializeDatabase().then(() => {
-        console.log(`Database ready. Forking traffic across ${numCPUs} CPU cores...`);
+
+    const startWorkers = () => {
+        console.log(`Starting traffic workers across ${numCPUs} CPU cores...`);
         for (let i = 0; i < numCPUs; i++) cluster.fork();
         cluster.on('exit', (worker) => {
             console.warn(`Worker ${worker.process.pid} died. Restarting automatically...`);
             cluster.fork();
         });
-    });
+    };
+
+    if (process.env.RUN_DB_INITIALIZERS === 'true') {
+        console.warn('RUN_DB_INITIALIZERS=true: startup schema initializers are enabled.');
+        initializeDatabase().then(startWorkers);
+    } else {
+        console.log('Startup schema initializers skipped; RUN_DB_INITIALIZERS is not true.');
+        startWorkers();
+    }
 } else {
     const app = express();
 
