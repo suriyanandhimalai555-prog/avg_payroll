@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: avgpayroll-frontend
+  namespace: avgpayroll
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: avgpayroll-frontend
+  template:
+    metadata:
+      labels:
+        app: avgpayroll-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-frontend:sha-27f66446d471c31346522db878b47765ced506cd
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: avgpayroll-frontend
+  namespace: avgpayroll
+spec:
+  type: ClusterIP
+  selector:
+    app: avgpayroll-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

@@ -36,13 +36,11 @@ jobs:
         working-directory: server
         run: node --check server.js
 
-      - name: Install frontend dependencies (pull requests)
-        if: github.event_name == 'pull_request'
+      - name: Install frontend dependencies
         working-directory: client
         run: npm ci
 
-      - name: Validate frontend build (pull requests)
-        if: github.event_name == 'pull_request'
+      - name: Validate frontend build
         working-directory: client
         env:
           VITE_API_URL: https://api.avgpayroll.com

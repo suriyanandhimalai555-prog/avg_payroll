@@ -4,7 +4,12 @@ metadata:
   name: avgpayroll-backend
   namespace: avgpayroll
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: avgpayroll-backend
@@ -15,7 +20,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-backend:sha-83ef41e8419846503d2cf551c02c078f540097b9
+          image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-backend:sha-27f66446d471c31346522db878b47765ced506cd
           imagePullPolicy: Always
           ports:
             - name: http
