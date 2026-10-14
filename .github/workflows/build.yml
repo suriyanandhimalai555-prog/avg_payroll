@@ -17,8 +17,9 @@ concurrency:
 
 jobs:
   validate:
-    name: Build and Validate
+    name: Validate Backend and Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -28,28 +29,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Install frontend dependencies
-        working-directory: client
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: client
-        run: VITE_API_URL=https://api.avgpayroll.com npm run build
-
-      - name: Install backend production dependencies
-        working-directory: server
-        run: npm ci --omit=dev
+          cache: npm
+          cache-dependency-path: client/package-lock.json
 
       - name: Check backend syntax
         working-directory: server
         run: node --check server.js
 
-  publish-images:
-    name: Publish ARM64 Images to GHCR
+      - name: Install frontend dependencies (pull requests)
+        if: github.event_name == 'pull_request'
+        working-directory: client
+        run: npm ci
+
+      - name: Validate frontend build (pull requests)
+        if: github.event_name == 'pull_request'
+        working-directory: client
+        env:
+          VITE_API_URL: https://api.avgpayroll.com
+        run: npm run build
+
+  publish-frontend:
+    name: Build and Publish Frontend ARM64
     needs: validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     permissions:
       contents: read
@@ -72,7 +76,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Prepare image tags
+      - name: Prepare frontend image tag
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -91,6 +95,36 @@ jobs:
             VITE_API_URL=https://api.avgpayroll.com
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=avgpayroll-frontend
+          cache-to: type=gha,mode=max,scope=avgpayroll-frontend
+
+  publish-backend:
+    name: Build and Publish Backend ARM64
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish backend
         uses: docker/build-push-action@v6
@@ -100,3 +134,5 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/avgpayroll-backend:sha-${{ github.sha }}
+          cache-from: type=gha,scope=avgpayroll-backend
+          cache-to: type=gha,mode=max,scope=avgpayroll-backend
