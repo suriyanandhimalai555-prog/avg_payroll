@@ -1,4 +1,4 @@
-name: AVG Payroll CI and Image Publishing
+name: AVG Payroll Image Build
 
 on:
   push:

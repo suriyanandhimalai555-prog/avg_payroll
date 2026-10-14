@@ -1,0 +1,141 @@
+name: Deploy to Kubernetes
+
+on:
+  workflow_run:
+    workflows:
+      - AVG Payroll Image Build
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avgpayroll-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy AVG Payroll
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Verify required SSH secrets
+        env:
+          SSH_HOST: ${{ secrets.AVGPAYROLL_SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.AVGPAYROLL_SSH_USERNAME }}
+          SSH_PRIVATE_KEY: ${{ secrets.AVGPAYROLL_SSH_PRIVATE_KEY }}
+          SSH_FINGERPRINT: ${{ secrets.AVGPAYROLL_SSH_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USERNAME"
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_FINGERPRINT"
+          echo "Required SSH secrets are configured."
+
+      - name: Configure SSH and verify VPS host
+        env:
+          SSH_HOST: ${{ secrets.AVGPAYROLL_SSH_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.AVGPAYROLL_SSH_PRIVATE_KEY }}
+          SSH_FINGERPRINT: ${{ secrets.AVGPAYROLL_SSH_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/avgpayroll_key"
+          unset SSH_PRIVATE_KEY
+          chmod 600 "$RUNNER_TEMP/avgpayroll_key"
+
+          ssh-keyscan -T 10 -t ed25519 "$SSH_HOST" \
+            2>/dev/null > "$RUNNER_TEMP/avgpayroll_known_hosts"
+
+          ACTUAL="$(ssh-keygen -lf "$RUNNER_TEMP/avgpayroll_known_hosts" | awk 'NR==1 {print $2}')"
+          if [ "$ACTUAL" != "$SSH_FINGERPRINT" ]; then
+            echo "VPS host fingerprint mismatch; refusing connection."
+            exit 1
+          fi
+
+          echo "VPS host fingerprint verified."
+
+      - name: Deploy the published images
+        env:
+          SSH_HOST: ${{ secrets.AVGPAYROLL_SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.AVGPAYROLL_SSH_USERNAME }}
+          IMAGE_TAG: sha-${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -i "$RUNNER_TEMP/avgpayroll_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/avgpayroll_known_hosts" \
+            "$SSH_USERNAME@$SSH_HOST" \
+            "set -eu
+             kubectl -n avgpayroll set image deployment/avgpayroll-backend backend=ghcr.io/suriyanandhimalai555-prog/avgpayroll-backend:${IMAGE_TAG}
+             kubectl -n avgpayroll set image deployment/avgpayroll-frontend frontend=ghcr.io/suriyanandhimalai555-prog/avgpayroll-frontend:${IMAGE_TAG}
+             kubectl -n avgpayroll rollout status deployment/avgpayroll-backend --timeout=300s
+             kubectl -n avgpayroll rollout status deployment/avgpayroll-frontend --timeout=300s"
+
+      - name: Verify public API health
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --retry 5 --retry-delay 5 --retry-connrefused \
+            https://api.avgpayroll.com/health
+
+  notify-success:
+    name: Email deployment success
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.AVGPAYROLL_SMTP_HOST }}
+          server_port: ${{ secrets.AVGPAYROLL_SMTP_PORT }}
+          secure: ${{ secrets.AVGPAYROLL_SMTP_PORT == '465' }}
+          username: ${{ secrets.AVGPAYROLL_SMTP_USERNAME }}
+          password: ${{ secrets.AVGPAYROLL_SMTP_PASSWORD }}
+          from: AVG Payroll Deployment <devops@avgprimetech.com>
+          to: devops@avgprimetech.com, ranjithram878@gmail.com
+          subject: "AVG Payroll Deployment Successful"
+          html_body: |
+            <h2>AVG Payroll Deployment Successful</h2>
+            <p>AVG Payroll was deployed and its API health check passed.</p>
+            <p><b>Repository:</b> ${{ github.repository }}</p>
+            <p><b>Branch:</b> main</p>
+            <p><b>Commit:</b> ${{ github.event.workflow_run.head_sha }}</p>
+            <p><b>Namespace:</b> avgpayroll</p>
+            <p><b>API:</b> https://api.avgpayroll.com/health</p>
+
+  notify-failure:
+    name: Email deployment failure
+    needs: deploy
+    if: always() && needs.deploy.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.AVGPAYROLL_SMTP_HOST }}
+          server_port: ${{ secrets.AVGPAYROLL_SMTP_PORT }}
+          secure: ${{ secrets.AVGPAYROLL_SMTP_PORT == '465' }}
+          username: ${{ secrets.AVGPAYROLL_SMTP_USERNAME }}
+          password: ${{ secrets.AVGPAYROLL_SMTP_PASSWORD }}
+          from: AVG Payroll Deployment <devops@avgprimetech.com>
+          to: devops@avgprimetech.com, ranjithram878@gmail.com
+          subject: "AVG Payroll Deployment Failed"
+          body: |
+            AVG Payroll automatic deployment did not complete successfully.
+            Repository: ${{ github.repository }}
+            Branch: main
+            Commit: ${{ github.event.workflow_run.head_sha }}
+            Check the GitHub Actions run for details.
