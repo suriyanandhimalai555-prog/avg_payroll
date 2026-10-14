@@ -7,7 +7,9 @@ ENV WORKERS=1
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev
 
 COPY . .
 
