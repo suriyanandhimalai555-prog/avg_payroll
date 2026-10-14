@@ -95,6 +95,7 @@ jobs:
     needs: deploy
     if: needs.deploy.result == 'success'
     runs-on: ubuntu-latest
+
     steps:
       - name: Send success notification
         uses: dawidd6/action-send-mail@v3
@@ -104,23 +105,45 @@ jobs:
           secure: ${{ secrets.AVGPAYROLL_SMTP_PORT == '465' }}
           username: ${{ secrets.AVGPAYROLL_SMTP_USERNAME }}
           password: ${{ secrets.AVGPAYROLL_SMTP_PASSWORD }}
-          from: AVG Payroll Deployment <devops@avgprimetech.com>
+          from: devops@avgprimetech.com
           to: devops@avgprimetech.com, ranjithram878@gmail.com
           subject: "AVG Payroll Deployment Successful"
           html_body: |
             <h2>AVG Payroll Deployment Successful</h2>
-            <p>AVG Payroll was deployed and its API health check passed.</p>
-            <p><b>Repository:</b> ${{ github.repository }}</p>
-            <p><b>Branch:</b> main</p>
-            <p><b>Commit:</b> ${{ github.event.workflow_run.head_sha }}</p>
-            <p><b>Namespace:</b> avgpayroll</p>
-            <p><b>API:</b> https://api.avgpayroll.com/health</p>
+
+            <table border="1" cellpadding="8">
+              <tr>
+                <td><b>Repository</b></td>
+                <td>${{ github.repository }}</td>
+              </tr>
+              <tr>
+                <td><b>Branch</b></td>
+                <td>${{ github.event.workflow_run.head_branch }}</td>
+              </tr>
+              <tr>
+                <td><b>Commit</b></td>
+                <td>${{ github.event.workflow_run.head_sha }}</td>
+              </tr>
+              <tr>
+                <td><b>Developer</b></td>
+                <td>${{ github.actor }}</td>
+              </tr>
+              <tr>
+                <td><b>Architecture</b></td>
+                <td>ARM64</td>
+              </tr>
+              <tr>
+                <td><b>Status</b></td>
+                <td>SUCCESS</td>
+              </tr>
+            </table>
 
   notify-failure:
     name: Email deployment failure
     needs: deploy
     if: always() && needs.deploy.result == 'failure'
     runs-on: ubuntu-latest
+
     steps:
       - name: Send failure notification
         uses: dawidd6/action-send-mail@v3
@@ -130,12 +153,12 @@ jobs:
           secure: ${{ secrets.AVGPAYROLL_SMTP_PORT == '465' }}
           username: ${{ secrets.AVGPAYROLL_SMTP_USERNAME }}
           password: ${{ secrets.AVGPAYROLL_SMTP_PASSWORD }}
-          from: AVG Payroll Deployment <devops@avgprimetech.com>
+          from: devops@avgprimetech.com
           to: devops@avgprimetech.com, ranjithram878@gmail.com
           subject: "AVG Payroll Deployment Failed"
           body: |
             AVG Payroll automatic deployment did not complete successfully.
             Repository: ${{ github.repository }}
-            Branch: main
+            Branch: ${{ github.event.workflow_run.head_branch }}
             Commit: ${{ github.event.workflow_run.head_sha }}
             Check the GitHub Actions run for details.
