@@ -74,10 +74,6 @@ jobs:
           test -f k8s/frontend.yaml
           test -f k8s/ingress.yaml
 
-          kubectl apply --dry-run=client -f k8s/namespace.yaml
-          kubectl apply --dry-run=client -f k8s/backend.yaml
-          kubectl apply --dry-run=client -f k8s/frontend.yaml
-          kubectl apply --dry-run=client -f k8s/ingress.yaml
 
       - name: Prepare manifests for this commit
         env:
