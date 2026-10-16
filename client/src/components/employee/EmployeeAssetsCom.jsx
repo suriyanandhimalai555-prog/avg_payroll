@@ -26,6 +26,16 @@ const getAssetIcon = (type) => {
     }
 };
 
+const getAssetIconBg = (type) => {
+    switch (type) {
+        case 'Laptop': return 'bg-blue-50 border-blue-100';
+        case 'Mobile Phone': return 'bg-purple-50 border-purple-100';
+        case 'ID Card': return 'bg-teal-50 border-teal-100';
+        case 'Access Key': return 'bg-orange-50 border-orange-100';
+        default: return 'bg-slate-50 border-slate-100';
+    }
+};
+
 const EmployeeAssetsCom = () => {
     const { user } = useAuth();
     const fileInputRef = useRef(null);
@@ -58,7 +68,6 @@ const EmployeeAssetsCom = () => {
         try {
             const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${user.employee_id}`);
             const formattedAssets = res.data.map(asset => {
-                // Graceful fallback for legacy single image vs new JSONB array
                 let photos = asset.asset_photos || [];
                 if (typeof photos === 'string') photos = JSON.parse(photos);
                 if (photos.length === 0 && asset.asset_photo) photos = [asset.asset_photo];
@@ -103,7 +112,7 @@ const EmployeeAssetsCom = () => {
         const validFiles = [];
 
         files.forEach(file => {
-            if (file.size > 8 * 1024 * 1024) { // 8MB exact
+            if (file.size > 8 * 1024 * 1024) {
                 hasError = true;
             } else {
                 validFiles.push(file);
@@ -199,7 +208,7 @@ const EmployeeAssetsCom = () => {
             }
 
             handleCancel();
-            fetchAssets(); 
+            fetchAssets();
 
             setTimeout(() => setSuccessMsg(''), 4000);
         } catch (error) {
@@ -214,7 +223,7 @@ const EmployeeAssetsCom = () => {
             try {
                 await axios.delete(`${import.meta.env.VITE_API_URL}/api/assets/${id}`);
                 setSuccessMsg('Asset removed successfully.');
-                fetchAssets(); 
+                fetchAssets();
                 setTimeout(() => setSuccessMsg(''), 4000);
             } catch (error) {
                 alert('Failed to delete asset. Please try again.');
@@ -222,122 +231,123 @@ const EmployeeAssetsCom = () => {
         }
     };
 
-    // Custom Design-Based Shimmer specifically mapped to the Asset Structure
+    // ==================== SHIMMER ====================
     if (isLoading) {
         return (
-            <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden animate-pulse">
-                
-                {/* Header Shimmer */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div className="space-y-2 w-full md:w-1/3">
-                        <div className="h-6 md:h-8 bg-slate-200 rounded-md w-3/4"></div>
-                        <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+            <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden animate-pulse">
+                <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-2 w-full md:w-1/3">
+                            <div className="h-6 md:h-7 bg-slate-200 rounded-md w-3/4"></div>
+                            <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                        </div>
+                        <div className="h-10 bg-slate-200 rounded-xl w-full md:w-44"></div>
                     </div>
-                    <div className="h-10 bg-slate-200 rounded-lg w-full md:w-40 shrink-0 mt-2 md:mt-0"></div>
                 </div>
 
-                {/* Main Content List Shimmer */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
-                    <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                        <div className="flex items-center gap-2 w-1/2 md:w-1/3">
-                            <div className="w-6 h-6 rounded bg-slate-200 shrink-0"></div>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                        <div className="flex items-center gap-2.5 w-1/2 md:w-1/3">
+                            <div className="w-8 h-8 rounded-lg bg-slate-200 shrink-0"></div>
                             <div className="h-5 bg-slate-200 rounded-md w-3/4"></div>
                         </div>
                         <div className="h-6 w-24 bg-slate-200 rounded-full shrink-0"></div>
                     </div>
-                    <div className="p-0">
-                        {/* Table Header Row (Hidden on very small screens, visible on md+) */}
-                        <div className="hidden md:flex justify-between px-6 py-4 border-b border-slate-100 bg-white">
-                            <div className="h-4 bg-slate-200 rounded w-1/4"></div>
-                            <div className="h-4 bg-slate-200 rounded w-1/6"></div>
-                            <div className="h-4 bg-slate-200 rounded w-1/6"></div>
-                            <div className="h-4 bg-slate-200 rounded w-1/12"></div>
-                            <div className="h-4 bg-slate-200 rounded w-1/12"></div>
-                        </div>
-                        {/* Table Rows */}
-                        {[1, 2, 3, 4].map(i => (
-                            <div key={i} className="flex flex-col md:flex-row md:items-center justify-between p-4 sm:p-6 border-b border-slate-50 gap-4">
-                                <div className="flex items-center gap-3 w-full md:w-1/4">
-                                    <div className="w-10 h-10 rounded-lg bg-slate-200 shrink-0"></div>
-                                    <div className="space-y-2 w-full">
-                                        <div className="h-4 bg-slate-200 rounded-md w-3/4"></div>
-                                        <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
-                                    </div>
-                                </div>
-                                <div className="w-full md:w-1/6 h-4 bg-slate-200 rounded-md"></div>
-                                <div className="w-full md:w-1/6 h-4 bg-slate-200 rounded-md"></div>
-                                <div className="w-16 h-6 bg-slate-200 rounded-md"></div>
-                                <div className="flex gap-2 justify-end w-full md:w-auto">
-                                    <div className="w-8 h-8 rounded bg-slate-200"></div>
-                                    <div className="w-8 h-8 rounded bg-slate-200"></div>
-                                    <div className="w-8 h-8 rounded bg-slate-200"></div>
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="flex flex-col md:flex-row md:items-center justify-between p-4 sm:p-6 border-b border-slate-50 gap-4">
+                            <div className="flex items-center gap-3 w-full md:w-1/4">
+                                <div className="w-10 h-10 rounded-lg bg-slate-200 shrink-0"></div>
+                                <div className="space-y-2 w-full">
+                                    <div className="h-4 bg-slate-200 rounded-md w-3/4"></div>
+                                    <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+                            <div className="w-full md:w-1/6 h-4 bg-slate-200 rounded-md"></div>
+                            <div className="w-full md:w-1/6 h-4 bg-slate-200 rounded-md"></div>
+                            <div className="w-16 h-6 bg-slate-200 rounded-md"></div>
+                        </div>
+                    ))}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden">
+        <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* View Modal */}
+            {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewAsset && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
-                        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                            <h2 className="text-base font-bold text-[#010a1f] flex items-center gap-2">
-                                {getAssetIcon(viewAsset.type)} Asset Details
-                            </h2>
-                            <button onClick={() => setIsViewModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors">
-                                <FaTimes />
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto flex flex-col custom-scrollbar">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
+
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50/40 sticky top-0 z-10 backdrop-blur-sm">
+                            <div className="flex items-center gap-3">
+                                <span className={`w-9 h-9 rounded-xl ${getAssetIconBg(viewAsset.type)} border flex items-center justify-center shrink-0`}>
+                                    {getAssetIcon(viewAsset.type)}
+                                </span>
+                                <div>
+                                    <h2 className="text-sm sm:text-base font-bold text-[#010a1f]">Asset Details</h2>
+                                    <p className="text-[10px] text-slate-500 font-medium">Complete record</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsViewModalOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <FaTimes className="text-sm" />
                             </button>
                         </div>
-                        <div className="p-5 space-y-4">
+
+                        <div className="p-5 sm:p-6 space-y-4">
                             {viewAsset.assetPhotos && viewAsset.assetPhotos.length > 0 && (
-                                <div className="mb-4">
-                                    <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
-                                        {viewAsset.assetPhotos.map((photo, idx) => (
-                                            <div key={idx} className="w-40 h-40 shrink-0 bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
-                                                <img src={photo} alt={`Asset ${idx + 1}`} className="w-full h-full object-cover" />
-                                            </div>
-                                        ))}
-                                    </div>
+                                <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2 -mx-1 px-1">
+                                    {viewAsset.assetPhotos.map((photo, idx) => (
+                                        <div key={idx} className="w-40 h-40 shrink-0 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+                                            <img src={photo} alt={`Asset ${idx + 1}`} className="w-full h-full object-cover" />
+                                        </div>
+                                    ))}
                                 </div>
                             )}
-                            <div>
-                                <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Asset Type</p>
-                                <p className="text-sm font-semibold text-slate-700">{viewAsset.type}</p>
+
+                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Asset Type</p>
+                                <p className="text-sm font-bold text-[#010a1f]">{viewAsset.type}</p>
                             </div>
-                            <div>
-                                <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Brand & Model</p>
+
+                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Brand & Model</p>
                                 <p className="text-sm font-semibold text-slate-700 break-words">{viewAsset.brandModel}</p>
                             </div>
-                            <div>
-                                <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Serial Number / Asset Tag</p>
-                                <p className="text-sm font-mono font-bold text-[#0437cc] break-words">{viewAsset.serialNumber}</p>
+
+                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-xl p-3.5">
+                                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1.5">Serial Number / Asset Tag</p>
+                                <p className="text-sm font-mono font-bold text-[#0437cc] break-words tracking-wide">{viewAsset.serialNumber}</p>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Received On</p>
-                                    <p className="text-sm font-semibold text-slate-700">{new Date(viewAsset.assignedDate).toLocaleDateString()}</p>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Received On</p>
+                                    <p className="text-xs sm:text-sm font-bold text-slate-700">
+                                        {new Date(viewAsset.assignedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </p>
                                 </div>
-                                <div>
-                                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Condition</p>
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${viewAsset.condition === 'Working' ? 'text-teal-700 bg-teal-50 border border-teal-100' :
-                                            viewAsset.condition === 'Needs Repair' ? 'text-orange-700 bg-orange-50 border border-orange-100' :
-                                                'text-red-700 bg-red-50 border border-red-100'
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Condition</p>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold border ${viewAsset.condition === 'Working' ? 'text-teal-700 bg-teal-50 border-teal-200' :
+                                            viewAsset.condition === 'Needs Repair' ? 'text-orange-700 bg-orange-50 border-orange-200' :
+                                                'text-red-700 bg-red-50 border-red-200'
                                         }`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${viewAsset.condition === 'Working' ? 'bg-teal-500' :
+                                                viewAsset.condition === 'Needs Repair' ? 'bg-orange-500' :
+                                                    'bg-red-500'
+                                            }`}></span>
                                         {viewAsset.condition}
                                     </span>
                                 </div>
                             </div>
-                            <div>
-                                <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Remarks</p>
-                                <p className="text-sm font-medium text-slate-600 break-words bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                    {viewAsset.remarks || 'No remarks provided.'}
+
+                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Remarks</p>
+                                <p className="text-xs sm:text-sm font-medium text-slate-600 break-words leading-relaxed">
+                                    {viewAsset.remarks || <span className="text-slate-400 italic">No remarks provided.</span>}
                                 </p>
                             </div>
                         </div>
@@ -345,82 +355,121 @@ const EmployeeAssetsCom = () => {
                 </div>
             )}
 
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div className="min-w-0">
-                    <h1 className="text-xl md:text-2xl font-bold text-[#010a1f] tracking-tight flex items-center gap-2 truncate">
-                        <FaLaptop className="text-[#0437cc] shrink-0" />
-                        <span className="truncate">Assigned Company Products</span>
-                    </h1>
-                    <p className="text-[11px] sm:text-xs md:text-sm text-slate-500 mt-1 truncate">
-                        Declare and manage all company-owned hardware and software licenses currently in your possession.
-                    </p>
+            {/* ==================== PAGE HEADER ==================== */}
+            <div className="relative bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
+                <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-100 mb-2">
+                            <FaLaptop className="text-[9px] text-[#0437cc]" />
+                            <span className="text-[10px] font-bold text-[#0437cc] uppercase tracking-[0.1em]">Company Assets</span>
+                        </div>
+                        <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">Assigned Company Products</h1>
+                        <p className="text-xs sm:text-sm text-slate-500 mt-1 truncate">
+                            Declare and manage all company-owned hardware and software licenses currently in your possession.
+                        </p>
+                    </div>
+                    {!isFormOpen && (
+                        <Button
+                            variant="primary"
+                            icon={FaPlusCircle}
+                            onClick={() => setIsFormOpen(true)}
+                            className="w-full md:w-auto shadow-lg shadow-[#0437cc]/25 rounded-xl shrink-0"
+                        >
+                            Declare New Asset
+                        </Button>
+                    )}
                 </div>
-                {!isFormOpen && (
-                    <Button variant="primary" icon={FaPlusCircle} onClick={() => setIsFormOpen(true)} className="w-full md:w-auto shadow-md shadow-[#0437cc]/20 shrink-0">
-                        Declare New Asset
-                    </Button>
-                )}
             </div>
 
+            {/* ==================== MESSAGES ==================== */}
             {successMsg && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-medium text-[11px] sm:text-sm break-words flex items-center gap-2">
-                    <FaCheck className="shrink-0" /> {successMsg}
+                <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm break-words flex items-center gap-2.5 overflow-hidden">
+                    <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
+                        <FaCheck className="text-green-600 text-xs" />
+                    </span>
+                    {successMsg}
                 </div>
             )}
 
             {apiError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-medium text-[11px] sm:text-sm break-words flex items-center gap-2">
-                    <FaTimes className="shrink-0" /> {apiError}
+                <div className="relative bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm break-words flex items-center gap-2.5 overflow-hidden">
+                    <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-red-200 shrink-0">
+                        <FaTimes className="text-red-600 text-xs" />
+                    </span>
+                    {apiError}
                 </div>
             )}
 
-            {/* Asset Form (Add/Edit) */}
+            {/* ==================== ASSET FORM ==================== */}
             {isFormOpen && (
-                <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-[#0437cc]/30 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
-                    <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                        <h2 className="text-sm md:text-base font-bold text-[#010a1f]">{editId ? 'Edit Asset Detail' : 'Declare Asset Detail'}</h2>
-                        <button type="button" onClick={handleCancel} className="text-slate-400 hover:text-red-500 transition-colors p-1">
-                            <FaTimes />
+                <form onSubmit={handleSubmit} className="relative bg-white rounded-2xl shadow-md shadow-[#0437cc]/5 border border-[#0437cc]/20 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
+
+                    {/* Form Header */}
+                    <div className="relative px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50/60 to-indigo-50/30 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white shrink-0 shadow-md shadow-[#0437cc]/20">
+                                {editId ? <FaEdit className="text-sm" /> : <FaPlusCircle className="text-sm" />}
+                            </span>
+                            <div>
+                                <h2 className="text-sm sm:text-base font-bold text-[#010a1f]">{editId ? 'Edit Asset Detail' : 'Declare New Asset'}</h2>
+                                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">Fill in the details below</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={handleCancel} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors rounded-lg">
+                            <FaTimes className="text-sm" />
                         </button>
                     </div>
 
-                    <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                        
-                        {/* Multiple Image Upload Area */}
-                        <div className="sm:col-span-2 lg:col-span-3 flex flex-col gap-2 border border-slate-100 rounded-xl p-4 bg-slate-50/50">
-                            <div className="pb-2 border-b border-slate-100">
-                                <p className="text-sm font-bold text-[#010a1f]">Asset Photos (Optional)</p>
-                                <p className="text-[11px] text-slate-500">Capture serial numbers, damage, or current condition.</p>
-                                <p className="text-[10px] text-slate-400 mt-0.5">Max size: 8MB per file. Format: JPG, PNG.</p>
+                    <div className="p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+
+                        {/* Multiple Image Upload */}
+                        <div className="sm:col-span-2 lg:col-span-3 flex flex-col gap-3 border border-slate-200 rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-slate-50/70 to-white">
+                            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+                                <span className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                                    <FaCamera className="text-[#0437cc] text-xs" />
+                                </span>
+                                <div>
+                                    <p className="text-sm font-bold text-[#010a1f]">Asset Photos <span className="text-slate-400 font-medium">(Optional)</span></p>
+                                    <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5">Capture serial numbers, damage, or current condition · Max 8MB per file · JPG / PNG</p>
+                                </div>
                             </div>
-                            
-                            <div className="flex flex-wrap gap-4 pt-2">
+
+                            <div className="flex flex-wrap gap-3 pt-2">
                                 {formData.assetPhotos.map((photo, idx) => (
-                                    <div key={idx} className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-white relative group shrink-0">
+                                    <div key={idx} className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white relative group shrink-0">
                                         <img src={photo} alt={`Asset ${idx + 1}`} className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button type="button" onClick={() => removePhoto(idx)} className="text-white hover:text-red-400 bg-black/50 p-2 rounded-full backdrop-blur-sm">
-                                                <FaTrash />
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                type="button"
+                                                onClick={() => removePhoto(idx)}
+                                                className="w-9 h-9 flex items-center justify-center text-white bg-red-500/90 hover:bg-red-500 rounded-xl backdrop-blur-sm transition-colors shadow-lg"
+                                            >
+                                                <FaTrash className="text-xs" />
                                             </button>
                                         </div>
                                     </div>
                                 ))}
-                                
-                                <div 
+
+                                <div
                                     onClick={() => fileInputRef.current.click()}
-                                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl border-2 border-dashed border-[#0437cc]/30 bg-[#0437cc]/5 flex flex-col items-center justify-center cursor-pointer hover:bg-[#0437cc]/10 transition-colors shrink-0"
+                                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl border-2 border-dashed border-[#0437cc]/30 bg-[#0437cc]/5 flex flex-col items-center justify-center cursor-pointer hover:bg-[#0437cc]/10 hover:border-[#0437cc]/50 transition-all shrink-0 group"
                                 >
-                                    <FaCamera className="text-2xl text-[#0437cc]/50 mb-1" />
-                                    <span className="text-[10px] font-bold text-[#0437cc]/70">Add Photo</span>
+                                    <span className="w-10 h-10 rounded-xl bg-white flex items-center justify-center mb-1.5 shadow-sm border border-blue-100 group-hover:scale-105 transition-transform">
+                                        <FaCamera className="text-base text-[#0437cc]" />
+                                    </span>
+                                    <span className="text-[10px] font-bold text-[#0437cc]">Add Photo</span>
                                 </div>
-                                <input 
-                                    type="file" 
-                                    accept="image/*" 
+                                <input
+                                    type="file"
+                                    accept="image/*"
                                     multiple
-                                    ref={fileInputRef} 
-                                    onChange={handlePhotoUpload} 
-                                    className="hidden" 
+                                    ref={fileInputRef}
+                                    onChange={handlePhotoUpload}
+                                    className="hidden"
                                 />
                             </div>
                         </div>
@@ -501,109 +550,137 @@ const EmployeeAssetsCom = () => {
                         </div>
                     </div>
 
-                    <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                        <Button type="button" variant="ghost" onClick={handleCancel} disabled={isSubmitting}>Cancel</Button>
-                        <Button type="submit" variant="primary" icon={FaSave} disabled={isSubmitting}>
+                    <div className="px-5 py-4 border-t border-slate-100 bg-gradient-to-r from-slate-50 to-slate-50/40 flex flex-col sm:flex-row justify-end gap-3">
+                        <Button type="button" variant="ghost" onClick={handleCancel} disabled={isSubmitting} className="w-full sm:w-auto rounded-xl order-2 sm:order-1">
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            icon={FaSave}
+                            disabled={isSubmitting}
+                            className="w-full sm:w-auto shadow-lg shadow-[#0437cc]/25 rounded-xl order-1 sm:order-2"
+                        >
                             {isSubmitting ? 'Saving...' : editId ? 'Update Asset' : 'Save Asset'}
                         </Button>
                     </div>
                 </form>
             )}
 
-            {/* Asset List */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                        <FaBox className="text-[#0437cc] text-lg shrink-0" />
-                        <h2 className="text-sm md:text-base font-bold text-[#010a1f]">Active Product Inventory</h2>
+            {/* ==================== ASSET LIST ==================== */}
+            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                            <FaBox className="text-[#0437cc] text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Active Product Inventory</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">All assets currently in your possession</p>
+                        </div>
                     </div>
-                    <span className="text-[10px] sm:text-xs font-bold bg-[#0437cc]/10 text-[#0437cc] px-3 py-1 rounded-full border border-[#0437cc]/20">
+                    <span className="inline-flex items-center gap-1.5 bg-[#0437cc]/10 text-[#0437cc] text-[10px] sm:text-[11px] font-bold px-3 py-1.5 rounded-full border border-[#0437cc]/20 shrink-0 w-max">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#0437cc]"></span>
                         {assets.length} Items Listed
                     </span>
                 </div>
 
                 <div className="p-0">
                     {assets.length === 0 ? (
-                        <div className="p-8 text-center flex flex-col items-center justify-center">
-                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3 border border-slate-100">
-                                <FaBox className="text-2xl text-slate-300" />
+                        <div className="p-10 text-center flex flex-col items-center justify-center">
+                            <div className="w-16 h-16 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl flex items-center justify-center mb-3 border border-blue-100">
+                                <FaBox className="text-2xl text-[#0437cc]/40" />
                             </div>
-                            <p className="text-sm font-semibold text-slate-500">No assets currently declared.</p>
-                            <p className="text-xs text-slate-400 mt-1">Click "Declare New Asset" if you possess company hardware.</p>
+                            <p className="text-sm font-bold text-slate-600">No assets currently declared.</p>
+                            <p className="text-xs text-slate-400 mt-1 max-w-xs">Click "Declare New Asset" if you possess company hardware.</p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto custom-scrollbar w-full">
                             <table className="w-full text-left border-collapse min-w-[700px]">
                                 <thead>
-                                    <tr className="border-b border-slate-100 text-[10px] sm:text-[11px] md:text-[12px] text-slate-400 uppercase tracking-wider bg-white">
-                                        <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">Asset Detail</th>
-                                        <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">Serial Number</th>
-                                        <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">Received On</th>
-                                        <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-center whitespace-nowrap">Condition</th>
-                                        <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-right whitespace-nowrap">Actions</th>
+                                    <tr className="border-b border-slate-100 text-[10px] sm:text-[11px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                        <th className="px-4 sm:px-6 py-3.5 sm:py-4 font-bold whitespace-nowrap">Asset Detail</th>
+                                        <th className="px-4 sm:px-6 py-3.5 sm:py-4 font-bold whitespace-nowrap">Serial Number</th>
+                                        <th className="px-4 sm:px-6 py-3.5 sm:py-4 font-bold whitespace-nowrap">Received On</th>
+                                        <th className="px-4 sm:px-6 py-3.5 sm:py-4 font-bold text-center whitespace-nowrap">Condition</th>
+                                        <th className="px-4 sm:px-6 py-3.5 sm:py-4 font-bold text-right whitespace-nowrap">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-50">
+                                <tbody className="divide-y divide-slate-100">
                                     {assets.map((asset) => (
-                                        <tr key={asset.id} className={`hover:bg-slate-50/50 transition-colors ${editId === asset.id ? 'bg-[#0437cc]/5' : ''}`}>
-                                            <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                        <tr
+                                            key={asset.id}
+                                            className={`transition-colors group ${editId === asset.id
+                                                ? 'bg-[#0437cc]/5'
+                                                : 'hover:bg-slate-50/60'
+                                                }`}
+                                        >
+                                            <td className="px-4 sm:px-6 py-3.5 sm:py-4">
                                                 <div className="flex items-center gap-3 min-w-0">
                                                     {asset.assetPhotos && asset.assetPhotos.length > 0 ? (
-                                                        <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-white">
+                                                        <div className="relative w-11 h-11 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-white shadow-sm">
                                                             <img src={asset.assetPhotos[0]} alt="Asset" className="w-full h-full object-cover" />
                                                             {asset.assetPhotos.length > 1 && (
-                                                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-[10px] font-bold">
+                                                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[10px] font-bold backdrop-blur-sm">
                                                                     +{asset.assetPhotos.length - 1}
                                                                 </div>
                                                             )}
                                                         </div>
                                                     ) : (
-                                                        <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200 shrink-0 text-lg">
+                                                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center border shrink-0 text-lg ${getAssetIconBg(asset.type)}`}>
                                                             {getAssetIcon(asset.type)}
                                                         </div>
                                                     )}
                                                     <div className="min-w-0">
                                                         <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{asset.brandModel}</p>
-                                                        <p className="text-[10px] sm:text-[11px] text-slate-500 truncate">{asset.type}</p>
+                                                        <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5 truncate">{asset.type}</p>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 sm:px-6 py-3 sm:py-4 min-w-0">
-                                                <p className="text-[12px] sm:text-[13px] font-mono font-bold text-slate-700 truncate">{asset.serialNumber}</p>
+                                            <td className="px-4 sm:px-6 py-3.5 sm:py-4 min-w-0">
+                                                <span className="inline-block text-[11px] sm:text-[12px] font-mono font-bold text-slate-700 bg-slate-50 border border-slate-200 px-2 py-1 rounded-md truncate max-w-[160px] tracking-tight">
+                                                    {asset.serialNumber}
+                                                </span>
                                             </td>
-                                            <td className="px-4 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
-                                                <p className="text-[12px] sm:text-[13px] font-medium text-slate-600">{new Date(asset.assignedDate).toLocaleDateString()}</p>
+                                            <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap">
+                                                <p className="text-[11px] sm:text-[13px] font-semibold text-slate-600">
+                                                    {new Date(asset.assignedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </p>
                                             </td>
-                                            <td className="px-4 sm:px-6 py-3 sm:py-4 text-center whitespace-nowrap">
-                                                <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[9px] sm:text-[11px] font-bold ${asset.condition === 'Working' ? 'text-teal-700 bg-teal-50 border border-teal-100' :
-                                                        asset.condition === 'Needs Repair' ? 'text-orange-700 bg-orange-50 border border-orange-100' :
-                                                            'text-red-700 bg-red-50 border border-red-100'
+                                            <td className="px-4 sm:px-6 py-3.5 sm:py-4 text-center whitespace-nowrap">
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-bold border ${asset.condition === 'Working' ? 'text-teal-700 bg-teal-50 border-teal-200' :
+                                                        asset.condition === 'Needs Repair' ? 'text-orange-700 bg-orange-50 border-orange-200' :
+                                                            'text-red-700 bg-red-50 border-red-200'
                                                     }`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${asset.condition === 'Working' ? 'bg-teal-500' :
+                                                            asset.condition === 'Needs Repair' ? 'bg-orange-500' :
+                                                                'bg-red-500'
+                                                        }`}></span>
                                                     {asset.condition}
                                                 </span>
                                             </td>
-                                            <td className="px-4 sm:px-6 py-3 sm:py-4 text-right whitespace-nowrap">
-                                                <div className="flex gap-1.5 justify-end">
+                                            <td className="px-4 sm:px-6 py-3.5 sm:py-4 text-right whitespace-nowrap">
+                                                <div className="flex gap-1 justify-end">
                                                     <button
                                                         onClick={() => handleView(asset)}
-                                                        className="p-1.5 sm:p-2 text-slate-400 hover:text-[#0437cc] transition-colors rounded hover:bg-[#0437cc]/10"
+                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
                                                         title="View Asset"
                                                     >
-                                                        <FaEye className="text-xs sm:text-sm" />
+                                                        <FaEye className="text-xs" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleEdit(asset)}
-                                                        className="p-1.5 sm:p-2 text-slate-400 hover:text-green-600 transition-colors rounded hover:bg-green-50"
+                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50"
                                                         title="Edit Asset"
                                                     >
-                                                        <FaEdit className="text-xs sm:text-sm" />
+                                                        <FaEdit className="text-xs" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleDelete(asset.id)}
-                                                        className="p-1.5 sm:p-2 text-slate-400 hover:text-red-500 transition-colors rounded hover:bg-red-50"
+                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
                                                         title="Remove Asset"
                                                     >
-                                                        <FaTrash className="text-xs sm:text-sm" />
+                                                        <FaTrash className="text-xs" />
                                                     </button>
                                                 </div>
                                             </td>

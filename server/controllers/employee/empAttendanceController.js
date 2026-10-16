@@ -22,7 +22,6 @@ export const clockIn = async (req, res) => {
         const now = new Date();
 
         // 0. STRICT DOUBLE CHECK-IN PREVENTION
-        // Block request if the user already has an open session for today
         const doubleCheckQuery = `
             SELECT id FROM emp_attendance 
             WHERE employee_id = $1 AND date = $2 AND clock_out IS NULL;
@@ -51,7 +50,7 @@ export const clockIn = async (req, res) => {
             `, [missedRecordId]);
         }
 
-        // 2. Shift and Grace Time / 1 PM Logic
+        // 2. Shift and Grace Time / Late Marking Logic
         const shiftQuery = `
             SELECT s.* FROM sa_work_shifts s
             JOIN sa_employees e ON s.shift_name = e.shift
@@ -62,28 +61,33 @@ export const clockIn = async (req, res) => {
         let lateMinutes = 0;
         let status = 'Present';
 
-        // Set 1 PM boundary for today
-        const onePM = new Date(now);
-        onePM.setHours(13, 0, 0, 0);
-
-        if (now.getTime() > onePM.getTime()) {
-            // Rule: Both Fixed & Flexible checking in after 1 PM are Absent and need approval
-            status = 'Absent (Pending Approval)';
-        } else if (shiftRes.rows.length > 0) {
+        if (shiftRes.rows.length > 0) {
             const shift = shiftRes.rows[0];
 
-            // Rule: Fixed shift checked before 1 PM -> check grace time for Late marking
-            if (shift.shift_type === 'Fixed' && shift.start_time) {
-                const [sHrs, sMins] = shift.start_time.split(':').map(Number);
+            if (shift.shift_type === 'Flexible') {
+                const fivePM = new Date(now);
+                fivePM.setHours(17, 0, 0, 0); // 5:00 PM Boundary
+                if (now.getTime() >= fivePM.getTime()) {
+                    return res.status(400).json({ message: 'It is past 5:00 PM. Flexible shift check-ins are not allowed at this time. You have been marked as Absent.' });
+                }
+            } else {
+                // Fixed Shift Rule: Allow login, but mark as Late if past grace period
+                if (shift.start_time) {
+                    let [sHrs, sMins] = shift.start_time.split(':').map(Number);
+                    
+                    if (shift.start_time.includes('PM') && sHrs !== 12) sHrs += 12;
+                    if (shift.start_time.includes('AM') && sHrs === 12) sHrs = 0;
 
-                const expectedTime = new Date(now);
-                expectedTime.setHours(sHrs, sMins, 0, 0);
+                    const expectedTime = new Date(now);
+                    expectedTime.setHours(sHrs, sMins, 0, 0);
 
-                const graceMs = (shift.grace_time || 0) * 60000;
-                const allowedTimeMs = expectedTime.getTime() + graceMs;
+                    const graceMs = (shift.grace_time || shift.grace_period || 0) * 60000;
+                    const allowedTimeMs = expectedTime.getTime() + graceMs;
 
-                if (now.getTime() > allowedTimeMs) {
-                    lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);
+                    if (now.getTime() > allowedTimeMs) {
+                        lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);
+                        status = 'Late (Pending Approval)';
+                    }
                 }
             }
         }

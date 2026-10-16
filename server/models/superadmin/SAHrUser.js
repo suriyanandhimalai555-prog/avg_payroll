@@ -11,11 +11,14 @@ const initializeSAHrUserModel = async () => {
             phone VARCHAR(20) NOT NULL,
             dob DATE NOT NULL,
             gender VARCHAR(20) NOT NULL,
+            blood_group VARCHAR(20),
+            address TEXT,
             joining_date DATE NOT NULL,
             company VARCHAR(255) NOT NULL,
             branch VARCHAR(255) NOT NULL,
             department VARCHAR(100),
             designation VARCHAR(100),
+            shift VARCHAR(50),
             md VARCHAR(100),
             status VARCHAR(50) DEFAULT 'Active',
             
@@ -42,8 +45,8 @@ const initializeSAHrUserModel = async () => {
             account_number VARCHAR(100) NOT NULL,
             ifsc VARCHAR(50) NOT NULL,
             
+            profile_photo TEXT,
             password VARCHAR(255),
-            permissions JSONB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `;
@@ -55,11 +58,14 @@ const initializeSAHrUserModel = async () => {
         
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS dob DATE;
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS gender VARCHAR(20);
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS blood_group VARCHAR(20);
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS address TEXT;
         
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS company VARCHAR(255);
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS branch VARCHAR(255);
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS department VARCHAR(100);
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS designation VARCHAR(100);
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS shift VARCHAR(50);
         
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS ctc NUMERIC NOT NULL DEFAULT 0;
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC NOT NULL DEFAULT 0;
@@ -82,14 +88,17 @@ const initializeSAHrUserModel = async () => {
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS account_holder VARCHAR(150);
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS account_number VARCHAR(100);
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS ifsc VARCHAR(50);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS permissions JSONB;
+        
+        -- Fix: Appends the profile_photo column
+        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS profile_photo TEXT;
+        
+        ALTER TABLE sa_hr_users DROP COLUMN IF EXISTS permissions;
     `;
 
     try {
         await pool.query(createTableQuery);
         await pool.query(alterTableQueries);
         
-        // Ensure legacy rows get a dummy hr_id so queries don't crash
         await pool.query(`UPDATE sa_hr_users SET hr_id = 'LEGACY-' || id WHERE hr_id IS NULL;`);
         
         console.log('SAHrUser table checked/updated successfully.');

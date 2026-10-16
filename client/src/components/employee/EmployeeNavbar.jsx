@@ -8,67 +8,95 @@ const EmployeeNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktopCo
     const navigate = useNavigate();
 
     return (
-        <header className="h-16 md:h-20 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-10 w-full transition-all duration-300">
+        <header className="h-16 md:h-20 bg-white/85 backdrop-blur-xl border-b border-slate-200/70 flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-30 w-full transition-all duration-300">
 
-            {/* Left side - Search & Toggles */}
-            <div className="flex items-center gap-3 sm:gap-4 md:gap-6 flex-1 min-w-0">
+            {/* ==================== LEFT: TOGGLES + SEARCH ==================== */}
+            <div className="flex items-center gap-2 sm:gap-3 md:gap-5 flex-1 min-w-0">
+
+                {/* Mobile menu toggle */}
                 <button
                     onClick={toggleMobileSidebar}
-                    className="md:hidden p-1.5 sm:p-2 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100 rounded-lg transition-colors shrink-0"
+                    className="md:hidden p-2 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100/80 active:scale-95 rounded-xl transition-all shrink-0"
+                    aria-label="Open menu"
                 >
                     <FaBars className="text-lg sm:text-xl" />
                 </button>
+
+                {/* Desktop collapse toggle */}
                 <button
                     onClick={toggleDesktopSidebar}
-                    className="hidden md:block p-2 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100 rounded-lg transition-colors shrink-0"
+                    className="hidden md:flex items-center justify-center w-10 h-10 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100/80 active:scale-95 rounded-xl transition-all shrink-0"
+                    aria-label="Toggle sidebar"
                 >
-                    <FaAlignLeft className={`text-xl transition-transform duration-300 ${isDesktopCollapsed ? 'rotate-180' : ''}`} />
+                    <FaAlignLeft className={`text-lg transition-transform duration-300 ${isDesktopCollapsed ? 'rotate-180' : ''}`} />
                 </button>
 
-                <div className="relative w-full max-w-xs sm:max-w-sm md:max-w-md hidden md:block">
-                    <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                {/* Desktop search */}
+                <div className="relative w-full max-w-xs sm:max-w-sm md:max-w-md hidden md:block group">
+                    <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm group-focus-within:text-[#0437cc] transition-colors pointer-events-none" />
                     <input
                         type="text"
-                        placeholder="Search payslips, documents, leaves..."
-                        className="w-full pl-9 pr-3 sm:pl-10 sm:pr-4 py-2 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-[#0437cc]/50 focus:border-[#0437cc] focus:bg-white transition-all outline-none text-[#010a1f]"
+                        placeholder="Search payslips, documents, leaves…"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 border border-slate-200/80 rounded-xl text-sm text-[#010a1f] placeholder:text-slate-400 focus:ring-2 focus:ring-[#0437cc]/20 focus:border-[#0437cc]/60 focus:bg-white transition-all outline-none"
                     />
+                    {/* Keyboard hint (cosmetic) */}
+                    <span className="hidden lg:inline-flex absolute right-3 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-white border border-slate-200 rounded-md">
+                        ⌘ K
+                    </span>
                 </div>
-                
-                {/* Mobile Search Icon Only */}
-                <button className="md:hidden p-1.5 sm:p-2 text-slate-500 hover:text-[#0437cc] hover:bg-slate-100 rounded-lg transition-colors shrink-0">
-                    <FaSearch className="text-lg sm:text-xl" />
+
+                {/* Mobile search icon */}
+                <button
+                    className="md:hidden p-2 text-slate-500 hover:text-[#0437cc] hover:bg-slate-100/80 active:scale-95 rounded-xl transition-all shrink-0 ml-auto"
+                    aria-label="Search"
+                >
+                    <FaSearch className="text-lg" />
                 </button>
             </div>
 
-            {/* Right side - Quick Actions & Profile */}
-            <div className="flex items-center gap-3 sm:gap-4 md:gap-6 shrink-0">
-                <div className="hidden lg:block text-xs sm:text-sm font-medium text-slate-600 bg-slate-50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-slate-100">
+            {/* ==================== RIGHT: DATE + BELL + PROFILE ==================== */}
+            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 lg:gap-5 shrink-0">
+
+                {/* Date pill */}
+                <div className="hidden lg:inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                     {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </div>
 
-                <button className="relative p-2 sm:p-2.5 rounded-full bg-slate-50 border border-slate-100 text-slate-600 hover:bg-slate-100 transition-colors">
+                {/* Notification bell */}
+                <button
+                    className="relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 hover:text-[#0437cc] hover:bg-white hover:border-[#0437cc]/30 active:scale-95 transition-all"
+                    aria-label="Notifications"
+                >
                     <FaBell className="text-base sm:text-lg" />
-                    <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 w-2 h-2 sm:w-2.5 sm:h-2.5 bg-[#f77704] rounded-full border-2 border-white"></span>
+                    <span className="absolute top-2 right-2 w-2 h-2 bg-[#f77704] rounded-full border-2 border-white shadow-sm">
+                        <span className="absolute inset-0 rounded-full bg-[#f77704] animate-ping opacity-75"></span>
+                    </span>
                 </button>
 
-                {/* Profile Avatar with Dynamic Real-time Data & Routing */}
-                <div 
+                {/* Vertical divider */}
+                <div className="hidden md:block w-px h-8 bg-slate-200/80"></div>
+
+                {/* Profile */}
+                <div
                     onClick={() => navigate('/employee/profile')}
-                    className="flex items-center gap-2 sm:gap-3 md:pl-4 md:border-l border-slate-200 cursor-pointer group"
+                    className="flex items-center gap-2 sm:gap-3 cursor-pointer group rounded-xl px-1 py-1 md:pl-2 hover:bg-slate-50 transition-colors"
                 >
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-green-600/20 p-0.5 group-hover:border-green-600 transition-all shrink-0">
-                        <img
-                            // Dynamically uses the Base64 image from the database if it exists, otherwise falls back to a default avatar
-                            src={user?.profile_photo || "https://ui-avatars.com/api/?name=" + user?.first_name + "+" + user?.last_name + "&background=f1f5f9&color=0437cc"}
-                            alt={`${user?.first_name} ${user?.last_name}`}
-                            className="w-full h-full rounded-full object-cover"
-                        />
+                    <div className="relative shrink-0">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden ring-2 ring-[#0437cc]/15 group-hover:ring-[#0437cc]/40 transition-all">
+                            <img
+                                src={user?.profile_photo || "https://ui-avatars.com/api/?name=" + user?.first_name + "+" + user?.last_name + "&background=f1f5f9&color=0437cc"}
+                                alt={`${user?.first_name} ${user?.last_name}`}
+                                className="w-full h-full object-cover"
+                            />
+                        </div>
+                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white"></span>
                     </div>
-                    <div className="hidden sm:block min-w-0">
-                        <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] group-hover:text-[#0437cc] transition-colors truncate max-w-[100px] lg:max-w-[150px]">
+                    <div className="hidden sm:block min-w-0 pr-1">
+                        <p className="text-[13px] font-bold text-[#010a1f] group-hover:text-[#0437cc] transition-colors truncate max-w-[110px] lg:max-w-[160px] leading-tight">
                             {user?.first_name} {user?.last_name}
                         </p>
-                        <p className="text-[10px] sm:text-xs text-slate-500 truncate">
+                        <p className="text-[10.5px] text-slate-500 truncate max-w-[110px] lg:max-w-[160px] mt-0.5">
                             ID: {user?.employee_id}
                         </p>
                     </div>

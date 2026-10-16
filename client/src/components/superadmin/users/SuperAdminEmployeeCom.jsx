@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FaUserPlus, FaUser, FaBriefcase, FaMoneyCheckAlt,
-    FaUniversity, FaTimes, FaCheck, FaTable, FaListUl,
-    FaSearch, FaEye, FaEdit, FaUserEdit, FaBuilding, FaTrash, FaLock, FaChevronDown, FaChevronUp, FaPlusCircle, FaMinusCircle
+    FaUniversity, FaTimes, FaCheck, FaListUl, FaEnvelope, FaPhoneAlt,
+    FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -12,7 +12,12 @@ import Select from '../../../components/common/Select';
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full min-w-0">
         {children}
-        {error && <span className="text-red-500 text-xs font-medium truncate">{error}</span>}
+        {error && (
+            <span className="text-red-500 text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 pl-1">
+                <span className="w-1 h-1 rounded-full bg-red-500 shrink-0"></span>
+                {error}
+            </span>
+        )}
     </div>
 );
 
@@ -28,21 +33,10 @@ const SuperAdminEmployeeCom = () => {
         uanNo: '', bankName: '', accountHolder: '', accountNumber: '', ifsc: ''
     };
 
-    const INITIAL_PERMISSIONS = {
-        core: { attendance: true, leave: true, documents: true },
-        finance: { payroll: true, reimbursements: true, loans: true },
-        system: { notifications: true, settings: true }
-    };
-
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
-    const [permissions, setPermissions] = useState(INITIAL_PERMISSIONS);
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const [expandedAccordion, setExpandedAccordion] = useState(null);
-    const [showPermissions, setShowPermissions] = useState(false);
-
-    // Master Data Arrays
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
     const [departments, setDepartments] = useState([]);
@@ -62,7 +56,6 @@ const SuperAdminEmployeeCom = () => {
     const [successMsg, setSuccessMsg] = useState('');
     const [apiError, setApiError] = useState('');
 
-    // Dynamic Financial Calculations
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
     const liveGross = parseNum(formData.basic) + parseNum(formData.hra) + parseNum(formData.conveyance) + parseNum(formData.medical) + parseNum(formData.specialAllowance) + parseNum(formData.otherAllowances);
     const liveDeductions = parseNum(formData.epf) + parseNum(formData.esi) + parseNum(formData.healthInsurance) + parseNum(formData.pt) + parseNum(formData.tds) + parseNum(formData.leaves);
@@ -124,7 +117,6 @@ const SuperAdminEmployeeCom = () => {
         fetchEmployees();
     }, []);
 
-    // Cascading Dropdown Logic
     const selectedCompanyObj = companies.find(c => c.company_name === formData.company);
     const filteredBranches = branches.filter(b => b.company_id === selectedCompanyObj?.id);
     const selectedBranchObj = filteredBranches.find(b => b.branch_name === formData.branch);
@@ -152,35 +144,9 @@ const SuperAdminEmployeeCom = () => {
         if (apiError) setApiError('');
     };
 
-    const handlePermissionToggle = (parentKey, childKey = null) => {
-        setPermissions(prev => {
-            const newPerms = { ...prev };
-            if (childKey) {
-                newPerms[parentKey] = {
-                    ...newPerms[parentKey],
-                    [childKey]: !newPerms[parentKey][childKey]
-                };
-            } else {
-                if (typeof newPerms[parentKey] === 'object' && newPerms[parentKey] !== null) {
-                    const allTrue = Object.values(newPerms[parentKey]).every(v => v === true);
-                    const newValue = !allTrue;
-                    const updatedChildren = {};
-                    Object.keys(newPerms[parentKey]).forEach(k => {
-                        updatedChildren[k] = newValue;
-                    });
-                    newPerms[parentKey] = updatedChildren;
-                } else {
-                    newPerms[parentKey] = !newPerms[parentKey];
-                }
-            }
-            return newPerms;
-        });
-    };
-
     const validateForm = () => {
         let newErrors = {};
-        
-        // Strictly matched to user requirements (*)
+
         const requiredFields = [
             'firstName', 'lastName', 'email', 'phone', 'dob', 'gender', 'address',
             'joiningDate', 'company', 'branch', 'department', 'designation', 'empType', 'location', 'shift', 'status',
@@ -215,7 +181,6 @@ const SuperAdminEmployeeCom = () => {
         setIsEditing(false);
         setEditEmployeeId(null);
         setFormData(INITIAL_FORM_STATE);
-        setPermissions(INITIAL_PERMISSIONS);
         setErrors({});
     };
 
@@ -229,7 +194,7 @@ const SuperAdminEmployeeCom = () => {
 
         setIsSubmitting(true);
         try {
-            const payload = { ...formData, permissions };
+            const payload = { ...formData };
 
             if (isEditing) {
                 await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-employees/${editEmployeeId}`, payload);
@@ -240,7 +205,6 @@ const SuperAdminEmployeeCom = () => {
                 if (response.status === 201 || response.status === 200) {
                     setSuccessMsg(`Employee created successfully with ID: ${response.data.employee?.employee_id}.`);
                     setFormData(INITIAL_FORM_STATE);
-                    setPermissions(INITIAL_PERMISSIONS);
                 }
             }
             fetchEmployees();
@@ -268,20 +232,6 @@ const SuperAdminEmployeeCom = () => {
             accountNumber: emp.account_number, ifsc: emp.ifsc
         });
 
-        if (emp.permissions && typeof emp.permissions === 'object') {
-            const loadedPerms = { ...INITIAL_PERMISSIONS };
-            Object.keys(emp.permissions).forEach(key => {
-                if (typeof emp.permissions[key] === 'object' && loadedPerms[key]) {
-                    loadedPerms[key] = { ...loadedPerms[key], ...emp.permissions[key] };
-                } else {
-                    loadedPerms[key] = emp.permissions[key];
-                }
-            });
-            setPermissions(loadedPerms);
-        } else {
-            setPermissions(INITIAL_PERMISSIONS);
-        }
-
         setIsEditing(true);
         setEditEmployeeId(emp.id);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -304,12 +254,6 @@ const SuperAdminEmployeeCom = () => {
         setIsViewModalOpen(true);
     };
 
-    const ToggleSwitch = ({ checked, onChange }) => (
-        <button type="button" onClick={onChange} className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? 'bg-[#0437cc]' : 'bg-slate-200'}`}>
-            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-        </button>
-    );
-
     const formatCurrency = (amount) => {
         if (amount === undefined || amount === null) return '₹0';
         return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
@@ -325,62 +269,53 @@ const SuperAdminEmployeeCom = () => {
         return searchStr.includes(searchTerm.toLowerCase());
     });
 
-    const permissionMatrix = [
-        {
-            key: 'core', label: 'Core HR Modules', description: 'Basic tracking and document features.',
-            subItems: [
-                { key: 'attendance', label: 'Attendance Management' },
-                { key: 'leave', label: 'Leave Requests' },
-                { key: 'documents', label: 'Document Hub' }
-            ]
-        },
-        {
-            key: 'finance', label: 'Financial Access', description: 'Controls visibility of salary and claims.',
-            subItems: [
-                { key: 'payroll', label: 'Payroll & Payslips' },
-                { key: 'reimbursements', label: 'Expense Reimbursements' },
-                { key: 'loans', label: 'Loans & Advances' }
-            ]
-        },
-        {
-            key: 'system', label: 'System & Notifications', description: 'General portal features and settings.',
-            subItems: [
-                { key: 'notifications', label: 'In-app Notifications' },
-                { key: 'settings', label: 'Account Settings' }
-            ]
-        }
-    ];
-
     return (
-        <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden">
+        <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* View Employee Dossier Modal */}
+            {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewEmployee && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
-                        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
-                            <h2 className="text-base sm:text-lg font-bold text-[#010a1f] flex items-center gap-2 truncate">
-                                <FaUser className="text-[#0437cc] shrink-0" /> <span className="truncate">Employee Dossier</span>
-                            </h2>
-                            <button onClick={() => setIsViewModalOpen(false)} className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0">
-                                <FaTimes />
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
+
+                        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50/40 shrink-0 sticky top-0 z-10 backdrop-blur-sm">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-blue-100">
+                                    <FaUser className="text-[#0437cc] text-sm" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Employee Dossier</h2>
+                                    <p className="text-[10px] text-slate-500 font-medium truncate">Complete record</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsViewModalOpen(false)}
+                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                            >
+                                <FaTimes className="text-sm" />
                             </button>
                         </div>
+
                         <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5 sm:space-y-6">
 
-                            {/* Profile Header */}
-                            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 border-b border-slate-100 pb-5 sm:pb-6 text-center sm:text-left">
-                                <div className="w-16 h-16 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-2xl border border-[#0437cc]/20 shrink-0">
+                            {/* Profile Banner */}
+                            <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 overflow-hidden">
+                                <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
+
+                                <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-black text-2xl sm:text-3xl shadow-lg shadow-[#0437cc]/25 shrink-0">
                                     {viewEmployee.first_name?.charAt(0)}{viewEmployee.last_name?.charAt(0)}
                                 </div>
-                                <div className="min-w-0 flex-1">
+                                <div className="relative min-w-0 text-center sm:text-left flex-1">
                                     <h3 className="text-lg sm:text-xl font-bold text-[#010a1f] break-words">{viewEmployee.first_name} {viewEmployee.last_name}</h3>
-                                    <p className="text-xs sm:text-sm font-mono text-[#0437cc] font-bold">{viewEmployee.employee_id}</p>
-                                    <p className="text-xs sm:text-sm text-slate-500 mt-1 break-words">{viewEmployee.designation} — {viewEmployee.department}</p>
+                                    <span className="inline-block mt-1.5 text-[10px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-md tracking-wide">
+                                        {viewEmployee.employee_id}
+                                    </span>
+                                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 break-words">{viewEmployee.designation} — {viewEmployee.department}</p>
                                 </div>
-                                <div className="shrink-0 bg-blue-50 border border-blue-200 text-[#0437cc] px-4 py-2 rounded-xl text-center w-full sm:w-auto">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-500">Net Monthly Pay</p>
-                                    <p className="text-lg sm:text-xl font-black">
+                                <div className="relative shrink-0 bg-gradient-to-br from-[#0437cc] to-[#1f56d6] rounded-2xl px-5 py-3 shadow-lg shadow-[#0437cc]/25 text-center text-white w-full sm:w-auto overflow-hidden">
+                                    <div className="absolute -top-6 -right-6 w-20 h-20 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                                    <p className="relative text-[10px] font-bold uppercase tracking-wider mb-0.5 opacity-80">Net Monthly Pay</p>
+                                    <p className="relative text-lg sm:text-xl font-black">
                                         {formatCurrency(
                                             (parseNum(viewEmployee.basic_salary) + parseNum(viewEmployee.hra) + parseNum(viewEmployee.conveyance) + parseNum(viewEmployee.medical) + parseNum(viewEmployee.special_allowance) + parseNum(viewEmployee.other_allowances)) -
                                             (parseNum(viewEmployee.epf) + parseNum(viewEmployee.esi) + parseNum(viewEmployee.health_insurance) + parseNum(viewEmployee.pt) + parseNum(viewEmployee.tds) + parseNum(viewEmployee.leaves))
@@ -390,59 +325,88 @@ const SuperAdminEmployeeCom = () => {
                             </div>
 
                             {/* Info Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-6 sm:gap-x-8 text-xs sm:text-sm">
-                                <div className="min-w-0"><span className="text-slate-400 block text-[10px] sm:text-xs uppercase font-bold mb-1">Company & Branch</span><span className="font-semibold text-slate-700 break-words">{viewEmployee.company} — {viewEmployee.branch}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[10px] sm:text-xs uppercase font-bold mb-1">Location & Shift</span><span className="font-semibold text-slate-700 break-words">{viewEmployee.location} ({viewEmployee.shift})</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[10px] sm:text-xs uppercase font-bold mb-1">Email</span><span className="font-semibold text-slate-700 break-words">{viewEmployee.email}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[10px] sm:text-xs uppercase font-bold mb-1">Phone</span><span className="font-semibold text-slate-700 break-words">{viewEmployee.phone}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[10px] sm:text-xs uppercase font-bold mb-1">UAN NO</span><span className="font-semibold text-slate-700 break-words">{viewEmployee.uan_no}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[10px] sm:text-xs uppercase font-bold mb-1">Status</span><span className={`font-semibold break-words ${viewEmployee.status === 'Active' ? 'text-teal-600' : 'text-orange-600'}`}>{viewEmployee.status}</span></div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {[
+                                    { label: 'Company & Branch', value: `${viewEmployee.company} — ${viewEmployee.branch}` },
+                                    { label: 'Location & Shift', value: `${viewEmployee.location} (${viewEmployee.shift})` },
+                                    { label: 'Email', value: viewEmployee.email },
+                                    { label: 'Phone', value: viewEmployee.phone },
+                                    { label: 'UAN NO', value: viewEmployee.uan_no },
+                                ].map((item, i) => (
+                                    <div key={i} className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 min-w-0">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{item.label}</p>
+                                        <p className="text-xs sm:text-sm font-semibold text-slate-700 break-words">{item.value}</p>
+                                    </div>
+                                ))}
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 min-w-0">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${viewEmployee.status === 'Active'
+                                        ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                        : 'text-orange-700 bg-orange-50 border-orange-200'
+                                        }`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${viewEmployee.status === 'Active' ? 'bg-teal-500' : 'bg-orange-500'}`}></span>
+                                        {viewEmployee.status}
+                                    </span>
+                                </div>
                             </div>
 
-                            {/* Detailed Salary Breakdown */}
-                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 mt-4">
-                                <h3 className="text-xs sm:text-sm font-bold text-[#010a1f] mb-3 sm:mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
-                                    <FaMoneyCheckAlt className="text-[#0437cc] shrink-0" /> Elaborate Salary Breakdown
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
-                                    {/* Earnings Column */}
-                                    <div className="space-y-3 sm:space-y-4">
-                                        <h4 className="text-[11px] sm:text-[13px] font-bold text-green-700 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 border-b border-slate-200/50 pb-1.5">
-                                            <FaPlusCircle /> Earnings
-                                        </h4>
-                                        <div className="space-y-1.5 sm:space-y-2">
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">CTC (Annual)</span><span className="font-semibold text-[#0437cc]">{formatCurrency(viewEmployee.ctc)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Basic Salary</span><span className="font-semibold text-slate-700">{formatCurrency(viewEmployee.basic_salary)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">HRA</span><span className="font-semibold text-slate-700">{formatCurrency(viewEmployee.hra)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Conveyance</span><span className="font-semibold text-slate-700">{formatCurrency(viewEmployee.conveyance)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Medical</span><span className="font-semibold text-slate-700">{formatCurrency(viewEmployee.medical)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Special Allowance</span><span className="font-semibold text-slate-700">{formatCurrency(viewEmployee.special_allowance)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Other Allowances</span><span className="font-semibold text-slate-700">{formatCurrency(viewEmployee.other_allowances)}</span></div>
+                            {/* Salary Breakdown */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
+                                <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-200">
+                                    <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shadow-sm">
+                                        <FaMoneyCheckAlt className="text-xs" />
+                                    </span>
+                                    <h3 className="text-xs sm:text-sm font-bold text-[#010a1f]">Elaborate Salary Breakdown</h3>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+
+                                    {/* Earnings */}
+                                    <div className="relative bg-gradient-to-br from-green-50/80 to-white p-4 rounded-2xl border border-green-100 overflow-hidden">
+                                        <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
+                                        <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-green-100">
+                                            <span className="w-6 h-6 rounded-md bg-green-100 flex items-center justify-center">
+                                                <FaPlusCircle className="text-green-700 text-[10px]" />
+                                            </span>
+                                            <h4 className="text-[11px] font-bold text-green-800 uppercase tracking-wider">Earnings</h4>
                                         </div>
-                                        <div className="pt-2 border-t border-slate-200 flex justify-between">
-                                            <span className="text-[11px] sm:text-sm font-bold text-[#010a1f]">Gross Salary</span>
-                                            <span className="text-[11px] sm:text-sm font-bold text-green-700">
+                                        <div className="relative space-y-2">
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">CTC (Annual)</span><span className="font-bold text-[#0437cc] shrink-0">{formatCurrency(viewEmployee.ctc)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Basic Salary</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.basic_salary)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">HRA</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.hra)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Conveyance</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.conveyance)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Medical</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.medical)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Special Allowance</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.special_allowance)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Other Allowances</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.other_allowances)}</span></div>
+                                        </div>
+                                        <div className="relative pt-3 mt-3 border-t border-green-200 flex justify-between items-center">
+                                            <span className="text-[11px] sm:text-sm font-bold text-green-800 uppercase tracking-wide">Gross</span>
+                                            <span className="text-sm font-black text-green-700">
                                                 {formatCurrency(parseNum(viewEmployee.basic_salary) + parseNum(viewEmployee.hra) + parseNum(viewEmployee.conveyance) + parseNum(viewEmployee.medical) + parseNum(viewEmployee.special_allowance) + parseNum(viewEmployee.other_allowances))}
                                             </span>
                                         </div>
                                     </div>
 
-                                    {/* Deductions Column */}
-                                    <div className="space-y-3 sm:space-y-4">
-                                        <h4 className="text-[11px] sm:text-[13px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 border-b border-slate-200/50 pb-1.5">
-                                            <FaMinusCircle /> Deductions
-                                        </h4>
-                                        <div className="space-y-1.5 sm:space-y-2">
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">EPF</span><span className="font-semibold text-red-600">{formatCurrency(viewEmployee.epf)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">ESI</span><span className="font-semibold text-red-600">{formatCurrency(viewEmployee.esi)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Health Insurance</span><span className="font-semibold text-red-600">{formatCurrency(viewEmployee.health_insurance)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Professional Tax</span><span className="font-semibold text-red-600">{formatCurrency(viewEmployee.pt)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">TDS</span><span className="font-semibold text-red-600">{formatCurrency(viewEmployee.tds)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Leaves</span><span className="font-semibold text-red-600">{formatCurrency(viewEmployee.leaves)}</span></div>
+                                    {/* Deductions */}
+                                    <div className="relative bg-gradient-to-br from-red-50/80 to-white p-4 rounded-2xl border border-red-100 overflow-hidden">
+                                        <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
+                                        <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-red-100">
+                                            <span className="w-6 h-6 rounded-md bg-red-100 flex items-center justify-center">
+                                                <FaMinusCircle className="text-red-600 text-[10px]" />
+                                            </span>
+                                            <h4 className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Deductions</h4>
                                         </div>
-                                        <div className="pt-2 border-t border-slate-200 flex justify-between">
-                                            <span className="text-[11px] sm:text-sm font-bold text-[#010a1f]">Total Deductions</span>
-                                            <span className="text-[11px] sm:text-sm font-bold text-red-600">
+                                        <div className="relative space-y-2">
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">EPF</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.epf)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">ESI</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.esi)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Health Insurance</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.health_insurance)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Professional Tax</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.pt)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">TDS</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.tds)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Leaves</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.leaves)}</span></div>
+                                        </div>
+                                        <div className="relative pt-3 mt-3 border-t border-red-200 flex justify-between items-center">
+                                            <span className="text-[11px] sm:text-sm font-bold text-red-800 uppercase tracking-wide">Total</span>
+                                            <span className="text-sm font-black text-red-600">
                                                 - {formatCurrency(parseNum(viewEmployee.epf) + parseNum(viewEmployee.esi) + parseNum(viewEmployee.health_insurance) + parseNum(viewEmployee.pt) + parseNum(viewEmployee.tds) + parseNum(viewEmployee.leaves))}
                                             </span>
                                         </div>
@@ -454,129 +418,109 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             )}
 
-            {/* Sticky Header */}
-            <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-white/90 backdrop-blur-md p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div className="min-w-0">
-                    <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-[#010a1f] tracking-tight flex items-center gap-2 truncate">
-                        {isEditing ? <FaUserEdit className="text-[#f77704] shrink-0" /> : <FaUserPlus className="text-[#0437cc] shrink-0" />}
-                        <span className="truncate">{isEditing ? 'Edit Employee Record' : 'Add New Employee'}</span>
-                    </h1>
-                </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                    <Button variant="outline" icon={FaTable} className="w-full sm:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white text-xs sm:text-sm py-1.5 sm:py-2" onClick={() => setShowPermissions(!showPermissions)}>
-                        {showPermissions ? 'Hide Access Controls' : 'Configure Permissions'}
-                    </Button>
-                    {isEditing ? (
-                        <Button variant="ghost" icon={FaTimes} onClick={cancelEdit} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 text-xs sm:text-sm py-1.5 sm:py-2">Cancel</Button>
-                    ) : (
-                        <Button variant="ghost" icon={FaTimes} onClick={() => { setFormData(INITIAL_FORM_STATE); setPermissions(INITIAL_PERMISSIONS); }} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 text-xs sm:text-sm py-1.5 sm:py-2">Clear</Button>
-                    )}
-                    <Button variant="primary" icon={FaCheck} className="w-full sm:w-auto shadow-md shadow-[#0437cc]/20 text-xs sm:text-sm py-1.5 sm:py-2" onClick={handleSubmit} disabled={isSubmitting}>
-                        {isSubmitting ? 'Saving...' : (isEditing ? 'Update Employee' : 'Create Employee')}
-                    </Button>
-                </div>
-            </div>
+            {/* ==================== STICKY HEADER ==================== */}
+            <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
-            {successMsg && <div className="bg-green-50 border border-green-200 text-green-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-medium text-[11px] sm:text-sm break-words">{successMsg}</div>}
-            {apiError && <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-medium text-[11px] sm:text-sm break-words">{apiError}</div>}
-
-            {/* Accordion Permissions Matrix */}
-            <div className={`transition-all duration-500 overflow-hidden ${showPermissions ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                <div className="bg-white rounded-2xl shadow-sm border border-[#0437cc]/20 mb-4 sm:mb-6">
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-[#0437cc]/5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                        <FaLock className="text-[#0437cc] text-base sm:text-lg shrink-0 hidden sm:block" />
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                        <span className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0 transition-all duration-300 ${isEditing
+                            ? 'bg-gradient-to-br from-[#f77704] to-orange-500 shadow-[#f77704]/25'
+                            : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] shadow-[#0437cc]/25'
+                            }`}>
+                            {isEditing ? <FaUserEdit className="text-lg sm:text-xl" /> : <FaUserPlus className="text-lg sm:text-xl" />}
+                        </span>
                         <div className="min-w-0">
-                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] flex items-center gap-1.5">
-                                <FaLock className="text-[#0437cc] shrink-0 sm:hidden" /> Dynamic Dropdown Permissions
-                            </h2>
-                            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate">Toggle parent modules entirely, or click to expand and restrict specific sub-menus inside the Employee Sidebar.</p>
+                            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border mb-1.5 transition-colors ${isEditing ? 'bg-orange-50 border-orange-100' : 'bg-blue-50 border-blue-100'
+                                }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isEditing ? 'bg-[#f77704]' : 'bg-[#0437cc]'}`}></span>
+                                <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${isEditing ? 'text-[#f77704]' : 'text-[#0437cc]'}`}>
+                                    {isEditing ? 'Edit Mode' : 'Employee Setup'}
+                                </span>
+                            </div>
+                            <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">
+                                {isEditing ? 'Edit Employee Record' : 'Add New Employee'}
+                            </h1>
+                            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">
+                                {isEditing ? 'Update employee details' : 'Onboard a new team member'}
+                            </p>
                         </div>
                     </div>
-                    <div className="p-3 sm:p-4 md:p-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-                            {permissionMatrix.map((module) => {
-                                const isExpanded = expandedAccordion === module.key;
-                                const hasSubItems = module.subItems && module.subItems.length > 0;
 
-                                let isParentChecked = false;
-                                if (hasSubItems) {
-                                    isParentChecked = Object.values(permissions[module.key] || {}).some(v => v === true);
-                                } else {
-                                    isParentChecked = permissions[module.key];
-                                }
-
-                                return (
-                                    <div key={module.key} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm flex flex-col transition-all">
-                                        <div
-                                            className={`flex items-center justify-between p-2.5 sm:p-3 md:p-4 transition-colors ${hasSubItems ? 'cursor-pointer hover:bg-slate-50' : ''} ${isExpanded ? 'bg-slate-50 border-b border-slate-100' : ''}`}
-                                            onClick={() => hasSubItems && setExpandedAccordion(isExpanded ? null : module.key)}
-                                        >
-                                            <div className="flex items-center gap-2 sm:gap-3 pr-2 sm:pr-4 min-w-0 flex-1">
-                                                {hasSubItems && (
-                                                    <span className="text-slate-400 text-[10px] sm:text-xs bg-slate-100 p-1.5 rounded-full shrink-0">
-                                                        {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
-                                                    </span>
-                                                )}
-                                                <div className="min-w-0 flex-1">
-                                                    <h3 className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{module.label}</h3>
-                                                    <p className="text-[9px] sm:text-[11px] font-medium text-slate-500 mt-0.5 leading-snug line-clamp-1 sm:line-clamp-2" title={module.description}>{module.description}</p>
-                                                </div>
-                                            </div>
-                                            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                                                <ToggleSwitch checked={isParentChecked} onChange={() => handlePermissionToggle(module.key)} />
-                                            </div>
-                                        </div>
-
-                                        {/* Sub-Items Dropdown */}
-                                        {hasSubItems && isExpanded && (
-                                            <div className="p-2 sm:p-3 md:p-4 bg-slate-50/50 grid grid-cols-1 gap-2">
-                                                {module.subItems.map(sub => (
-                                                    <div key={sub.key} className="flex items-center justify-between p-2 sm:p-2.5 border border-slate-200 bg-white rounded-lg shadow-sm min-w-0">
-                                                        <span className="text-[11px] sm:text-xs font-bold text-slate-600 pl-2 border-l-2 border-[#0437cc] truncate pr-2 flex-1">{sub.label}</span>
-                                                        <div className="shrink-0">
-                                                            <ToggleSwitch checked={permissions[module.key]?.[sub.key] || false} onChange={() => handlePermissionToggle(module.key, sub.key)} />
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
+                    <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
+                        {isEditing ? (
+                            <Button variant="ghost" icon={FaTimes} onClick={cancelEdit} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Cancel</Button>
+                        ) : (
+                            <Button variant="ghost" icon={FaTimes} onClick={() => setFormData(INITIAL_FORM_STATE)} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Clear</Button>
+                        )}
+                        <Button variant="primary" icon={FaCheck} className="w-full sm:w-auto shadow-lg shadow-[#0437cc]/25 rounded-xl text-xs sm:text-sm py-2" onClick={handleSubmit} disabled={isSubmitting}>
+                            {isSubmitting ? 'Saving...' : (isEditing ? 'Update Employee' : 'Create Employee')}
+                        </Button>
                     </div>
                 </div>
             </div>
 
-            <form className="space-y-4 md:space-y-6" onSubmit={handleSubmit}>
-                {/* 1. Personal Information */}
-                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2.5">
-                        <FaUser className={`${isEditing ? 'text-[#f77704]' : 'text-[#0437cc]'} text-base sm:text-lg shrink-0`} />
-                        <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Personal Information</h2>
+            {/* ==================== MESSAGES ==================== */}
+            {successMsg && (
+                <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
+                    <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
+                        <FaCheck className="text-green-600 text-xs" />
+                    </span>
+                    {successMsg}
+                </div>
+            )}
+            {apiError && (
+                <div className="relative bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
+                    <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-red-200 shrink-0">
+                        <FaTimes className="text-red-600 text-xs" />
+                    </span>
+                    {apiError}
+                </div>
+            )}
+
+            {/* ==================== FORM ==================== */}
+            <form className="space-y-5 sm:space-y-6" onSubmit={handleSubmit}>
+
+                {/* 1. Identity */}
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md ${isEditing ? 'bg-gradient-to-br from-[#f77704] to-orange-500 shadow-[#f77704]/20' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] shadow-[#0437cc]/20'}`}>
+                            <FaUser className="text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Employee Identity Details</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Basic personal & contact details</p>
+                        </div>
                     </div>
-                    <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <FieldWrapper error={errors.firstName}><Input label={<>First Name <span className="text-red-500">*</span></>} name="firstName" value={formData.firstName} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.lastName}><Input label={<>Last Name <span className="text-red-500">*</span></>} name="lastName" value={formData.lastName} onChange={handleInputChange} /></FieldWrapper>
-                        <FieldWrapper error={errors.email}><Input label={<>Email Address <span className="text-red-500">*</span></>} type="email" name="email" value={formData.email} onChange={handleInputChange} disabled={isEditing} className={isEditing ? "bg-slate-100 cursor-not-allowed" : ""} /></FieldWrapper>
-                        <FieldWrapper error={errors.phone}><Input label={<>Phone Number <span className="text-red-500">*</span></>} type="tel" name="phone" value={formData.phone} onChange={handleInputChange} /></FieldWrapper>
+                        <FieldWrapper error={errors.email}><Input label={<>Official Email <span className="text-red-500">*</span></>} type="email" name="email" icon={FaEnvelope} value={formData.email} onChange={handleInputChange} disabled={isEditing} className={isEditing ? "bg-slate-100 cursor-not-allowed" : ""} /></FieldWrapper>
+                        <FieldWrapper error={errors.phone}><Input label={<>Contact Number <span className="text-red-500">*</span></>} type="tel" name="phone" icon={FaPhoneAlt} value={formData.phone} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.dob}><Input label={<>Date of Birth <span className="text-red-500">*</span></>} type="date" name="dob" value={formData.dob} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.gender}>
-                            <Select label={<>Gender <span className="text-red-500">*</span></>} name="gender" value={formData.gender} onChange={handleInputChange} options={[{ value: '', label: 'Select Gender' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }]} />
+                            <Select label={<>Gender <span className="text-red-500">*</span></>} name="gender" value={formData.gender} onChange={handleInputChange} options={[{ value: '', label: 'Select Gender' }, { value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }]} />
                         </FieldWrapper>
-                        <div className="col-span-1 sm:col-span-2 lg:col-span-3">
+                        <div className="sm:col-span-2 lg:col-span-3">
                             <FieldWrapper error={errors.address}><Input label={<>Residential Address <span className="text-red-500">*</span></>} name="address" value={formData.address} onChange={handleInputChange} /></FieldWrapper>
                         </div>
                     </div>
                 </div>
 
-                {/* 2. Employment & Cascading Organization Placement */}
-                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2.5">
-                        <FaBriefcase className={`${isEditing ? 'text-[#f77704]' : 'text-[#0437cc]'} text-base sm:text-lg shrink-0`} />
-                        <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Organizational Placement</h2>
+                {/* 2. Placement */}
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
+                            <FaBriefcase className="text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Organizational Placement</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Department, designation, shift & reporting hierarchy</p>
+                        </div>
                     </div>
-                    <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <Input label="Employee ID" name="employeeId" value={formData.employeeId} disabled className="bg-slate-100 font-mono text-[#0437cc]" />
                         <FieldWrapper error={errors.joiningDate}><Input label={<>Joining Date <span className="text-red-500">*</span></>} type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} /></FieldWrapper>
 
@@ -619,10 +563,7 @@ const SuperAdminEmployeeCom = () => {
                                 disabled={!formData.company}
                                 options={[
                                     { value: '', label: formData.company ? 'Select Target Shift' : 'Select Company First' },
-                                    ...availableShifts.map(s => ({
-                                        value: s.shift_name,
-                                        label: `${s.shift_name} | ${s.shift_type}`
-                                    }))
+                                    ...availableShifts.map(s => ({ value: s.shift_name, label: `${s.shift_name} | ${s.shift_type}` }))
                                 ]}
                             />
                         </FieldWrapper>
@@ -641,65 +582,68 @@ const SuperAdminEmployeeCom = () => {
                     </div>
                 </div>
 
-                {/* 3. Elaborate Salary Information */}
-                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
-                            <FaMoneyCheckAlt className="text-green-600 text-base sm:text-lg shrink-0" />
-                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Salary Configuration</h2>
+                {/* 3. Salary Configuration */}
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-emerald-100/40 rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-emerald-500/20">
+                                <FaMoneyCheckAlt className="text-sm" />
+                            </span>
+                            <div className="min-w-0">
+                                <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Salary Configuration</h2>
+                                <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Monthly earnings and deductions</p>
+                            </div>
                         </div>
-                        <div className="bg-white border border-slate-200 px-3 sm:px-4 py-1.5 rounded-lg flex items-center justify-between sm:justify-start gap-3 shadow-sm">
-                            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Live Net Pay:</span>
-                            <span className="text-base sm:text-lg font-black text-green-600">{formatCurrency(liveNet)}</span>
+                        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm shrink-0">
+                            <span className="text-[10px] sm:text-xs font-bold text-emerald-700 uppercase tracking-wider">Live Net Pay:</span>
+                            <span className="text-base sm:text-lg font-black text-green-700 tabular-nums">{formatCurrency(liveNet)}</span>
                         </div>
                     </div>
 
-                    <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
-                        {/* Earnings Section */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                <h3 className="text-xs sm:text-sm font-bold text-green-700 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2">
-                                    <FaPlusCircle /> Earnings
-                                </h3>
+                    <div className="relative p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+
+                        {/* Earnings */}
+                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-5 rounded-2xl border border-green-100 overflow-hidden">
+                            <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
+                            <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-green-100">
                                 <div className="flex items-center gap-2">
-                                     <span className={`text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded border ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{formatCurrency(liveGross)}</span>
+                                    <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                                        <FaPlusCircle className="text-green-700 text-xs" />
+                                    </span>
+                                    <h3 className="text-xs font-bold text-green-800 uppercase tracking-wider">Earnings</h3>
                                 </div>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{formatCurrency(liveGross)}</span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <FieldWrapper error={errors.ctc}><Input label={<>CTC (Annual) (₹) <span className="text-red-500">*</span></>} type="number" name="ctc" placeholder="0" value={formData.ctc} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.monthlySalary}><Input label={<>Monthly Salary (₹) <span className="text-red-500">*</span></>} type="number" name="monthlySalary" placeholder="0" value={formData.monthlySalary} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <FieldWrapper error={errors.basic}><Input label={<>Basic Salary (₹) <span className="text-red-500">*</span></>} type="number" name="basic" placeholder="0" value={formData.basic} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.hra}><Input label={<>HRA (₹) <span className="text-red-500">*</span></>} type="number" name="hra" placeholder="0" value={formData.hra} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                <FieldWrapper error={errors.conveyance}><Input label={<>Conveyance Allowance (₹) <span className="text-red-500">*</span></>} type="number" name="conveyance" placeholder="0" value={formData.conveyance} onChange={handleInputChange} /></FieldWrapper>
-                                <FieldWrapper error={errors.medical}><Input label={<>Medical Allowance (₹) <span className="text-red-500">*</span></>} type="number" name="medical" placeholder="0" value={formData.medical} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                <FieldWrapper error={errors.conveyance}><Input label={<>Conveyance (₹) <span className="text-red-500">*</span></>} type="number" name="conveyance" placeholder="0" value={formData.conveyance} onChange={handleInputChange} /></FieldWrapper>
+                                <FieldWrapper error={errors.medical}><Input label={<>Medical (₹) <span className="text-red-500">*</span></>} type="number" name="medical" placeholder="0" value={formData.medical} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.specialAllowance}><Input label="Special Allowance (₹)" type="number" name="specialAllowance" placeholder="0" value={formData.specialAllowance} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.otherAllowances}><Input label={<>Other Allowances (₹) <span className="text-red-500">*</span></>} type="number" name="otherAllowances" placeholder="0" value={formData.otherAllowances} onChange={handleInputChange} /></FieldWrapper>
                             </div>
                         </div>
 
-                        {/* Deductions Section */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                <h3 className="text-xs sm:text-sm font-bold text-red-600 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2">
-                                    <FaMinusCircle /> Deductions
-                                </h3>
-                                <span className="text-[10px] sm:text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200">-{formatCurrency(liveDeductions)}</span>
+                        {/* Deductions */}
+                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-5 rounded-2xl border border-red-100 overflow-hidden">
+                            <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
+                            <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-red-100">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
+                                        <FaMinusCircle className="text-red-600 text-xs" />
+                                    </span>
+                                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wider">Deductions</h3>
+                                </div>
+                                <span className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200">-{formatCurrency(liveDeductions)}</span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <FieldWrapper error={errors.epf}><Input label={<>EPF (₹) <span className="text-red-500">*</span></>} type="number" name="epf" placeholder="0" value={formData.epf} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.esi}><Input label="ESI (₹)" type="number" name="esi" placeholder="If Gross <= 21k" value={formData.esi} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <FieldWrapper error={errors.healthInsurance}><Input label="Health Insurance (₹)" type="number" name="healthInsurance" placeholder="0" value={formData.healthInsurance} onChange={handleInputChange} /></FieldWrapper>
-                                <FieldWrapper error={errors.pt}><Input label="Professional Tax (PT) (₹)" type="number" name="pt" placeholder="0" value={formData.pt} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                <FieldWrapper error={errors.pt}><Input label="Professional Tax (₹)" type="number" name="pt" placeholder="0" value={formData.pt} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.tds}><Input label="TDS (₹)" type="number" name="tds" placeholder="0" value={formData.tds} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.leaves}><Input label="Leaves Deduction (₹)" type="number" name="leaves" placeholder="0" value={formData.leaves} onChange={handleInputChange} /></FieldWrapper>
                             </div>
@@ -708,12 +652,18 @@ const SuperAdminEmployeeCom = () => {
                 </div>
 
                 {/* 4. Bank Information */}
-                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2.5">
-                        <FaUniversity className="text-purple-600 text-base sm:text-lg shrink-0" />
-                        <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Bank Information</h2>
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-100/40 rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-purple-500/20">
+                            <FaUniversity className="text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Bank Information</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Salary disbursement account</p>
+                        </div>
                     </div>
-                    <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <FieldWrapper error={errors.uanNo}><Input label={<>UAN NO <span className="text-red-500">*</span></>} name="uanNo" placeholder="12-digit UAN" value={formData.uanNo} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.bankName}><Input label={<>Bank Name <span className="text-red-500">*</span></>} name="bankName" value={formData.bankName} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.accountHolder}><Input label={<>Account Holder Name <span className="text-red-500">*</span></>} name="accountHolder" value={formData.accountHolder} onChange={handleInputChange} /></FieldWrapper>
@@ -723,91 +673,105 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             </form>
 
-            {/* 5. Existing Employees Master List */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6 sm:mt-8">
-                <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <FaListUl className="text-[#0437cc] text-base sm:text-lg shrink-0" />
-                        <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Registered Employees</h2>
-                        <span className="bg-[#0437cc]/10 text-[#0437cc] text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border border-[#0437cc]/20 shrink-0 ml-1 sm:ml-2">
-                            {filteredEmployees.length} Total
+            {/* ==================== EMPLOYEES LIST ==================== */}
+            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white shrink-0 shadow-md shadow-[#0437cc]/20">
+                            <FaListUl className="text-sm" />
                         </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Registered Employees</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
+                                {filteredEmployees.length} of {employees.length} {employees.length === 1 ? 'record' : 'records'}
+                            </p>
+                        </div>
                     </div>
 
-                    <div className="relative w-full sm:w-64 md:w-72 shrink-0">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <FaSearch className="text-slate-400 text-xs sm:text-sm" />
-                        </div>
+                    <div className="relative w-full md:w-72 shrink-0">
+                        <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                         <input
                             type="text"
-                            placeholder="Search name, ID or branch..."
+                            placeholder="Search name, ID or branch…"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-8 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:border-[#0437cc] focus:ring-1 focus:ring-[#0437cc] transition-all bg-white"
+                            className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
                         />
                     </div>
                 </div>
 
-                <div className="overflow-x-auto w-full custom-scrollbar">
+                <div className="relative overflow-x-auto custom-scrollbar">
                     {isFetching ? (
-                        <div className="p-6 sm:p-8 text-center text-xs sm:text-sm font-semibold text-slate-500">Loading database records...</div>
+                        <div className="p-12 text-center">
+                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
+                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading employees…</p>
+                        </div>
                     ) : filteredEmployees.length === 0 ? (
-                        <div className="p-6 sm:p-8 text-center text-xs sm:text-sm font-semibold text-slate-400">
-                            {searchTerm ? 'No employees match your search.' : 'No employees have been registered yet.'}
+                        <div className="p-12 text-center">
+                            <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                                <FaUser className="text-xl text-slate-300" />
+                            </div>
+                            <p className="text-xs sm:text-sm font-semibold text-slate-400">
+                                {searchTerm ? 'No employees match your search.' : 'No employees have been registered yet.'}
+                            </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[700px]">
+                        <table className="w-full text-left border-collapse min-w-[820px]">
                             <thead>
-                                <tr className="border-b border-slate-100 text-[10px] sm:text-[11px] md:text-[12px] text-slate-400 uppercase tracking-wider bg-white">
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">Employee Details</th>
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">Org Placement</th>
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">Joined On</th>
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-center whitespace-nowrap">Status</th>
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-right whitespace-nowrap">Actions</th>
+                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                    <th className="px-5 py-3.5 font-bold">Employee Details</th>
+                                    <th className="px-5 py-3.5 font-bold">Org Placement</th>
+                                    <th className="px-5 py-3.5 font-bold">Joined On</th>
+                                    <th className="px-5 py-3.5 font-bold text-center">Status</th>
+                                    <th className="px-5 py-3.5 font-bold text-right">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-50">
+                            <tbody className="divide-y divide-slate-100">
                                 {filteredEmployees.map((emp, i) => (
-                                    <tr key={i} className={`hover:bg-slate-50/50 transition-colors group ${isEditing && editEmployeeId === emp.id ? 'bg-[#f77704]/5' : ''}`}>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4">
-                                            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                                                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 border border-[#0437cc]/20">
+                                    <tr key={i} className={`transition-colors group ${isEditing && editEmployeeId === emp.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}>
+                                        <td className="px-5 py-4">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
                                                     {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{emp.first_name} {emp.last_name}</p>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[10px] sm:text-[11px] font-mono font-bold text-[#0437cc] truncate">{emp.employee_id}</span>
-                                                        <span className="text-[10px] sm:text-[11px] text-slate-500 truncate">{emp.email}</span>
-                                                    </div>
+                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{emp.first_name} {emp.last_name}</p>
+                                                    <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                        {emp.employee_id}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4 min-w-0">
-                                            <p className="text-[13px] sm:text-sm font-bold text-slate-700 truncate max-w-[150px] sm:max-w-[200px]">{emp.designation}</p>
-                                            <p className="text-[11px] sm:text-xs font-semibold text-slate-500 mt-0.5 truncate max-w-[150px] sm:max-w-[200px]">{emp.department} • <span className="text-slate-400">{emp.branch}</span></p>
+                                        <td className="px-5 py-4 min-w-0">
+                                            <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{emp.designation}</p>
+                                            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mt-0.5 truncate">{emp.department} <span className="text-slate-300 mx-0.5">•</span> {emp.branch}</p>
                                         </td>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
-                                            <p className="text-[13px] sm:text-sm font-semibold text-[#010a1f]">{formatDate(emp.joining_date)}</p>
+                                        <td className="px-5 py-4">
+                                            <p className="text-xs sm:text-sm font-semibold text-[#010a1f] whitespace-nowrap">{formatDate(emp.joining_date)}</p>
                                         </td>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-center whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-bold ${emp.status === 'Active' ? 'text-teal-700 bg-[#eef8f8]' :
-                                                emp.status === 'Pending Activation' ? 'text-orange-700 bg-orange-50' :
-                                                    'text-red-700 bg-red-50'
+                                        <td className="px-5 py-4 text-center">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${emp.status === 'Active'
+                                                ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                                : emp.status === 'Pending Activation'
+                                                    ? 'text-orange-700 bg-orange-50 border-orange-200'
+                                                    : 'text-red-700 bg-red-50 border-red-200'
                                                 }`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500' : emp.status === 'Pending Activation' ? 'bg-orange-500' : 'bg-red-500'}`}></span>
                                                 {emp.status}
                                             </span>
                                         </td>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-right">
-                                            <div className="flex gap-1 sm:gap-1.5 justify-end">
-                                                <button onClick={() => handleView(emp)} className="p-1.5 sm:p-2 text-slate-400 hover:text-[#0437cc] transition-colors rounded hover:bg-[#0437cc]/10" title="View Elaborate Dossier">
-                                                    <FaEye className="text-xs sm:text-sm" />
+                                        <td className="px-5 py-4 text-right">
+                                            <div className="flex gap-1 justify-end">
+                                                <button onClick={() => handleView(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50" title="View Dossier">
+                                                    <FaEye className="text-xs" />
                                                 </button>
-                                                <button onClick={() => handleEdit(emp)} className="p-1.5 sm:p-2 text-slate-400 hover:text-[#f77704] transition-colors rounded hover:bg-[#f77704]/10" title="Edit Employee">
-                                                    <FaEdit className="text-xs sm:text-sm" />
+                                                <button onClick={() => handleEdit(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50" title="Edit Employee">
+                                                    <FaEdit className="text-xs" />
                                                 </button>
-                                                <button onClick={() => handleDelete(emp.id)} className="p-1.5 sm:p-2 text-slate-400 hover:text-red-500 transition-colors rounded hover:bg-red-50" title="Delete Employee">
-                                                    <FaTrash className="text-xs sm:text-sm" />
+                                                <button onClick={() => handleDelete(emp.id)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50" title="Delete Employee">
+                                                    <FaTrash className="text-xs" />
                                                 </button>
                                             </div>
                                         </td>

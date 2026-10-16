@@ -56,6 +56,20 @@ import SuperAdminProfile from '../pages/superadmin/SuperAdminProfile';
 import HRLayout from '../layouts/HRLayout';
 import HRDashboard from '../pages/hr/HRDashboard';
 import HRProfile from '../pages/hr/HRProfile';
+import HRVirtualID from '../pages/hr/HRVirtualID';
+import HREmployee from '../pages/hr/HREmployee';
+import HRMyAttendance from '../pages/hr/HRMyAttendance';
+// HR Employees Attendance
+import HREmployeesAttendance from '../pages/hr/attendance/HREmployeesAttendance';
+import HRAttendanceCorrections from '../pages/hr/attendance/HRAttendanceCorrections';
+import HROvertimeRequests from '../pages/hr/attendance/HROvertimeRequests';
+// HR Leave Management
+import HRMyLeave from '../pages/hr/leave/HRMyLeave';
+import HREmployeeLeaveRequests from '../pages/hr/leave/HREmployeeLeaveRequests';
+
+import HRPayroll from '../pages/hr/HRPayroll';
+import HRReports from '../pages/hr/HRReports';
+import HRNotifications from '../pages/hr/HRNotifications';
 
 // Manager
 import ManagerLayout from '../layouts/ManagerLayout';
@@ -65,6 +79,7 @@ import ManagerDashboard from '../pages/manager/ManagerDashboard';
 import EmployeeLayout from '../layouts/EmployeeLayout';
 import EmployeeDashboard from '../pages/employee/EmployeeDashboard';
 import EmployeeMyProfile from '../pages/employee/EmployeeMyProfile';
+import EmployeeVirtualIDCom from '../pages/employee/EmployeeVirtualID';
 import EmployeeAssets from '../pages/employee/EmployeeAssets';
 import EmployeeAttendance from '../pages/employee/EmployeeAttendance';
 import EmployeeLeaveManagement from '../pages/employee/EmployeeLeaveManagement';
@@ -157,7 +172,20 @@ const AppRoutes = () => {
             >
                 <Route index element={<HRDashboard />} />
                 <Route path="profile" element={<HRProfile />} />
+                <Route path="virtual-id" element={<HRVirtualID />} />
+                <Route path="employees" element={<HREmployee />} />
+                <Route path="my-attendance" element={<HRMyAttendance />} />
+                {/* HR Attendance Management */}
+                <Route path="attendance/employees" element={<HREmployeesAttendance />} />
+                <Route path="attendance/corrections" element={<HRAttendanceCorrections />} />
+                <Route path="attendance/overtime" element={<HROvertimeRequests />} />
+                {/* HR Leave Management */}
+                <Route path="leave/my-leave" element={<HRMyLeave />} />
+                <Route path="leave/employee-requests" element={<HREmployeeLeaveRequests />} />
 
+                <Route path="payroll" element={<HRPayroll />} />
+                <Route path="reports" element={<HRReports />} />
+                <Route path="notifications" element={<HRNotifications />} />
             </Route>
 
             {/* Manager Protected Routes */}
@@ -183,6 +211,7 @@ const AppRoutes = () => {
             >
                 <Route index element={<EmployeeDashboard />} />
                 <Route path="profile" element={<EmployeeMyProfile />} />
+                <Route path="virtual-id" element={<EmployeeVirtualIDCom />} />
                 <Route path="assets" element={<EmployeeAssets />} />
                 <Route path="attendance" element={<EmployeeAttendance />} />
                 <Route path="leave" element={<EmployeeLeaveManagement />} />

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
-    FaUserShield, FaInfoCircle, FaCheck, FaTimes,
-    FaUser, FaBuilding, FaUsersCog, FaEnvelope, FaPhoneAlt,
-    FaSitemap, FaEdit, FaTrash, FaTable, FaMoneyCheckAlt, FaUniversity, FaLock, FaChevronDown, FaChevronUp, FaPlusCircle, FaMinusCircle, FaEye, FaIdBadge
+    FaUserShield, FaCheck, FaTimes,
+    FaUser, FaUsersCog, FaEnvelope, FaPhoneAlt,
+    FaSitemap, FaEdit, FaTrash, FaMoneyCheckAlt, FaUniversity, FaPlusCircle, FaMinusCircle, FaEye
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -12,7 +12,12 @@ import Select from '../../../components/common/Select';
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full min-w-0">
         {children}
-        {error && <span className="text-red-500 text-[10px] sm:text-xs font-medium truncate">{error}</span>}
+        {error && (
+            <span className="text-red-500 text-[10px] sm:text-xs font-semibold flex items-center gap-1.5 pl-1">
+                <span className="w-1 h-1 rounded-full bg-red-500 shrink-0"></span>
+                {error}
+            </span>
+        )}
     </div>
 );
 
@@ -22,36 +27,20 @@ const SuperAdminHRCom = () => {
     const INITIAL_FORM_STATE = {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '',
         hrId: `AVG-HR-${currentYear}-XXX (Auto)`, joiningDate: '',
-        company: '', branch: '', department: '', designation: '', md: '', status: 'Active',
+        company: '', branch: '', department: '', designation: '', shift: '', md: '', status: 'Active',
         ctc: '', monthlySalary: '', basic: '', hra: '', conveyance: '', medical: '', specialAllowance: '', otherAllowances: '', 
         epf: '', esi: '', healthInsurance: '', pt: '', tds: '', leaves: '',
         uanNo: '', bankName: '', accountHolder: '', accountNumber: '', ifsc: ''
     };
 
-    const INITIAL_PERMISSIONS = {
-        organization: { overview: false, profile: false, branches: false, departments: false, designations: false, locations: false },
-        users: { hr: false, managers: true, employees: true },
-        employeeHrManagement: true,
-        payroll: { dashboard: true, structure: true, generate: true, history: true, payslips: true },
-        attendance: { overview: true, shifts: true, holidays: true, leave: true },
-        expenses: true,
-        loans: true,
-        reports: { payroll: true, attendance: true, employee: true, tax: true, financial: true },
-        settings: { payroll: false, tax: false, leave: false, notifications: false, system: false },
-        auditLogs: false
-    };
-
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
-    const [permissions, setPermissions] = useState(INITIAL_PERMISSIONS);
     const [hrUsers, setHrUsers] = useState([]);
-
-    const [expandedAccordion, setExpandedAccordion] = useState(null);
-    const [showPermissions, setShowPermissions] = useState(false);
 
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [designations, setDesignations] = useState([]);
+    const [shifts, setShifts] = useState([]);
 
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,7 +53,6 @@ const SuperAdminHRCom = () => {
     const [viewUser, setViewUser] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
-    // Dynamic Financial Calculations
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
     const liveGross = parseNum(formData.basic) + parseNum(formData.hra) + parseNum(formData.conveyance) + parseNum(formData.medical) + parseNum(formData.specialAllowance) + parseNum(formData.otherAllowances);
     const liveDeductions = parseNum(formData.epf) + parseNum(formData.esi) + parseNum(formData.healthInsurance) + parseNum(formData.pt) + parseNum(formData.tds) + parseNum(formData.leaves);
@@ -74,17 +62,19 @@ const SuperAdminHRCom = () => {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [compRes, branchRes, deptRes, desigRes, hrRes] = await Promise.all([
+            const [compRes, branchRes, deptRes, desigRes, shiftRes, hrRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
             setDepartments(deptRes.data || []);
             setDesignations(desigRes.data || []);
+            setShifts(shiftRes.data || []);
             setHrUsers(hrRes.data || []);
         } catch (error) {
             console.error('Failed to load data', error);
@@ -103,12 +93,13 @@ const SuperAdminHRCom = () => {
     const filteredDepartments = departments.filter(d => d.branch_id === selectedBranchObj?.id);
     const selectedDeptObj = filteredDepartments.find(d => d.department_name === formData.department);
     const filteredDesignations = designations.filter(des => des.department_id === selectedDeptObj?.id);
+    const availableShifts = shifts.filter(s => s.status === 'Active' && s.company_name === formData.company);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         let updates = { [name]: value };
 
-        if (name === 'company') { updates.branch = ''; updates.department = ''; updates.designation = ''; }
+        if (name === 'company') { updates.branch = ''; updates.department = ''; updates.designation = ''; updates.shift = ''; }
         else if (name === 'branch') { updates.department = ''; updates.designation = ''; }
         else if (name === 'department') { updates.designation = ''; }
 
@@ -117,38 +108,12 @@ const SuperAdminHRCom = () => {
         if (apiError) setApiError('');
     };
 
-    const handlePermissionToggle = (parentKey, childKey = null) => {
-        setPermissions(prev => {
-            const newPerms = { ...prev };
-            if (childKey) {
-                newPerms[parentKey] = {
-                    ...newPerms[parentKey],
-                    [childKey]: !newPerms[parentKey][childKey]
-                };
-            } else {
-                if (typeof newPerms[parentKey] === 'object' && newPerms[parentKey] !== null) {
-                    const allTrue = Object.values(newPerms[parentKey]).every(v => v === true);
-                    const newValue = !allTrue;
-                    const updatedChildren = {};
-                    Object.keys(newPerms[parentKey]).forEach(k => {
-                        updatedChildren[k] = newValue;
-                    });
-                    newPerms[parentKey] = updatedChildren;
-                } else {
-                    newPerms[parentKey] = !newPerms[parentKey];
-                }
-            }
-            return newPerms;
-        });
-    };
-
     const validateForm = () => {
         let newErrors = {};
-        
-        // Strict mapping based on requested mandatory (*) fields
+
         const requiredFields = [
             'firstName', 'lastName', 'email', 'phone', 'dob', 'gender', 'joiningDate',
-            'company', 'branch', 'status',
+            'company', 'branch', 'shift', 'status',
             'ctc', 'monthlySalary', 'basic', 'hra', 'conveyance', 'medical', 'otherAllowances',
             'epf', 'uanNo',
             'bankName', 'accountHolder', 'accountNumber', 'ifsc'
@@ -180,7 +145,6 @@ const SuperAdminHRCom = () => {
         setIsEditing(false);
         setEditId(null);
         setFormData(INITIAL_FORM_STATE);
-        setPermissions(INITIAL_PERMISSIONS);
         setErrors({});
     };
 
@@ -194,17 +158,16 @@ const SuperAdminHRCom = () => {
 
         setIsSubmitting(true);
         try {
-            const payload = { ...formData, permissions };
+            const payload = { ...formData };
 
             if (isEditing) {
                 await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-hr-users/${editId}`, payload);
-                setSuccessMsg('HR Profile & Permissions updated successfully.');
+                setSuccessMsg('HR Profile updated successfully.');
                 handleCancelEdit();
             } else {
                 const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-hr-users/create`, payload);
                 setSuccessMsg(`HR User "${formData.firstName}" created successfully with ID: ${response.data.user?.hr_id}!`);
                 setFormData(INITIAL_FORM_STATE);
-                setPermissions(INITIAL_PERMISSIONS);
             }
             fetchData();
             setTimeout(() => setSuccessMsg(''), 5000);
@@ -222,7 +185,7 @@ const SuperAdminHRCom = () => {
             const dateObj = new Date(hr.dob);
             if (!isNaN(dateObj)) formattedDob = dateObj.toISOString().split('T')[0];
         }
-        
+
         let formattedJoining = '';
         if (hr.joining_date) {
             const joinObj = new Date(hr.joining_date);
@@ -233,25 +196,11 @@ const SuperAdminHRCom = () => {
             firstName: hr.first_name, lastName: hr.last_name, email: hr.email, phone: hr.phone,
             dob: formattedDob, gender: hr.gender || '',
             hrId: hr.hr_id || `AVG-HR-${currentYear}-XXX`, joiningDate: formattedJoining,
-            company: hr.company, branch: hr.branch, department: hr.department || '', designation: hr.designation || '', md: hr.md || '', status: hr.status,
-            ctc: hr.ctc || '', monthlySalary: hr.monthly_salary || '', basic: hr.basic_salary || '', hra: hr.hra || '', conveyance: hr.conveyance || 0, medical: hr.medical || 0, specialAllowance: hr.special_allowance || 0, otherAllowances: hr.other_allowances || 0, 
+            company: hr.company, branch: hr.branch, department: hr.department || '', designation: hr.designation || '', shift: hr.shift || '', md: hr.md || '', status: hr.status,
+            ctc: hr.ctc || '', monthlySalary: hr.monthly_salary || '', basic: hr.basic_salary || '', hra: hr.hra || '', conveyance: hr.conveyance || 0, medical: hr.medical || 0, specialAllowance: hr.special_allowance || 0, otherAllowances: hr.other_allowances || 0,
             epf: hr.epf || 0, esi: hr.esi || 0, healthInsurance: hr.health_insurance || 0, pt: hr.pt || 0, tds: hr.tds || 0, leaves: hr.leaves || 0,
             uanNo: hr.uan_no || '', bankName: hr.bank_name || '', accountHolder: hr.account_holder || '', accountNumber: hr.account_number || '', ifsc: hr.ifsc || ''
         });
-
-        if (hr.permissions && typeof hr.permissions === 'object') {
-            const loadedPerms = { ...INITIAL_PERMISSIONS };
-            Object.keys(hr.permissions).forEach(key => {
-                if (typeof hr.permissions[key] === 'object' && loadedPerms[key]) {
-                    loadedPerms[key] = { ...loadedPerms[key], ...hr.permissions[key] };
-                } else {
-                    loadedPerms[key] = hr.permissions[key];
-                }
-            });
-            setPermissions(loadedPerms);
-        } else {
-            setPermissions(INITIAL_PERMISSIONS);
-        }
 
         setIsEditing(true);
         setEditId(hr.id);
@@ -279,99 +228,61 @@ const SuperAdminHRCom = () => {
         if (amount === undefined || amount === null) return '₹0';
         return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
     };
-    
+
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         return new Date(dateString).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
-    const ToggleSwitch = ({ checked, onChange }) => (
-        <button type="button" onClick={onChange} className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? 'bg-[#0437cc]' : 'bg-slate-200'}`}>
-            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-        </button>
-    );
-
-    const permissionMatrix = [
-        {
-            key: 'organization', label: 'Organization & Structure', description: 'Company profiles, branches, and departments.',
-            subItems: [
-                { key: 'overview', label: 'Organization Overview' }, { key: 'profile', label: 'Company Profile' },
-                { key: 'branches', label: 'Branches' }, { key: 'departments', label: 'Departments' },
-                { key: 'designations', label: 'Designations' }, { key: 'locations', label: 'Locations' }
-            ]
-        },
-        {
-            key: 'users', label: 'User Provisioning', description: 'Control access to role creations.',
-            subItems: [
-                { key: 'hr', label: 'HR Admin Creation' }, { key: 'managers', label: 'Manager Creation' }, { key: 'employees', label: 'Employee Creation' }
-            ]
-        },
-        { key: 'employeeHrManagement', label: 'Employee Lifecycle', description: 'Full access to Employee records and document hubs.' },
-        {
-            key: 'payroll', label: 'Payroll Operations', description: 'Calculate and process salaries.',
-            subItems: [
-                { key: 'dashboard', label: 'Payroll Dashboard' }, { key: 'structure', label: 'Salary Structure Mapping' },
-                { key: 'generate', label: 'Generate Payroll Batch' }, { key: 'history', label: 'Payroll History' }, { key: 'payslips', label: 'Distribute Payslips' }
-            ]
-        },
-        {
-            key: 'attendance', label: 'Attendance & Leave', description: 'Time-tracking and absence management.',
-            subItems: [
-                { key: 'overview', label: 'Attendance Dashboard' }, { key: 'shifts', label: 'Shift Rules Configuration' },
-                { key: 'holidays', label: 'Manage Holidays' }, { key: 'leave', label: 'Leave Approvals & Policies' }
-            ]
-        },
-        { key: 'expenses', label: 'Expenses & Reimbursements', description: 'Review and approve expense claims.' },
-        { key: 'loans', label: 'Loans & Advances', description: 'Manage employee loan allocations.' },
-        {
-            key: 'reports', label: 'System Reports', description: 'Access to data analytics.',
-            subItems: [
-                { key: 'payroll', label: 'Payroll Reports' }, { key: 'attendance', label: 'Attendance Reports' },
-                { key: 'employee', label: 'Employee Data' }, { key: 'tax', label: 'Tax Deductions' }, { key: 'financial', label: 'General Finance' }
-            ]
-        },
-        {
-            key: 'settings', label: 'System Settings', description: 'Configure global HR parameters.',
-            subItems: [
-                { key: 'payroll', label: 'Payroll Settings' }, { key: 'tax', label: 'Tax Settings' },
-                { key: 'leave', label: 'Leave Definitions' }, { key: 'notifications', label: 'SMTP & Notifications' }, { key: 'system', label: 'General System' }
-            ]
-        },
-        { key: 'auditLogs', label: 'Audit Logs', description: 'View highly secure action tracing.' }
-    ];
-
     return (
-        <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden">
-            
-            {/* View User Dossier Modal */}
+        <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
+
+            {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewUser && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
-                        <div className="px-4 sm:px-5 lg:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0 sticky top-0 z-10">
-                            <h2 className="text-base sm:text-lg font-bold text-[#010a1f] flex items-center gap-2 truncate">
-                                <FaUserShield className="text-[#0437cc] shrink-0" /> <span className="truncate">HR User Dossier</span>
-                            </h2>
-                            <button onClick={() => setIsViewModalOpen(false)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors shrink-0">
-                                <FaTimes />
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
+
+                        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50/40 shrink-0 sticky top-0 z-10 backdrop-blur-sm">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-blue-100">
+                                    <FaUserShield className="text-[#0437cc] text-sm" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">HR User Dossier</h2>
+                                    <p className="text-[10px] text-slate-500 font-medium truncate">Complete record</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsViewModalOpen(false)}
+                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                            >
+                                <FaTimes className="text-sm" />
                             </button>
                         </div>
-                        <div className="p-4 sm:p-5 lg:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4 sm:space-y-6">
-                            
-                            {/* Profile Header */}
-                            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 border-b border-slate-100 pb-4 sm:pb-6 text-center sm:text-left">
-                                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-xl sm:text-2xl border border-[#0437cc]/20 shrink-0">
+
+                        <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5 sm:space-y-6">
+
+                            {/* Profile Banner */}
+                            <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 overflow-hidden">
+                                <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
+
+                                <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-black text-2xl sm:text-3xl shadow-lg shadow-[#0437cc]/25 shrink-0">
                                     {viewUser.first_name?.charAt(0)}{viewUser.last_name?.charAt(0)}
                                 </div>
-                                <div className="min-w-0 flex-1 w-full sm:w-auto">
+                                <div className="relative min-w-0 text-center sm:text-left flex-1">
                                     <h3 className="text-lg sm:text-xl font-bold text-[#010a1f] truncate">{viewUser.first_name} {viewUser.last_name}</h3>
-                                    <p className="text-[11px] sm:text-xs font-mono text-[#0437cc] font-bold truncate">{viewUser.hr_id || viewUser.email}</p>
-                                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate">{viewUser.phone}</p>
+                                    <span className="inline-block mt-1.5 text-[10px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-md tracking-wide">
+                                        {viewUser.hr_id || viewUser.email}
+                                    </span>
+                                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 truncate">{viewUser.phone}</p>
                                 </div>
-                                <div className="shrink-0 bg-blue-50 border border-blue-200 text-[#0437cc] px-4 sm:px-5 py-2 sm:py-3 rounded-xl text-center w-full sm:w-auto mt-2 sm:mt-0">
-                                    <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-500">Net Monthly Pay</p>
-                                    <p className="text-lg sm:text-xl font-black">
+                                <div className="relative shrink-0 bg-gradient-to-br from-[#0437cc] to-[#1f56d6] rounded-2xl px-5 py-3 shadow-lg shadow-[#0437cc]/25 text-center text-white w-full sm:w-auto overflow-hidden">
+                                    <div className="absolute -top-6 -right-6 w-20 h-20 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                                    <p className="relative text-[10px] font-bold uppercase tracking-wider mb-0.5 opacity-80">Net Monthly Pay</p>
+                                    <p className="relative text-lg sm:text-xl font-black">
                                         {formatCurrency(
-                                            (parseNum(viewUser.basic_salary) + parseNum(viewUser.hra) + parseNum(viewUser.conveyance) + parseNum(viewUser.medical) + parseNum(viewUser.special_allowance) + parseNum(viewUser.other_allowances)) - 
+                                            (parseNum(viewUser.basic_salary) + parseNum(viewUser.hra) + parseNum(viewUser.conveyance) + parseNum(viewUser.medical) + parseNum(viewUser.special_allowance) + parseNum(viewUser.other_allowances)) -
                                             (parseNum(viewUser.epf) + parseNum(viewUser.esi) + parseNum(viewUser.health_insurance) + parseNum(viewUser.pt) + parseNum(viewUser.tds) + parseNum(viewUser.leaves))
                                         )}
                                     </p>
@@ -379,59 +290,99 @@ const SuperAdminHRCom = () => {
                             </div>
 
                             {/* Info Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-8 text-xs sm:text-sm">
-                                <div className="min-w-0"><span className="text-slate-400 block text-[9px] sm:text-[10px] uppercase font-bold mb-0.5 sm:mb-1">Company & Branch</span><span className="font-semibold text-slate-700 truncate block">{viewUser.company || 'N/A'} — {viewUser.branch || 'N/A'}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[9px] sm:text-[10px] uppercase font-bold mb-0.5 sm:mb-1">Role / Placement</span><span className="font-semibold text-slate-700 truncate block">{viewUser.department ? `${viewUser.designation} (${viewUser.department})` : <span className="text-[#0437cc] bg-[#0437cc]/10 px-2 py-0.5 rounded">Whole Branch / All Departments</span>}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[9px] sm:text-[10px] uppercase font-bold mb-0.5 sm:mb-1">Joined On</span><span className="font-semibold text-slate-700 truncate block">{formatDate(viewUser.joining_date)}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[9px] sm:text-[10px] uppercase font-bold mb-0.5 sm:mb-1">UAN NO</span><span className="font-semibold text-slate-700 truncate block">{viewUser.uan_no || 'N/A'}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[9px] sm:text-[10px] uppercase font-bold mb-0.5 sm:mb-1">MD</span><span className="font-semibold text-slate-700 truncate block">{viewUser.md || 'N/A'}</span></div>
-                                <div className="min-w-0"><span className="text-slate-400 block text-[9px] sm:text-[10px] uppercase font-bold mb-0.5 sm:mb-1">Status</span><span className={`font-semibold truncate block ${viewUser.status === 'Active' ? 'text-teal-600' : 'text-orange-600'}`}>{viewUser.status || 'N/A'}</span></div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {[
+                                    { label: 'Company & Branch', value: `${viewUser.company || 'N/A'} — ${viewUser.branch || 'N/A'}` },
+                                    {
+                                        label: 'Role / Placement',
+                                        value: viewUser.department
+                                            ? `${viewUser.designation} (${viewUser.department})`
+                                            : 'Whole Branch / All Departments',
+                                        highlight: !viewUser.department
+                                    },
+                                    { label: 'Work Shift', value: viewUser.shift || 'General Shift' },
+                                    { label: 'MD', value: viewUser.md || 'N/A' },
+                                    { label: 'Joined On', value: formatDate(viewUser.joining_date) },
+                                    { label: 'UAN NO', value: viewUser.uan_no || 'N/A' },
+                                ].map((item, i) => (
+                                    <div key={i} className={`bg-slate-50 border border-slate-100 rounded-xl p-3.5 min-w-0 ${item.highlight ? 'sm:col-span-2' : ''}`}>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{item.label}</p>
+                                        {item.highlight ? (
+                                            <span className="inline-block text-[11px] font-bold text-[#0437cc] bg-[#0437cc]/10 px-2.5 py-1 rounded-md">{item.value}</span>
+                                        ) : (
+                                            <p className="text-xs sm:text-sm font-semibold text-slate-700 break-words">{item.value}</p>
+                                        )}
+                                    </div>
+                                ))}
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 min-w-0 sm:col-span-2">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${viewUser.status === 'Active'
+                                        ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                        : 'text-orange-700 bg-orange-50 border-orange-200'
+                                        }`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${viewUser.status === 'Active' ? 'bg-teal-500' : 'bg-orange-500'}`}></span>
+                                        {viewUser.status || 'N/A'}
+                                    </span>
+                                </div>
                             </div>
 
-                            {/* Detailed Salary Breakdown */}
-                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 mt-2 sm:mt-4">
-                                <h3 className="text-xs sm:text-sm font-bold text-[#010a1f] mb-3 sm:mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
-                                    <FaMoneyCheckAlt className="text-[#0437cc] shrink-0" /> Elaborate Salary Breakdown
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
-                                    {/* Earnings Column */}
-                                    <div className="space-y-3 sm:space-y-4">
-                                        <h4 className="text-[11px] sm:text-[13px] font-bold text-green-700 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 border-b border-slate-200/50 pb-1.5">
-                                            <FaPlusCircle /> Earnings
-                                        </h4>
-                                        <div className="space-y-1.5 sm:space-y-2">
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">CTC (Annual)</span><span className="font-semibold text-[#0437cc] shrink-0">{formatCurrency(viewUser.ctc)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Basic Salary</span><span className="font-semibold text-slate-700 shrink-0">{formatCurrency(viewUser.basic_salary)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">HRA</span><span className="font-semibold text-slate-700 shrink-0">{formatCurrency(viewUser.hra)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Conveyance</span><span className="font-semibold text-slate-700 shrink-0">{formatCurrency(viewUser.conveyance)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Medical</span><span className="font-semibold text-slate-700 shrink-0">{formatCurrency(viewUser.medical)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Special Allowance</span><span className="font-semibold text-slate-700 shrink-0">{formatCurrency(viewUser.special_allowance)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Other</span><span className="font-semibold text-slate-700 shrink-0">{formatCurrency(viewUser.other_allowances)}</span></div>
+                            {/* Salary Breakdown */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
+                                <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-200">
+                                    <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shadow-sm">
+                                        <FaMoneyCheckAlt className="text-xs" />
+                                    </span>
+                                    <h3 className="text-xs sm:text-sm font-bold text-[#010a1f]">Elaborate Salary Breakdown</h3>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+
+                                    {/* Earnings */}
+                                    <div className="relative bg-gradient-to-br from-green-50/80 to-white p-4 rounded-2xl border border-green-100 overflow-hidden">
+                                        <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
+                                        <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-green-100">
+                                            <span className="w-6 h-6 rounded-md bg-green-100 flex items-center justify-center">
+                                                <FaPlusCircle className="text-green-700 text-[10px]" />
+                                            </span>
+                                            <h4 className="text-[11px] font-bold text-green-800 uppercase tracking-wider">Earnings</h4>
                                         </div>
-                                        <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
-                                            <span className="text-[11px] sm:text-sm font-bold text-[#010a1f] truncate pr-2">Gross Salary</span>
-                                            <span className="text-[11px] sm:text-sm font-bold text-green-700 shrink-0">
+                                        <div className="relative space-y-2">
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">CTC (Annual)</span><span className="font-bold text-[#0437cc] shrink-0 tabular-nums">{formatCurrency(viewUser.ctc)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Basic Salary</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewUser.basic_salary)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">HRA</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewUser.hra)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Conveyance</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewUser.conveyance)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Medical</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewUser.medical)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Special Allowance</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewUser.special_allowance)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Other</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewUser.other_allowances)}</span></div>
+                                        </div>
+                                        <div className="relative pt-3 mt-3 border-t border-green-200 flex justify-between items-center">
+                                            <span className="text-[11px] sm:text-sm font-bold text-green-800 uppercase tracking-wide">Gross</span>
+                                            <span className="text-sm font-black text-green-700 tabular-nums">
                                                 {formatCurrency(parseNum(viewUser.basic_salary) + parseNum(viewUser.hra) + parseNum(viewUser.conveyance) + parseNum(viewUser.medical) + parseNum(viewUser.special_allowance) + parseNum(viewUser.other_allowances))}
                                             </span>
                                         </div>
                                     </div>
 
-                                    {/* Deductions Column */}
-                                    <div className="space-y-3 sm:space-y-4">
-                                        <h4 className="text-[11px] sm:text-[13px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 border-b border-slate-200/50 pb-1.5">
-                                            <FaMinusCircle /> Deductions
-                                        </h4>
-                                        <div className="space-y-1.5 sm:space-y-2">
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">EPF</span><span className="font-semibold text-red-600 shrink-0">{formatCurrency(viewUser.epf)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">ESI</span><span className="font-semibold text-red-600 shrink-0">{formatCurrency(viewUser.esi)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Health Insurance</span><span className="font-semibold text-red-600 shrink-0">{formatCurrency(viewUser.health_insurance)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Professional Tax</span><span className="font-semibold text-red-600 shrink-0">{formatCurrency(viewUser.pt)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">TDS</span><span className="font-semibold text-red-600 shrink-0">{formatCurrency(viewUser.tds)}</span></div>
-                                            <div className="flex justify-between items-center text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Leaves</span><span className="font-semibold text-red-600 shrink-0">{formatCurrency(viewUser.leaves)}</span></div>
+                                    {/* Deductions */}
+                                    <div className="relative bg-gradient-to-br from-red-50/80 to-white p-4 rounded-2xl border border-red-100 overflow-hidden">
+                                        <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
+                                        <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-red-100">
+                                            <span className="w-6 h-6 rounded-md bg-red-100 flex items-center justify-center">
+                                                <FaMinusCircle className="text-red-600 text-[10px]" />
+                                            </span>
+                                            <h4 className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Deductions</h4>
                                         </div>
-                                        <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
-                                            <span className="text-[11px] sm:text-sm font-bold text-[#010a1f] truncate pr-2">Total Deductions</span>
-                                            <span className="text-[11px] sm:text-sm font-bold text-red-600 shrink-0">
+                                        <div className="relative space-y-2">
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">EPF</span><span className="font-bold text-red-600 shrink-0 tabular-nums">{formatCurrency(viewUser.epf)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">ESI</span><span className="font-bold text-red-600 shrink-0 tabular-nums">{formatCurrency(viewUser.esi)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Health Insurance</span><span className="font-bold text-red-600 shrink-0 tabular-nums">{formatCurrency(viewUser.health_insurance)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Professional Tax</span><span className="font-bold text-red-600 shrink-0 tabular-nums">{formatCurrency(viewUser.pt)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">TDS</span><span className="font-bold text-red-600 shrink-0 tabular-nums">{formatCurrency(viewUser.tds)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Leaves</span><span className="font-bold text-red-600 shrink-0 tabular-nums">{formatCurrency(viewUser.leaves)}</span></div>
+                                        </div>
+                                        <div className="relative pt-3 mt-3 border-t border-red-200 flex justify-between items-center">
+                                            <span className="text-[11px] sm:text-sm font-bold text-red-800 uppercase tracking-wide">Total</span>
+                                            <span className="text-sm font-black text-red-600 tabular-nums">
                                                 - {formatCurrency(parseNum(viewUser.epf) + parseNum(viewUser.esi) + parseNum(viewUser.health_insurance) + parseNum(viewUser.pt) + parseNum(viewUser.tds) + parseNum(viewUser.leaves))}
                                             </span>
                                         </div>
@@ -443,108 +394,82 @@ const SuperAdminHRCom = () => {
                 </div>
             )}
 
-            {/* Sticky Header */}
-            <div className="sticky top-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-white/90 backdrop-blur-md p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div className="min-w-0">
-                    <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-[#010a1f] tracking-tight flex items-center gap-2 truncate">
-                        <FaUserShield className={`shrink-0 ${isEditing ? "text-[#f77704]" : "text-[#0437cc]"}`} />
-                        <span className="truncate">{isEditing ? 'Edit HR User' : 'HR User Management'}</span>
-                    </h1>
-                </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                    <Button variant="outline" icon={FaTable} className="w-full sm:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white text-xs sm:text-sm py-1.5 sm:py-2" onClick={() => setShowPermissions(!showPermissions)}>
-                        {showPermissions ? 'Hide Access Controls' : 'Configure HR Permissions'}
-                    </Button>
-                    {isEditing ? (
-                        <Button variant="ghost" icon={FaTimes} onClick={handleCancelEdit} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 text-xs sm:text-sm py-1.5 sm:py-2">Cancel</Button>
-                    ) : (
-                        <Button variant="ghost" icon={FaTimes} onClick={() => { setFormData(INITIAL_FORM_STATE); setPermissions(INITIAL_PERMISSIONS); }} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 text-xs sm:text-sm py-1.5 sm:py-2">Clear</Button>
-                    )}
-                    <Button variant="primary" icon={FaCheck} className="w-full sm:w-auto shadow-md shadow-[#0437cc]/20 text-xs sm:text-sm py-1.5 sm:py-2" onClick={handleSubmit} disabled={isSubmitting}>
-                        {isSubmitting ? 'Saving...' : (isEditing ? 'Update HR User' : 'Create HR User')}
-                    </Button>
-                </div>
-            </div>
+            {/* ==================== STICKY HEADER ==================== */}
+            <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
-            {successMsg && <div className="bg-green-50 border border-green-200 text-green-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-medium text-[11px] sm:text-sm break-words">{successMsg}</div>}
-            {apiError && <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-medium text-[11px] sm:text-sm break-words">{apiError}</div>}
-
-            {/* Accordion Permissions Matrix */}
-            <div className={`transition-all duration-500 overflow-hidden ${showPermissions ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                <div className="bg-white rounded-2xl shadow-sm border border-[#0437cc]/20 mb-4 sm:mb-6">
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-[#0437cc]/5 flex items-center gap-2.5 sm:gap-3">
-                        <FaLock className="text-[#0437cc] text-base sm:text-lg shrink-0 hidden sm:block" />
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                        <span className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0 transition-all duration-300 ${isEditing
+                            ? 'bg-gradient-to-br from-[#f77704] to-orange-500 shadow-[#f77704]/25'
+                            : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] shadow-[#0437cc]/25'
+                            }`}>
+                            <FaUserShield className="text-lg sm:text-xl" />
+                        </span>
                         <div className="min-w-0">
-                            <h2 className="text-sm md:text-base font-bold text-[#010a1f] flex items-center gap-1.5 truncate">
-                                <FaLock className="text-[#0437cc] shrink-0 sm:hidden" /> Dynamic Dropdown Permissions
-                            </h2>
-                            <p className="text-[10px] md:text-[11px] text-slate-500 mt-0.5 truncate">Toggle parent modules entirely, or click to expand and restrict specific sub-menus inside the HR Sidebar.</p>
+                            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border mb-1.5 transition-colors ${isEditing ? 'bg-orange-50 border-orange-100' : 'bg-blue-50 border-blue-100'
+                                }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isEditing ? 'bg-[#f77704]' : 'bg-[#0437cc]'}`}></span>
+                                <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${isEditing ? 'text-[#f77704]' : 'text-[#0437cc]'}`}>
+                                    {isEditing ? 'Edit Mode' : 'HR Provisioning'}
+                                </span>
+                            </div>
+                            <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">
+                                {isEditing ? 'Edit HR User' : 'HR User Management'}
+                            </h1>
+                            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">
+                                {isEditing ? 'Update HR profile details' : 'Create and manage HR accounts'}
+                            </p>
                         </div>
                     </div>
-                    <div className="p-3 sm:p-4 md:p-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-                            {permissionMatrix.map((module) => {
-                                const isExpanded = expandedAccordion === module.key;
-                                const hasSubItems = module.subItems && module.subItems.length > 0;
 
-                                let isParentChecked = false;
-                                if (hasSubItems) {
-                                    isParentChecked = Object.values(permissions[module.key] || {}).some(v => v === true);
-                                } else {
-                                    isParentChecked = permissions[module.key];
-                                }
-
-                                return (
-                                    <div key={module.key} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm flex flex-col transition-all">
-                                        <div
-                                            className={`flex items-center justify-between p-2.5 sm:p-3 md:p-4 transition-colors ${hasSubItems ? 'cursor-pointer hover:bg-slate-50' : ''} ${isExpanded ? 'bg-slate-50 border-b border-slate-100' : ''}`}
-                                            onClick={() => hasSubItems && setExpandedAccordion(isExpanded ? null : module.key)}
-                                        >
-                                            <div className="flex items-center gap-2 sm:gap-3 pr-2 sm:pr-4 min-w-0 flex-1">
-                                                {hasSubItems && (
-                                                    <span className="text-slate-400 text-[10px] sm:text-xs bg-slate-100 p-1.5 rounded-full shrink-0">
-                                                        {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
-                                                    </span>
-                                                )}
-                                                <div className="min-w-0 flex-1">
-                                                    <h3 className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{module.label}</h3>
-                                                    <p className="text-[9px] sm:text-[11px] font-medium text-slate-500 mt-0.5 leading-snug line-clamp-1 sm:line-clamp-2" title={module.description}>{module.description}</p>
-                                                </div>
-                                            </div>
-                                            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                                                <ToggleSwitch checked={isParentChecked} onChange={() => handlePermissionToggle(module.key)} />
-                                            </div>
-                                        </div>
-
-                                        {/* Sub-Items Dropdown */}
-                                        {hasSubItems && isExpanded && (
-                                            <div className="p-2 sm:p-3 md:p-4 bg-slate-50/50 grid grid-cols-1 gap-2">
-                                                {module.subItems.map(sub => (
-                                                    <div key={sub.key} className="flex items-center justify-between p-2 sm:p-2.5 border border-slate-200 bg-white rounded-lg shadow-sm min-w-0">
-                                                        <span className="text-[11px] sm:text-xs font-bold text-slate-600 pl-2 border-l-2 border-[#0437cc] truncate pr-2 flex-1">{sub.label}</span>
-                                                        <div className="shrink-0">
-                                                            <ToggleSwitch checked={permissions[module.key]?.[sub.key] || false} onChange={() => handlePermissionToggle(module.key, sub.key)} />
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
+                    <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
+                        {isEditing ? (
+                            <Button variant="ghost" icon={FaTimes} onClick={handleCancelEdit} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Cancel</Button>
+                        ) : (
+                            <Button variant="ghost" icon={FaTimes} onClick={() => setFormData(INITIAL_FORM_STATE)} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Clear</Button>
+                        )}
+                        <Button variant="primary" icon={FaCheck} className="w-full sm:w-auto shadow-lg shadow-[#0437cc]/25 rounded-xl text-xs sm:text-sm py-2" onClick={handleSubmit} disabled={isSubmitting}>
+                            {isSubmitting ? 'Saving...' : (isEditing ? 'Update HR User' : 'Create HR User')}
+                        </Button>
                     </div>
                 </div>
             </div>
 
-            <form className="space-y-4 md:space-y-6" onSubmit={handleSubmit}>
+            {/* ==================== MESSAGES ==================== */}
+            {successMsg && (
+                <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
+                    <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
+                        <FaCheck className="text-green-600 text-xs" />
+                    </span>
+                    {successMsg}
+                </div>
+            )}
+            {apiError && (
+                <div className="relative bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
+                    <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-red-200 shrink-0">
+                        <FaTimes className="text-red-600 text-xs" />
+                    </span>
+                    {apiError}
+                </div>
+            )}
+
+            {/* ==================== FORM ==================== */}
+            <form className="space-y-5 sm:space-y-6" onSubmit={handleSubmit}>
+
                 {/* 1. Identity */}
-                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2.5">
-                        <FaUser className={`${isEditing ? 'text-[#f77704]' : 'text-[#0437cc]'} text-base sm:text-lg shrink-0`} />
-                        <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">HR Identity Details</h2>
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md ${isEditing ? 'bg-gradient-to-br from-[#f77704] to-orange-500 shadow-[#f77704]/20' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] shadow-[#0437cc]/20'}`}>
+                            <FaUser className="text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">HR Identity Details</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Basic personal & contact details</p>
+                        </div>
                     </div>
-                    <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <FieldWrapper error={errors.firstName}><Input label={<>First Name <span className="text-red-500">*</span></>} name="firstName" value={formData.firstName} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.lastName}><Input label={<>Last Name <span className="text-red-500">*</span></>} name="lastName" value={formData.lastName} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.email}><Input label={<>Official Email <span className="text-red-500">*</span></>} type="email" name="email" icon={FaEnvelope} value={formData.email} onChange={handleInputChange} disabled={isEditing} className={isEditing ? "bg-slate-100 cursor-not-allowed" : ""} /></FieldWrapper>
@@ -559,15 +484,21 @@ const SuperAdminHRCom = () => {
                 </div>
 
                 {/* 2. Placement */}
-                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2.5">
-                        <FaSitemap className={`${isEditing ? 'text-[#f77704]' : 'text-[#0437cc]'} text-base sm:text-lg shrink-0`} />
-                        <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">HR Organizational Placement</h2>
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
+                            <FaSitemap className="text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Organizational Placement</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Department, designation, shift & reporting hierarchy</p>
+                        </div>
                     </div>
-                    <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <Input label="HR ID" name="hrId" value={formData.hrId} disabled className="bg-slate-100 font-mono text-[#0437cc]" />
                         <FieldWrapper error={errors.joiningDate}><Input label={<>Joining Date <span className="text-red-500">*</span></>} type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} /></FieldWrapper>
-                        
+
                         <FieldWrapper error={errors.company}>
                             <Select label={<>Company <span className="text-red-500">*</span></>} name="company" value={formData.company} onChange={handleInputChange}
                                 options={[{ value: '', label: 'Select Company' }, ...companies.map(c => ({ value: c.company_name, label: c.company_name }))]}
@@ -588,6 +519,19 @@ const SuperAdminHRCom = () => {
                                 options={[{ value: '', label: 'Select Designation' }, ...filteredDesignations.map(d => ({ value: d.designation_name, label: d.designation_name }))]}
                             />
                         </FieldWrapper>
+                        <FieldWrapper error={errors.shift}>
+                            <Select
+                                label={<>Assigned Work Shift <span className="text-red-500">*</span></>}
+                                name="shift"
+                                value={formData.shift}
+                                onChange={handleInputChange}
+                                disabled={!formData.company}
+                                options={[
+                                    { value: '', label: formData.company ? 'Select Target Shift' : 'Select Company First' },
+                                    ...availableShifts.map(s => ({ value: s.shift_name, label: `${s.shift_name} | ${s.shift_type}` }))
+                                ]}
+                            />
+                        </FieldWrapper>
                         <FieldWrapper error={errors.md}>
                             <Input label="MD (Managing Director) (Optional)" name="md" placeholder="e.g., Jane Doe" value={formData.md} onChange={handleInputChange} />
                         </FieldWrapper>
@@ -599,65 +543,68 @@ const SuperAdminHRCom = () => {
                     </div>
                 </div>
 
-                {/* 3. Elaborate Salary Information */}
-                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
-                            <FaMoneyCheckAlt className="text-green-600 text-base sm:text-lg shrink-0" />
-                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Salary Configuration</h2>
+                {/* 3. Salary */}
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-emerald-100/40 rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-emerald-500/20">
+                                <FaMoneyCheckAlt className="text-sm" />
+                            </span>
+                            <div className="min-w-0">
+                                <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Salary Configuration</h2>
+                                <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Monthly earnings and deductions</p>
+                            </div>
                         </div>
-                        <div className="bg-white border border-slate-200 px-3 sm:px-4 py-1.5 rounded-lg flex items-center justify-between sm:justify-start gap-3 shadow-sm">
-                            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Live Net Pay:</span>
-                            <span className="text-base sm:text-lg font-black text-green-600">{formatCurrency(liveNet)}</span>
+                        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm shrink-0">
+                            <span className="text-[10px] sm:text-xs font-bold text-emerald-700 uppercase tracking-wider">Live Net Pay:</span>
+                            <span className="text-base sm:text-lg font-black text-green-700 tabular-nums">{formatCurrency(liveNet)}</span>
                         </div>
                     </div>
-                    
-                    <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
-                        {/* Earnings Section */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                <h3 className="text-xs sm:text-sm font-bold text-green-700 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2">
-                                    <FaPlusCircle /> Earnings
-                                </h3>
+
+                    <div className="relative p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+
+                        {/* Earnings */}
+                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-5 rounded-2xl border border-green-100 overflow-hidden">
+                            <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
+                            <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-green-100">
                                 <div className="flex items-center gap-2">
-                                     <span className={`text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded border ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{formatCurrency(liveGross)}</span>
+                                    <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                                        <FaPlusCircle className="text-green-700 text-xs" />
+                                    </span>
+                                    <h3 className="text-xs font-bold text-green-800 uppercase tracking-wider">Earnings</h3>
                                 </div>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border tabular-nums ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{formatCurrency(liveGross)}</span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <FieldWrapper error={errors.ctc}><Input label={<>CTC (Annual) (₹) <span className="text-red-500">*</span></>} type="number" name="ctc" placeholder="0" value={formData.ctc} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.monthlySalary}><Input label={<>Monthly Salary (₹) <span className="text-red-500">*</span></>} type="number" name="monthlySalary" placeholder="0" value={formData.monthlySalary} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <FieldWrapper error={errors.basic}><Input label={<>Basic Salary (₹) <span className="text-red-500">*</span></>} type="number" name="basic" placeholder="0" value={formData.basic} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.hra}><Input label={<>HRA (₹) <span className="text-red-500">*</span></>} type="number" name="hra" placeholder="0" value={formData.hra} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                <FieldWrapper error={errors.conveyance}><Input label={<>Conveyance Allowance (₹) <span className="text-red-500">*</span></>} type="number" name="conveyance" placeholder="0" value={formData.conveyance} onChange={handleInputChange} /></FieldWrapper>
-                                <FieldWrapper error={errors.medical}><Input label={<>Medical Allowance (₹) <span className="text-red-500">*</span></>} type="number" name="medical" placeholder="0" value={formData.medical} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                <FieldWrapper error={errors.conveyance}><Input label={<>Conveyance (₹) <span className="text-red-500">*</span></>} type="number" name="conveyance" placeholder="0" value={formData.conveyance} onChange={handleInputChange} /></FieldWrapper>
+                                <FieldWrapper error={errors.medical}><Input label={<>Medical (₹) <span className="text-red-500">*</span></>} type="number" name="medical" placeholder="0" value={formData.medical} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.specialAllowance}><Input label="Special Allowance (₹)" type="number" name="specialAllowance" placeholder="0" value={formData.specialAllowance} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.otherAllowances}><Input label={<>Other Allowances (₹) <span className="text-red-500">*</span></>} type="number" name="otherAllowances" placeholder="0" value={formData.otherAllowances} onChange={handleInputChange} /></FieldWrapper>
                             </div>
                         </div>
-                        
-                        {/* Deductions Section */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                <h3 className="text-xs sm:text-sm font-bold text-red-600 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2">
-                                    <FaMinusCircle /> Deductions
-                                </h3>
-                                <span className="text-[10px] sm:text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200">-{formatCurrency(liveDeductions)}</span>
+
+                        {/* Deductions */}
+                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-5 rounded-2xl border border-red-100 overflow-hidden">
+                            <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
+                            <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-red-100">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
+                                        <FaMinusCircle className="text-red-600 text-xs" />
+                                    </span>
+                                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wider">Deductions</h3>
+                                </div>
+                                <span className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 tabular-nums">-{formatCurrency(liveDeductions)}</span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <FieldWrapper error={errors.epf}><Input label={<>EPF (₹) <span className="text-red-500">*</span></>} type="number" name="epf" placeholder="0" value={formData.epf} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.esi}><Input label="ESI (₹)" type="number" name="esi" placeholder="If Gross <= 21k" value={formData.esi} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <FieldWrapper error={errors.healthInsurance}><Input label="Health Insurance (₹)" type="number" name="healthInsurance" placeholder="0" value={formData.healthInsurance} onChange={handleInputChange} /></FieldWrapper>
-                                <FieldWrapper error={errors.pt}><Input label="Professional Tax (PT) (₹)" type="number" name="pt" placeholder="0" value={formData.pt} onChange={handleInputChange} /></FieldWrapper>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                <FieldWrapper error={errors.pt}><Input label="Professional Tax (₹)" type="number" name="pt" placeholder="0" value={formData.pt} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.tds}><Input label="TDS (₹)" type="number" name="tds" placeholder="0" value={formData.tds} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.leaves}><Input label="Leaves Deduction (₹)" type="number" name="leaves" placeholder="0" value={formData.leaves} onChange={handleInputChange} /></FieldWrapper>
                             </div>
@@ -665,13 +612,19 @@ const SuperAdminHRCom = () => {
                     </div>
                 </div>
 
-                {/* 4. Bank Information */}
-                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${isEditing ? 'border-[#f77704]/30 shadow-[#f77704]/5' : 'border-slate-100'}`}>
-                    <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2.5">
-                        <FaUniversity className="text-purple-600 text-base sm:text-lg shrink-0" />
-                        <h2 className="text-sm md:text-base font-bold text-[#010a1f] truncate">Bank Information</h2>
+                {/* 4. Bank */}
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-100/40 rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-purple-500/20">
+                            <FaUniversity className="text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Bank Information</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Salary disbursement account</p>
+                        </div>
                     </div>
-                    <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <FieldWrapper error={errors.uanNo}><Input label={<>UAN NO <span className="text-red-500">*</span></>} name="uanNo" placeholder="12-digit UAN" value={formData.uanNo} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.bankName}><Input label={<>Bank Name <span className="text-red-500">*</span></>} name="bankName" value={formData.bankName} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.accountHolder}><Input label={<>Account Holder Name <span className="text-red-500">*</span></>} name="accountHolder" value={formData.accountHolder} onChange={handleInputChange} /></FieldWrapper>
@@ -681,74 +634,107 @@ const SuperAdminHRCom = () => {
                 </div>
             </form>
 
-            {/* Existing HR Users List */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6 sm:mt-8">
-                <div className="p-3 sm:p-4 md:p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <FaUsersCog className="text-[#f77704] text-base sm:text-lg shrink-0" />
-                        <h2 className="text-sm md:text-base font-bold text-[#010a1f] truncate">Active HR Personnel</h2>
+            {/* ==================== HR USERS LIST ==================== */}
+            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
+                            <FaUsersCog className="text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Active HR Personnel</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
+                                {hrUsers.length} {hrUsers.length === 1 ? 'record' : 'records'} in system
+                            </p>
+                        </div>
                     </div>
-                    <span className="bg-[#0437cc]/10 text-[#0437cc] text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border border-[#0437cc]/20 shrink-0 ml-1 sm:ml-2">
+                    <span className="bg-[#0437cc]/10 text-[#0437cc] text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-full border border-[#0437cc]/20 shrink-0 w-max">
                         {hrUsers.length} HR Users
                     </span>
                 </div>
-                <div className="overflow-x-auto w-full custom-scrollbar">
+
+                <div className="relative overflow-x-auto custom-scrollbar">
                     {isLoading ? (
-                        <div className="p-6 sm:p-8 text-center text-xs sm:text-sm font-semibold text-slate-500">Loading HR personnel...</div>
+                        <div className="p-12 text-center">
+                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
+                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading HR personnel…</p>
+                        </div>
                     ) : hrUsers.length === 0 ? (
-                        <div className="p-6 sm:p-8 text-center text-xs sm:text-sm font-semibold text-slate-400">No HR users have been registered yet.</div>
+                        <div className="p-12 text-center">
+                            <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                                <FaUsersCog className="text-xl text-slate-300" />
+                            </div>
+                            <p className="text-xs sm:text-sm font-semibold text-slate-400">No HR users have been registered yet.</p>
+                        </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[700px]">
+                        <table className="w-full text-left border-collapse min-w-[820px]">
                             <thead>
-                                <tr className="border-b border-slate-100 text-[10px] sm:text-[11px] md:text-[12px] text-slate-400 uppercase tracking-wider bg-white">
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">HR Name</th>
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">Contact Info</th>
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold whitespace-nowrap">Org Placement</th>
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-center whitespace-nowrap">Status</th>
-                                    <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-right whitespace-nowrap">Actions</th>
+                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                    <th className="px-5 py-3.5 font-bold">HR Name</th>
+                                    <th className="px-5 py-3.5 font-bold">Contact Info</th>
+                                    <th className="px-5 py-3.5 font-bold">Org Placement</th>
+                                    <th className="px-5 py-3.5 font-bold text-center">Status</th>
+                                    <th className="px-5 py-3.5 font-bold text-right">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-50">
+                            <tbody className="divide-y divide-slate-100">
                                 {hrUsers.map((hr, i) => (
-                                    <tr key={i} className={`hover:bg-slate-50/50 transition-colors group ${isEditing && editId === hr.id ? 'bg-[#f77704]/5' : ''}`}>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4">
-                                            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                                                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#0437cc]/10 text-[#0437cc] flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 border border-[#0437cc]/20">
+                                    <tr key={i} className={`transition-colors group ${isEditing && editId === hr.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}>
+                                        <td className="px-5 py-4">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
                                                     {(hr.first_name || hr.firstName)?.charAt(0)}{(hr.last_name || hr.lastName)?.charAt(0)}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] whitespace-nowrap">{hr.first_name || hr.firstName} {hr.last_name || hr.lastName}</p>
-                                                    <p className="text-[10px] sm:text-[11px] font-mono font-bold text-[#0437cc] truncate">{hr.hr_id || hr.email}</p>
+                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{hr.first_name || hr.firstName} {hr.last_name || hr.lastName}</p>
+                                                    <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                        {hr.hr_id || hr.email}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4">
-                                            <p className="text-[11px] sm:text-sm font-semibold text-slate-700 whitespace-nowrap">{hr.email}</p>
-                                            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 whitespace-nowrap">{hr.phone}</p>
+                                        <td className="px-5 py-4 min-w-0">
+                                            <p className="text-xs sm:text-sm font-semibold text-slate-700 truncate">{hr.email}</p>
+                                            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate">{hr.phone}</p>
                                         </td>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4">
-                                            <p className="text-[11px] sm:text-sm font-bold text-slate-700 max-w-[200px] truncate">
-                                                {hr.department ? hr.designation || 'General HR' : <span className="text-[#0437cc] bg-[#0437cc]/10 px-1.5 py-0.5 rounded">Whole Branch HR</span>}
-                                            </p>
-                                            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mt-0.5 flex items-center gap-1.5 max-w-[200px] truncate">
-                                                <span className="truncate">{hr.department ? `${hr.department} • ` : 'All Departments • '}{hr.branch}</span> <span className="text-slate-400 shrink-0">({hr.company})</span>
-                                            </p>
+                                        <td className="px-5 py-4 min-w-0">
+                                            {hr.department ? (
+                                                <>
+                                                    <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{hr.designation || 'General HR'}</p>
+                                                    <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mt-0.5 truncate">
+                                                        {hr.department} <span className="text-slate-300 mx-0.5">•</span> {hr.branch}
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="inline-block text-[10px] font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">Whole Branch HR</span>
+                                                    <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mt-1 truncate">
+                                                        All Departments <span className="text-slate-300 mx-0.5">•</span> {hr.branch}
+                                                    </p>
+                                                </>
+                                            )}
                                         </td>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-center whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[9px] sm:text-[11px] font-bold ${hr.status === 'Active' ? 'text-teal-700 bg-[#eef8f8] border border-teal-100' : 'text-red-700 bg-red-50 border border-red-100'}`}>
+                                        <td className="px-5 py-4 text-center">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${hr.status === 'Active'
+                                                ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                                : 'text-red-700 bg-red-50 border-red-200'
+                                                }`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${hr.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
                                                 {hr.status}
                                             </span>
                                         </td>
-                                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-right whitespace-nowrap">
-                                            <div className="flex gap-1 sm:gap-1.5 justify-end">
-                                                <button onClick={() => handleView(hr)} className="p-1.5 sm:p-2 text-slate-400 hover:text-[#0437cc] transition-colors rounded hover:bg-[#0437cc]/10" title="View Detailed Dossier">
-                                                    <FaEye className="text-xs sm:text-sm" />
+                                        <td className="px-5 py-4 text-right">
+                                            <div className="flex gap-1 justify-end">
+                                                <button onClick={() => handleView(hr)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50" title="View Detailed Dossier">
+                                                    <FaEye className="text-xs" />
                                                 </button>
-                                                <button onClick={() => handleEdit(hr)} className="p-1.5 sm:p-2 text-slate-400 hover:text-[#f77704] transition-colors rounded hover:bg-[#f77704]/10" title="Edit HR">
-                                                    <FaEdit className="text-xs sm:text-sm" />
+                                                <button onClick={() => handleEdit(hr)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50" title="Edit HR">
+                                                    <FaEdit className="text-xs" />
                                                 </button>
-                                                <button onClick={() => handleDelete(hr.id)} className="p-1.5 sm:p-2 text-slate-400 hover:text-red-500 transition-colors rounded hover:bg-red-50" title="Delete HR">
-                                                    <FaTrash className="text-xs sm:text-sm" />
+                                                <button onClick={() => handleDelete(hr.id)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50" title="Delete HR">
+                                                    <FaTrash className="text-xs" />
                                                 </button>
                                             </div>
                                         </td>

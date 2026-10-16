@@ -10,17 +10,18 @@ const initializeSAEmployeeModel = async () => {
             phone VARCHAR(20) NOT NULL,
             dob DATE NOT NULL,
             gender VARCHAR(20) NOT NULL,
-            address TEXT NOT NULL,
+            blood_group VARCHAR(20),
+            address TEXT DEFAULT 'N/A',
             employee_id VARCHAR(50) UNIQUE NOT NULL,
             joining_date DATE NOT NULL,
             company VARCHAR(255),
             branch VARCHAR(255),
             department VARCHAR(100) NOT NULL,
             designation VARCHAR(100) NOT NULL,
-            manager VARCHAR(100) NOT NULL,
-            emp_type VARCHAR(50) NOT NULL,
-            location VARCHAR(100) NOT NULL,
-            shift VARCHAR(50) NOT NULL,
+            manager VARCHAR(100) DEFAULT 'Unassigned',
+            emp_type VARCHAR(50) DEFAULT 'Full-Time',
+            location VARCHAR(100) DEFAULT 'Head Office',
+            shift VARCHAR(50) DEFAULT 'General Shift',
             status VARCHAR(50) DEFAULT 'Pending Activation',
             
             -- Salary Breakdown Columns
@@ -60,12 +61,18 @@ const initializeSAEmployeeModel = async () => {
     `;
 
     const alterQueries = `
-        -- Drop strict NOT NULL constraints from legacy columns to prevent crash
+        -- Drop strict NOT NULL constraints from legacy/optional columns to prevent 500 errors
         ALTER TABLE sa_employees ALTER COLUMN allowances DROP NOT NULL;
         ALTER TABLE sa_employees ALTER COLUMN pf DROP NOT NULL;
         ALTER TABLE sa_employees ALTER COLUMN esi DROP NOT NULL;
         ALTER TABLE sa_employees ALTER COLUMN pt DROP NOT NULL;
+        ALTER TABLE sa_employees ALTER COLUMN address DROP NOT NULL;
+        ALTER TABLE sa_employees ALTER COLUMN manager DROP NOT NULL;
+        ALTER TABLE sa_employees ALTER COLUMN emp_type DROP NOT NULL;
+        ALTER TABLE sa_employees ALTER COLUMN location DROP NOT NULL;
+        ALTER TABLE sa_employees ALTER COLUMN shift DROP NOT NULL;
         
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS blood_group VARCHAR(20);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_name VARCHAR(150);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_relationship VARCHAR(100);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_phone VARCHAR(20);

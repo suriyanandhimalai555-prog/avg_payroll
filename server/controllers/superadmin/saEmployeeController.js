@@ -15,7 +15,7 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
+const parseNum = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(val) ? parseFloat(val) : 0);
 
 export const createEmployee = async (req, res) => {
     try {
@@ -38,7 +38,8 @@ export const createEmployee = async (req, res) => {
         if (lastEmpResult.rows.length > 0) {
             const lastId = lastEmpResult.rows[0].employee_id;
             const parts = lastId.split('-');
-            newSequence = parseInt(parts[2], 10) + 1;
+            const parsedSeq = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(parsedSeq)) newSequence = parsedSeq + 1;
         }
 
         const generatedEmployeeId = `AVG-${currentYear}-${String(newSequence).padStart(3, '0')}`;
@@ -59,11 +60,43 @@ export const createEmployee = async (req, res) => {
         `;
 
         const values = [
-            data.firstName, data.lastName, data.email, data.phone, data.dob, data.gender, data.address,
-            generatedEmployeeId, data.joiningDate, data.company, data.branch, data.department, data.designation, data.manager, data.empType, data.location, data.shift, data.status,
-            parseNum(data.ctc), parseNum(data.monthlySalary), parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.specialAllowance), parseNum(data.otherAllowances),
-            parseNum(data.epf), parseNum(data.esi), parseNum(data.healthInsurance), parseNum(data.pt), parseNum(data.tds), parseNum(data.leaves),
-            data.uanNo, data.bankName, data.accountHolder, data.accountNumber, data.ifsc,
+            data.firstName || data.first_name,
+            data.lastName || data.last_name,
+            data.email,
+            data.phone || '',
+            data.dob || null,
+            data.gender || 'Other',
+            data.address || 'N/A',
+            generatedEmployeeId,
+            data.joiningDate || data.joining_date || new Date().toISOString().split('T')[0],
+            data.company,
+            data.branch,
+            data.department,
+            data.designation || 'Staff',
+            data.manager || data.reportingManager || data.reporting_manager || 'Unassigned',
+            data.empType || data.emp_type || 'Full-Time',
+            data.location || data.branch || 'Head Office',
+            data.shift || 'General Shift',
+            data.status || 'Active',
+            parseNum(data.ctc),
+            parseNum(data.monthlySalary ?? data.monthly_salary),
+            parseNum(data.basic ?? data.basic_salary),
+            parseNum(data.hra),
+            parseNum(data.conveyance),
+            parseNum(data.medical),
+            parseNum(data.specialAllowance ?? data.special_allowance),
+            parseNum(data.otherAllowances ?? data.other_allowances),
+            parseNum(data.epf),
+            parseNum(data.esi),
+            parseNum(data.healthInsurance ?? data.health_insurance),
+            parseNum(data.pt),
+            parseNum(data.tds),
+            parseNum(data.leaves),
+            data.uanNo || data.uan_no || 'PENDING',
+            data.bankName || data.bank_name || '',
+            data.accountHolder || data.account_holder || '',
+            data.accountNumber || data.account_number || '',
+            data.ifsc || '',
             JSON.stringify(data.permissions || {})
         ];
 
@@ -92,7 +125,7 @@ export const createEmployee = async (req, res) => {
                                 <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Employee ID:</strong> <span style="color: #0437cc; font-family: monospace; font-size: 16px;">${generatedEmployeeId}</span></p>
                                 <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Role:</strong> ${data.designation}</p>
                                 <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Department:</strong> ${data.department}</p>
-                                <p style="margin: 0; color: #010a1f; font-size: 15px;"><strong>Location:</strong> ${data.location} (${data.branch})</p>
+                                <p style="margin: 0; color: #010a1f; font-size: 15px;"><strong>Location:</strong> ${data.location || data.branch} (${data.branch})</p>
                             </div>
                             
                             <p style="color: #475569; line-height: 1.6; font-size: 15px; margin-bottom: 30px;">To get started and access your employee dashboard, please activate your account and set up a secure password by clicking the button below:</p>
@@ -130,63 +163,66 @@ export const updateEmployee = async (req, res) => {
         const { id } = req.params;
         const data = req.body;
 
+        // Fetch existing employee first so missing fields in partial updates don't overwrite with NULL
+        const existingRes = await pool.query('SELECT * FROM sa_employees WHERE id = $1', [id]);
+        if (existingRes.rows.length === 0) {
+            return res.status(404).json({ message: 'Employee not found.' });
+        }
+        const existing = existingRes.rows[0];
+
         const updateQuery = `
             UPDATE sa_employees SET
-                first_name = $1, last_name = $2, phone = $3, dob = $4, gender = $5, address = $6,
-                joining_date = $7, company = $8, branch = $9, department = $10, designation = $11, manager = $12, emp_type = $13, 
-                location = $14, shift = $15, status = $16, 
-                ctc = $17, monthly_salary = $18, basic_salary = $19, hra = $20, conveyance = $21, medical = $22, special_allowance = $23, other_allowances = $24, allowances = 0,
-                epf = $25, pf = 0, esi = $26, health_insurance = $27, pt = $28, tds = $29, leaves = $30, other_deductions = 0, 
-                uan_no = $31, bank_name = $32, account_holder = $33, account_number = $34, ifsc = $35, permissions = $36
-            WHERE id = $37 RETURNING *;
+                first_name = $1, last_name = $2, email = $3, phone = $4, dob = $5, gender = $6, address = $7,
+                joining_date = $8, company = $9, branch = $10, department = $11, designation = $12, manager = $13, emp_type = $14, 
+                location = $15, shift = $16, status = $17, 
+                ctc = $18, monthly_salary = $19, basic_salary = $20, hra = $21, conveyance = $22, medical = $23, special_allowance = $24, other_allowances = $25, allowances = 0,
+                epf = $26, pf = 0, esi = $27, health_insurance = $28, pt = $29, tds = $30, leaves = $31, other_deductions = 0, 
+                uan_no = $32, bank_name = $33, account_holder = $34, account_number = $35, ifsc = $36, permissions = $37
+            WHERE id = $38 RETURNING *;
         `;
 
-        // Apply strict fallbacks to support both React components safely
         const values = [
-            data.firstName || data.first_name, 
-            data.lastName || data.last_name, 
-            data.phone, 
-            data.dob, 
-            data.gender, 
-            data.address,
-            data.joiningDate || data.joining_date, 
-            data.company, 
-            data.branch, 
-            data.department, 
-            data.designation, 
-            data.manager, 
-            data.empType || data.emp_type,
-            data.location, 
-            data.shift, 
-            data.status,
-            parseNum(data.ctc), 
-            parseNum(data.monthlySalary ?? data.monthly_salary), 
-            parseNum(data.basic ?? data.basic_salary), 
-            parseNum(data.hra), 
-            parseNum(data.conveyance), 
-            parseNum(data.medical), 
-            parseNum(data.specialAllowance ?? data.special_allowance), 
-            parseNum(data.otherAllowances ?? data.other_allowances),
-            parseNum(data.epf), 
-            parseNum(data.esi), 
-            parseNum(data.healthInsurance ?? data.health_insurance), 
-            parseNum(data.pt), 
-            parseNum(data.tds), 
-            parseNum(data.leaves),
-            data.uanNo || data.uan_no, 
-            data.bankName || data.bank_name, 
-            data.accountHolder || data.account_holder, 
-            data.accountNumber || data.account_number, 
-            data.ifsc, 
-            JSON.stringify(data.permissions || {}), 
+            data.firstName ?? data.first_name ?? existing.first_name,
+            data.lastName ?? data.last_name ?? existing.last_name,
+            data.email ?? existing.email,
+            data.phone ?? existing.phone ?? '',
+            data.dob || existing.dob,
+            data.gender ?? existing.gender ?? 'Other',
+            data.address ?? existing.address ?? 'N/A',
+            data.joiningDate || data.joining_date || existing.joining_date,
+            data.company ?? existing.company,
+            data.branch ?? existing.branch,
+            data.department ?? existing.department,
+            data.designation ?? existing.designation,
+            data.manager ?? data.reportingManager ?? data.reporting_manager ?? existing.manager ?? 'Unassigned',
+            data.empType ?? data.emp_type ?? existing.emp_type ?? 'Full-Time',
+            data.location ?? existing.location ?? data.branch ?? 'Head Office',
+            data.shift ?? existing.shift ?? 'General Shift',
+            data.status ?? existing.status ?? 'Active',
+            parseNum(data.ctc ?? existing.ctc),
+            parseNum(data.monthlySalary ?? data.monthly_salary ?? existing.monthly_salary),
+            parseNum(data.basic ?? data.basic_salary ?? existing.basic_salary),
+            parseNum(data.hra ?? existing.hra),
+            parseNum(data.conveyance ?? existing.conveyance),
+            parseNum(data.medical ?? existing.medical),
+            parseNum(data.specialAllowance ?? data.special_allowance ?? existing.special_allowance),
+            parseNum(data.otherAllowances ?? data.other_allowances ?? existing.other_allowances),
+            parseNum(data.epf ?? existing.epf),
+            parseNum(data.esi ?? existing.esi),
+            parseNum(data.healthInsurance ?? data.health_insurance ?? existing.health_insurance),
+            parseNum(data.pt ?? existing.pt),
+            parseNum(data.tds ?? existing.tds),
+            parseNum(data.leaves ?? existing.leaves),
+            data.uanNo ?? data.uan_no ?? existing.uan_no ?? 'PENDING',
+            data.bankName ?? data.bank_name ?? existing.bank_name ?? '',
+            data.accountHolder ?? data.account_holder ?? existing.account_holder ?? '',
+            data.accountNumber ?? data.account_number ?? existing.account_number ?? '',
+            data.ifsc ?? existing.ifsc ?? '',
+            JSON.stringify(data.permissions ?? existing.permissions ?? {}),
             id
         ];
 
         const result = await pool.query(updateQuery, values);
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Employee not found.' });
-        }
 
         res.status(200).json({ message: 'Employee updated successfully.', employee: result.rows[0] });
     } catch (error) {

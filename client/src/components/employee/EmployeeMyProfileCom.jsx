@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Cropper from 'react-easy-crop';
 import {
     FaUserEdit, FaLock, FaBuilding, FaBriefcase,
-    FaMoneyCheck, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt,
-    FaFileAlt, FaTimes, FaSitemap, FaMoneyBillWave,
-    FaFileInvoiceDollar, FaChartLine, FaPlusCircle, FaMinusCircle, FaUniversity
+    FaPhoneAlt, FaEnvelope, FaMapMarkerAlt,
+    FaFileAlt, FaTimes, FaFileInvoiceDollar,
+    FaPlusCircle, FaMinusCircle, FaUniversity,
+    FaIdBadge, FaTint
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -41,8 +43,13 @@ const getCroppedImg = async (imageSrc, pixelCrop) => {
     return canvas.toDataURL('image/jpeg');
 };
 
+const BLOOD_GROUP_OPTIONS = [
+    'A +ve', 'A -ve', 'B +ve', 'B -ve', 'O +ve', 'O -ve', 'AB +ve', 'AB -ve'
+];
+
 const EmployeeMyProfileCom = () => {
     const { user, login } = useAuth();
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [profileData, setProfileData] = useState(null);
 
@@ -58,6 +65,28 @@ const EmployeeMyProfileCom = () => {
     const [zoomLevel, setZoomLevel] = useState(1);
     const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
     const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+    /* -------- Inject DM Sans font -------- */
+    useEffect(() => {
+        const styleEl = document.createElement('style');
+        styleEl.setAttribute('data-dm-sans', 'true');
+        styleEl.textContent = `
+            @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+            .dm-sans-root, .dm-sans-root *:not(code):not(pre):not(.font-mono) {
+                font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            }
+            .dm-sans-root .font-mono, .dm-sans-root code, .dm-sans-root pre {
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            }
+            .dm-sans-root input, .dm-sans-root select, .dm-sans-root textarea, .dm-sans-root button {
+                font-family: inherit;
+            }
+        `;
+        document.head.appendChild(styleEl);
+        return () => {
+            if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+        };
+    }, []);
 
     const formatDateForDisplay = (dateString) => {
         if (!dateString) return 'Not Provided';
@@ -77,16 +106,19 @@ const EmployeeMyProfileCom = () => {
             setProfileData({
                 personal: {
                     photo: data.profile_photo || "/logo.jpg",
-                    fullName: `${data.first_name} ${data.last_name}`,
+                    fullName: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
+                    firstName: data.first_name || 'Employee',
                     employeeId: data.employee_id,
                     dob: formatDateForDisplay(data.dob),
+                    rawDob: data.dob,
+                    bloodGroup: data.blood_group || 'Not Provided',
                     gender: data.gender,
                     phone: data.phone,
                     email: data.email,
                     address: data.address
                 },
                 employment: {
-                    company: data.company || "Not Assigned",
+                    company: data.company || "AGILAVETRI PRIMETECH PVT. LTD",
                     branch: data.branch || "Not Assigned",
                     department: data.department || "Not Assigned",
                     designation: data.designation || "Not Assigned",
@@ -129,9 +161,25 @@ const EmployeeMyProfileCom = () => {
             });
 
             setEditForm({
-                personal: { phone: data.phone, address: data.address, dob: formatDateForInput(data.dob), gender: data.gender },
-                bank: { uan_no: data.uan_no, bank_name: data.bank_name, account_holder: data.account_holder, account_number: data.account_number, ifsc: data.ifsc },
-                emergency: { emergency_name: data.emergency_name || '', emergency_relationship: data.emergency_relationship || '', emergency_phone: data.emergency_phone || '' }
+                personal: {
+                    phone: data.phone || '',
+                    address: data.address || '',
+                    dob: formatDateForInput(data.dob),
+                    gender: data.gender || 'Male',
+                    blood_group: data.blood_group || ''
+                },
+                bank: {
+                    uan_no: data.uan_no || '',
+                    bank_name: data.bank_name || '',
+                    account_holder: data.account_holder || '',
+                    account_number: data.account_number || '',
+                    ifsc: data.ifsc || ''
+                },
+                emergency: {
+                    emergency_name: data.emergency_name || '',
+                    emergency_relationship: data.emergency_relationship || '',
+                    emergency_phone: data.emergency_phone || ''
+                }
             });
 
             setLoading(false);
@@ -143,6 +191,7 @@ const EmployeeMyProfileCom = () => {
 
     useEffect(() => {
         if (user?.employee_id) fetchProfile();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const toggleEdit = (section) => setIsEditing({ ...isEditing, [section]: true });
@@ -219,73 +268,55 @@ const EmployeeMyProfileCom = () => {
 
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
 
-    // Custom Design-Based Shimmer specifically mapped to the Profile Structure
+    // ==================== SHIMMER ====================
     if (loading || !profileData) {
         return (
-            <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden animate-pulse">
-                {/* Header Shimmer */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div className="space-y-2 w-full md:w-1/3">
-                        <div className="h-6 md:h-8 bg-slate-200 rounded-md w-3/4"></div>
-                        <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+            <div className="dm-sans-root space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden animate-pulse">
+                <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-2 w-full md:w-1/3">
+                            <div className="h-6 md:h-7 bg-slate-200 rounded-md w-3/4"></div>
+                            <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                        </div>
+                        <div className="flex gap-3 w-full md:w-auto">
+                            <div className="h-10 bg-slate-200 rounded-xl w-full md:w-36"></div>
+                            <div className="h-10 bg-slate-200 rounded-xl w-full md:w-44"></div>
+                        </div>
                     </div>
-                    <div className="h-10 bg-slate-200 rounded-lg w-full md:w-40 shrink-0 mt-2 md:mt-0"></div>
                 </div>
 
-                {/* Top Summary Card Shimmer */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col md:flex-row items-center gap-4 md:gap-6">
-                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-slate-200 shrink-0"></div>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 lg:p-7 flex flex-col md:flex-row items-center gap-5 md:gap-6">
+                    <div className="w-24 h-24 md:w-28 md:h-28 rounded-2xl bg-slate-200 shrink-0"></div>
                     <div className="flex-1 w-full space-y-3 flex flex-col items-center md:items-start">
-                        <div className="h-6 sm:h-8 bg-slate-200 rounded-md w-1/2 md:w-1/3"></div>
-                        <div className="flex gap-2 w-full justify-center md:justify-start">
+                        <div className="h-7 bg-slate-200 rounded-md w-1/2 md:w-1/3"></div>
+                        <div className="flex gap-2 w-full justify-center md:justify-start flex-wrap">
                             <div className="h-6 bg-slate-200 rounded-md w-24"></div>
                             <div className="h-6 bg-slate-200 rounded-md w-24"></div>
                             <div className="h-6 bg-slate-200 rounded-md w-24"></div>
                         </div>
                     </div>
-                    <div className="w-full md:w-40 h-16 bg-slate-200 rounded-xl shrink-0 mt-2 md:mt-0"></div>
+                    <div className="w-full md:w-48 h-20 bg-slate-200 rounded-2xl shrink-0"></div>
                 </div>
 
-                {/* Profile Grids Shimmer */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                    {/* Personal Information */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col h-full">
-                        <div className="h-5 bg-slate-200 rounded-md w-1/3 mb-4"></div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
-                            {[...Array(4)].map((_, i) => (
-                                <div key={i} className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl">
-                                    <div className="h-3 bg-slate-200 rounded-md w-1/2 mb-2"></div>
-                                    <div className="h-4 bg-slate-200 rounded-md w-3/4"></div>
-                                </div>
-                            ))}
-                            {[...Array(2)].map((_, i) => (
-                                <div key={i + 4} className="sm:col-span-2 bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl">
-                                    <div className="h-3 bg-slate-200 rounded-md w-1/4 mb-2"></div>
-                                    <div className="h-4 bg-slate-200 rounded-md w-full"></div>
-                                </div>
-                            ))}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
+                    {[1, 2].map((c) => (
+                        <div key={c} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6">
+                            <div className="h-5 bg-slate-200 rounded-md w-1/3 mb-5"></div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                {[...Array(6)].map((_, i) => (
+                                    <div key={i} className="bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                                        <div className="h-3 bg-slate-200 rounded-md w-1/2 mb-2"></div>
+                                        <div className="h-4 bg-slate-200 rounded-md w-3/4"></div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
-
-                    {/* Employment Information */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col h-full">
-                        <div className="h-5 bg-slate-200 rounded-md w-1/3 mb-4"></div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
-                            {[...Array(10)].map((_, i) => (
-                                <div key={i} className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl">
-                                    <div className="h-3 bg-slate-200 rounded-md w-1/2 mb-2"></div>
-                                    <div className="h-4 bg-slate-200 rounded-md w-3/4"></div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    
-                    {/* Salary Information */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 lg:col-span-2">
-                        <div className="h-5 bg-slate-200 rounded-md w-1/4 mb-4"></div>
+                    ))}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 lg:col-span-2">
+                        <div className="h-5 bg-slate-200 rounded-md w-1/4 mb-5"></div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                            <div className="bg-slate-50 border border-slate-100 p-4 sm:p-5 rounded-xl h-64"></div>
-                            <div className="bg-slate-50 border border-slate-100 p-4 sm:p-5 rounded-xl h-64"></div>
+                            <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl h-72"></div>
+                            <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl h-72"></div>
                         </div>
                     </div>
                 </div>
@@ -297,308 +328,396 @@ const EmployeeMyProfileCom = () => {
     const liveDeductions = parseNum(profileData.salary.epf) + parseNum(profileData.salary.esi) + parseNum(profileData.salary.healthInsurance) + parseNum(profileData.salary.pt) + parseNum(profileData.salary.tds) + parseNum(profileData.salary.leaves);
     const liveNet = liveGross - liveDeductions;
 
-    const inputStyles = "w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-medium text-[#010a1f] outline-none focus:border-[#0437cc] focus:ring-1 focus:ring-[#0437cc] transition-all";
+    const inputStyles = "w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-[#010a1f] outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 transition-all";
+
+    const SectionHeader = ({ icon: Icon, iconBg, iconColor, title, badge, action }) => (
+        <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2.5 min-w-0">
+                <span className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+                    <Icon className={`text-sm ${iconColor}`} />
+                </span>
+                <h2 className="text-sm sm:text-[15px] font-bold text-[#010a1f] truncate">{title}</h2>
+                {badge && (
+                    <span className="hidden sm:inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0">
+                        <FaLock className="text-[7px]" /> {badge}
+                    </span>
+                )}
+            </div>
+            {action}
+        </div>
+    );
+
+    const InfoTile = ({ label, value, icon, editing, input }) => (
+        <div className={`bg-slate-50/70 border border-slate-100 p-3 rounded-xl min-w-0 transition-colors ${editing ? 'ring-1 ring-[#0437cc]/20 bg-white' : ''}`}>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 truncate">{label}</p>
+            {editing && input ? input : (
+                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] flex items-center gap-1.5 min-w-0">
+                    {icon && <span className="text-slate-300 shrink-0">{icon}</span>}
+                    <span className="truncate">{value}</span>
+                </p>
+            )}
+        </div>
+    );
 
     return (
-        <div className="space-y-4 md:space-y-6 pb-8 relative w-full overflow-hidden">
+        <div className="dm-sans-root space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
-                <div className="min-w-0">
-                    <h1 className="text-xl md:text-2xl font-bold text-[#010a1f] tracking-tight truncate">My Profile</h1>
-                    <p className="text-[11px] sm:text-xs md:text-sm text-slate-500 mt-1 truncate">View and manage your personal, employment, and financial information.</p>
-                </div>
-                <div className="flex w-full md:w-auto shrink-0">
-                    <Button variant="outline" icon={FaFileAlt} className="w-full md:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm text-sm py-2">
-                        Profile Change Request
-                    </Button>
-                </div>
-            </div>
-
-            {/* Top Summary Card */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col md:flex-row items-center gap-4 md:gap-6">
-                <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current.click()}>
-                    <img src={profileData.personal.photo} alt="Profile" className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-slate-50 shadow-sm object-cover transition-opacity group-hover:opacity-80" />
-                    <button className="absolute bottom-0 right-0 w-7 h-7 md:w-8 md:h-8 bg-[#0437cc] text-white rounded-full flex items-center justify-center border-2 border-white shadow-sm hover:bg-[#032a9e] transition-colors pointer-events-none">
-                        <FaUserEdit className="text-[10px] md:text-sm" />
-                    </button>
-                    <input type="file" accept="image/*" ref={fileInputRef} onChange={handlePhotoFileChange} className="hidden" />
-                </div>
-
-                <div className="flex-1 text-center md:text-left min-w-0 w-full">
-                    <div className="flex flex-col md:flex-row md:items-center justify-center md:justify-start gap-2 md:gap-3">
-                        <h2 className="text-lg md:text-2xl font-bold text-[#010a1f] truncate">{profileData.personal.fullName}</h2>
-                        <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${profileData.employment.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} w-max mx-auto md:mx-0`}>
-                            {profileData.employment.status}
-                        </span>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-2 md:mt-3 text-xs text-slate-500 font-medium">
-                        <span className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded border border-slate-100 max-w-full truncate"><FaLock className="text-[10px] text-slate-400 shrink-0" /> <span className="truncate">{profileData.personal.employeeId}</span></span>
-                        <span className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded border border-slate-100 max-w-full truncate"><FaBriefcase className="text-[#0437cc]/60 shrink-0" /> <span className="truncate">{profileData.employment.designation}</span></span>
-                        <span className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded border border-slate-100 max-w-full truncate"><FaBuilding className="text-[#f77704]/60 shrink-0" /> <span className="truncate">{profileData.employment.department}</span></span>
-                    </div>
-                </div>
-
-                <div className="shrink-0 bg-blue-50 border border-blue-200 text-[#0437cc] px-5 py-3 rounded-xl text-center shadow-sm w-full md:w-auto mt-2 md:mt-0">
-                    <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-500">Calculated Net Pay</p>
-                    <p className="text-xl md:text-2xl font-black">{formatCurrency(liveNet)}</p>
-                </div>
-            </div>
-
-            {/* Profile Grids */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-
-                {/* Personal Information */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col h-full">
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                        <h2 className="text-sm md:text-base font-bold text-[#010a1f]">Personal Information</h2>
-                        {!isEditing.personal ? (
-                            <button onClick={() => toggleEdit('personal')} className="text-xs font-semibold text-[#0437cc] hover:underline">Edit Info</button>
-                        ) : (
-                            <div className="flex gap-3">
-                                <button onClick={() => handleCancel('personal')} className="text-xs font-semibold text-slate-500 hover:underline">Cancel</button>
-                                <button onClick={() => handleSave('personal')} className="text-xs font-semibold text-green-600 hover:underline">Save</button>
-                            </div>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Name</p>
-                            <p className="text-sm font-bold text-[#010a1f] truncate">{profileData.personal.fullName}</p>
+            {/* ==================== PAGE HEADER ==================== */}
+            <div className="relative bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-100 mb-2">
+                            <FaUserEdit className="text-[9px] text-[#0437cc]" />
+                            <span className="text-[10px] font-bold text-[#0437cc] uppercase tracking-[0.1em]">My Account</span>
                         </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Date of Birth</p>
-                            {isEditing.personal ? (
-                                <input type="date" name="dob" value={editForm.personal.dob} onChange={(e) => handleInputChange('personal', e)} className={inputStyles} />
+                        <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">My Profile</h1>
+                        <p className="text-xs sm:text-sm text-slate-500 mt-1 truncate">View and manage your personal, employment, and financial information.</p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto shrink-0">
+                        <Button
+                            variant="primary"
+                            icon={FaIdBadge}
+                            onClick={() => navigate('/employee/virtual-id')}
+                            className="w-full sm:w-auto shadow-md shadow-[#0437cc]/20 text-sm py-2 px-4 rounded-xl"
+                        >
+                            Virtual ID Card
+                        </Button>
+                        <Button
+                            variant="outline"
+                            icon={FaFileAlt}
+                            className="w-full sm:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm text-sm py-2 rounded-xl"
+                        >
+                            Profile Change Request
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* ==================== HERO / SUMMARY CARD ==================== */}
+            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="absolute top-0 right-0 w-80 h-40 bg-gradient-to-br from-[#0437cc]/[0.05] via-[#0437cc]/[0.02] to-transparent pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-64 h-32 bg-gradient-to-tr from-[#f77704]/[0.03] to-transparent pointer-events-none"></div>
+
+                <div className="relative p-5 sm:p-6 lg:p-7 flex flex-col md:flex-row items-center gap-5 md:gap-6">
+
+                    <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current.click()}>
+                        <div className="w-24 h-24 md:w-28 md:h-28 rounded-2xl overflow-hidden ring-4 ring-white shadow-lg shadow-[#0437cc]/10 transition-all duration-300 group-hover:ring-[#0437cc]/30 group-hover:shadow-xl group-hover:shadow-[#0437cc]/15">
+                            <img
+                                src={profileData.personal.photo}
+                                alt="Profile"
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            />
+                        </div>
+                        <button className="absolute -bottom-1 -right-1 w-9 h-9 bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white rounded-xl flex items-center justify-center border-4 border-white shadow-lg pointer-events-none transition-transform group-hover:scale-110">
+                            <FaUserEdit className="text-[11px]" />
+                        </button>
+                        <input type="file" accept="image/*" ref={fileInputRef} onChange={handlePhotoFileChange} className="hidden" />
+                    </div>
+
+                    <div className="flex-1 text-center md:text-left min-w-0 w-full">
+                        <div className="flex flex-col md:flex-row md:items-center justify-center md:justify-start gap-2 md:gap-3">
+                            <h2 className="text-xl sm:text-2xl font-bold text-[#010a1f] truncate">{profileData.personal.fullName}</h2>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider w-max mx-auto md:mx-0 ${profileData.employment.status === 'Active'
+                                ? 'bg-green-50 text-green-700 border border-green-100'
+                                : 'bg-red-50 text-red-700 border border-red-100'
+                                }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${profileData.employment.status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                {profileData.employment.status}
+                            </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-3">
+                            <span className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/70 text-[11px] font-semibold text-slate-600 max-w-full">
+                                <FaLock className="text-[9px] text-slate-400 shrink-0" />
+                                <span className="truncate">{profileData.personal.employeeId}</span>
+                            </span>
+                            <span className="flex items-center gap-1.5 bg-blue-50/70 px-2.5 py-1 rounded-lg border border-blue-100 text-[11px] font-semibold text-[#0437cc] max-w-full">
+                                <FaBriefcase className="text-[9px] shrink-0" />
+                                <span className="truncate">{profileData.employment.designation}</span>
+                            </span>
+                            <span className="flex items-center gap-1.5 bg-orange-50/70 px-2.5 py-1 rounded-lg border border-orange-100 text-[11px] font-semibold text-[#f77704] max-w-full">
+                                <FaBuilding className="text-[9px] shrink-0" />
+                                <span className="truncate">{profileData.employment.department}</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="shrink-0 relative w-full md:w-auto">
+                        <div className="bg-gradient-to-br from-[#0437cc] to-[#1f56d6] rounded-2xl px-6 py-4 shadow-lg shadow-[#0437cc]/25 text-center text-white relative overflow-hidden">
+                            <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-1 opacity-80 relative">Calculated Net Pay</p>
+                            <p className="text-2xl sm:text-[26px] font-black tracking-tight relative">{formatCurrency(liveNet)}</p>
+                            <p className="text-[10px] font-medium mt-1 opacity-70 relative">per month</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* ==================== PROFILE GRIDS ==================== */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
+
+                {/* PERSONAL INFORMATION */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex flex-col h-full transition-shadow hover:shadow-md">
+                    <SectionHeader
+                        icon={FaUserEdit}
+                        iconBg="bg-blue-50"
+                        iconColor="text-[#0437cc]"
+                        title="Personal Information"
+                        action={
+                            !isEditing.personal ? (
+                                <button onClick={() => toggleEdit('personal')} className="text-[11px] sm:text-xs font-bold text-[#0437cc] hover:text-[#0437cc]/80 hover:underline transition-colors">
+                                    Edit Info
+                                </button>
                             ) : (
-                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.personal.dob}</p>
-                            )}
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gender</p>
-                            {isEditing.personal ? (
+                                <div className="flex gap-3">
+                                    <button onClick={() => handleCancel('personal')} className="text-[11px] sm:text-xs font-bold text-slate-500 hover:underline">Cancel</button>
+                                    <button onClick={() => handleSave('personal')} className="text-[11px] sm:text-xs font-bold text-green-600 hover:underline">Save</button>
+                                </div>
+                            )
+                        }
+                    />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
+                        <InfoTile label="Full Name" value={profileData.personal.fullName} />
+
+                        <InfoTile
+                            label="Date of Birth"
+                            value={profileData.personal.dob}
+                            editing={isEditing.personal}
+                            input={<input type="date" name="dob" value={editForm.personal.dob} onChange={(e) => handleInputChange('personal', e)} className={inputStyles} />}
+                        />
+
+                        <InfoTile
+                            label="Gender"
+                            value={profileData.personal.gender}
+                            editing={isEditing.personal}
+                            input={
                                 <select name="gender" value={editForm.personal.gender} onChange={(e) => handleInputChange('personal', e)} className={inputStyles}>
                                     <option value="Male">Male</option>
                                     <option value="Female">Female</option>
                                     <option value="Other">Other</option>
                                 </select>
-                            ) : (
-                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.personal.gender}</p>
-                            )}
+                            }
+                        />
+
+                        <InfoTile
+                            label="Blood Group"
+                            value={profileData.personal.bloodGroup}
+                            icon={<FaTint className="text-[10px] text-red-500" />}
+                            editing={isEditing.personal}
+                            input={
+                                <select name="blood_group" value={editForm.personal.blood_group} onChange={(e) => handleInputChange('personal', e)} className={inputStyles}>
+                                    <option value="">Select Blood Group</option>
+                                    {BLOOD_GROUP_OPTIONS.map((bg) => (
+                                        <option key={bg} value={bg}>{bg}</option>
+                                    ))}
+                                </select>
+                            }
+                        />
+
+                        <InfoTile
+                            label="Phone"
+                            value={profileData.personal.phone}
+                            icon={<FaPhoneAlt className="text-[10px]" />}
+                            editing={isEditing.personal}
+                            input={<input type="tel" name="phone" value={editForm.personal.phone} onChange={(e) => handleInputChange('personal', e)} className={inputStyles} />}
+                        />
+
+                        <div className="bg-slate-50/70 border border-slate-100 p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Email</p>
+                            <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] flex items-center gap-1.5 min-w-0">
+                                <FaEnvelope className="text-slate-300 shrink-0 text-xs" />
+                                <span className="truncate">{profileData.personal.email}</span>
+                            </p>
                         </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone</p>
-                            {isEditing.personal ? (
-                                <input type="tel" name="phone" value={editForm.personal.phone} onChange={(e) => handleInputChange('personal', e)} className={inputStyles} />
-                            ) : (
-                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate"><FaPhoneAlt className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.personal.phone}</span></p>
-                            )}
-                        </div>
-                        <div className="sm:col-span-2 bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email</p>
-                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate"><FaEnvelope className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.personal.email}</span></p>
-                        </div>
-                        <div className="sm:col-span-2 bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Address</p>
+
+                        <div className={`sm:col-span-2 bg-slate-50/70 border border-slate-100 p-3 rounded-xl min-w-0 ${isEditing.personal ? 'ring-1 ring-[#0437cc]/20 bg-white' : ''}`}>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Address</p>
                             {isEditing.personal ? (
                                 <textarea name="address" rows="2" value={editForm.personal.address} onChange={(e) => handleInputChange('personal', e)} className={inputStyles}></textarea>
                             ) : (
-                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-start gap-1.5 break-words"><FaMapMarkerAlt className="text-slate-300 shrink-0 mt-0.5" /> <span>{profileData.personal.address}</span></p>
+                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-start gap-1.5 break-words">
+                                    <FaMapMarkerAlt className="text-slate-300 shrink-0 mt-0.5 text-xs" />
+                                    <span>{profileData.personal.address}</span>
+                                </p>
                             )}
                         </div>
                     </div>
                 </div>
 
-                {/* Employment Information (Read Only) */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 relative overflow-hidden flex flex-col h-full">
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-sm md:text-base font-bold text-[#010a1f]">Employment Info</h2>
-                            <span className="bg-slate-100 text-slate-500 text-[9px] md:text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 shrink-0"><FaLock className="text-[8px]" /> Read Only</span>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 relative z-10 flex-1">
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">ID <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-bold text-slate-700 truncate">{profileData.personal.employeeId}</p>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Type <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.employmentType}</p>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Company <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.company}</p>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Branch <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.branch}</p>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Department <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.department}</p>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Designation <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{profileData.employment.designation}</p>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Location <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.location}</p>
-                        </div>
-                        <div className="bg-blue-50/50 border border-blue-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-blue-500 uppercase tracking-wider mb-1 flex items-center gap-1">Shift <FaLock className="text-blue-300 text-[8px]" /></p>
+                {/* EMPLOYMENT INFO */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex flex-col h-full relative overflow-hidden transition-shadow hover:shadow-md">
+                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+
+                    <SectionHeader
+                        icon={FaBriefcase}
+                        iconBg="bg-orange-50"
+                        iconColor="text-[#f77704]"
+                        title="Employment Info"
+                        badge="Read Only"
+                    />
+
+                    <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
+                        <InfoTile label="Employee ID" value={profileData.personal.employeeId} />
+                        <InfoTile label="Employment Type" value={profileData.employment.employmentType} />
+                        <InfoTile label="Company" value={profileData.employment.company} />
+                        <InfoTile label="Branch" value={profileData.employment.branch} />
+                        <InfoTile label="Department" value={profileData.employment.department} />
+                        <InfoTile label="Designation" value={profileData.employment.designation} />
+                        <InfoTile label="Location" value={profileData.employment.location} />
+
+                        <div className="bg-blue-50/70 border border-blue-100 p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1.5 truncate">Shift</p>
                             <p className="text-[13px] sm:text-sm font-bold text-[#0437cc] truncate">{profileData.employment.shift}</p>
                         </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Joining Date <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.employment.joiningDate}</p>
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">Reporting Manager <FaLock className="text-slate-300 text-[8px]" /></p>
-                            <p className="text-[13px] sm:text-sm font-bold text-slate-700 truncate">{profileData.employment.reportingManager}</p>
-                        </div>
+
+                        <InfoTile label="Joining Date" value={profileData.employment.joiningDate} />
+                        <InfoTile label="Reporting Manager" value={profileData.employment.reportingManager} />
                     </div>
                 </div>
 
-                {/* Salary & Financial Information (Read Only) */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 relative overflow-hidden lg:col-span-2">
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-sm md:text-base font-bold text-[#010a1f] flex items-center gap-1.5"><FaFileInvoiceDollar className="text-[#0437cc]" /> Financial Structure (Monthly)</h2>
-                            <span className="bg-slate-100 text-slate-500 text-[9px] md:text-[10px] font-bold px-2 py-0.5 rounded hidden sm:flex items-center gap-1"><FaLock className="text-[8px]" /> Read Only</span>
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 relative z-10">
-                        {/* Earnings */}
-                        <div className="bg-green-50/50 p-4 sm:p-5 rounded-xl border border-green-100 flex flex-col">
-                            <h3 className="text-xs md:text-[13px] font-bold text-green-700 uppercase tracking-wider mb-3 border-b border-green-100 pb-2 flex items-center gap-1.5">
-                                <FaPlusCircle /> Earnings
-                            </h3>
-                            <div className="space-y-2.5 flex-1">
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
+                {/* FINANCIAL STRUCTURE */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 relative overflow-hidden lg:col-span-2 transition-shadow hover:shadow-md">
+                    <div className="absolute -bottom-20 -left-20 w-56 h-56 bg-green-100/30 rounded-full blur-3xl pointer-events-none"></div>
+
+                    <SectionHeader
+                        icon={FaFileInvoiceDollar}
+                        iconBg="bg-emerald-50"
+                        iconColor="text-emerald-600"
+                        title="Financial Structure (Monthly)"
+                        badge="Read Only"
+                    />
+
+                    <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+
+                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-5 rounded-2xl border border-green-100/80 overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-green-200/20 rounded-full blur-3xl pointer-events-none"></div>
+
+                            <div className="relative flex items-center gap-2 mb-4 pb-3 border-b border-green-100">
+                                <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                                    <FaPlusCircle className="text-green-700 text-xs" />
+                                </span>
+                                <h3 className="text-xs sm:text-[13px] font-bold text-green-800 uppercase tracking-wider">Earnings</h3>
+                            </div>
+
+                            <div className="relative space-y-2.5">
+                                <div className="flex justify-between items-center text-xs sm:text-sm">
                                     <span className="text-slate-600 font-medium truncate pr-2">CTC (Annual)</span>
                                     <span className="font-bold text-[#0437cc] shrink-0">{formatCurrency(profileData.salary.ctc)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Basic Salary</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.basic)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">HRA</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.hra)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Conveyance</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.conveyance)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Medical</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.medical)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Special Allowance</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.specialAllowance)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Other</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.otherAllowances)}</span>
-                                </div>
+                                {[
+                                    ['Basic Salary', profileData.salary.basic],
+                                    ['HRA', profileData.salary.hra],
+                                    ['Conveyance', profileData.salary.conveyance],
+                                    ['Medical', profileData.salary.medical],
+                                    ['Special Allowance', profileData.salary.specialAllowance],
+                                    ['Other Allowances', profileData.salary.otherAllowances],
+                                ].map(([label, val], i) => (
+                                    <div key={i} className="flex justify-between items-center text-xs sm:text-sm">
+                                        <span className="text-slate-600 font-medium truncate pr-2">{label}</span>
+                                        <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(val)}</span>
+                                    </div>
+                                ))}
                             </div>
-                            <div className="pt-2.5 mt-4 border-t border-green-200 flex justify-between items-center">
-                                <span className="text-xs md:text-sm font-bold text-green-800">Gross</span>
-                                <span className="text-sm md:text-base font-black text-green-700">{formatCurrency(liveGross)}</span>
+
+                            <div className="relative pt-3 mt-4 border-t border-green-200 flex justify-between items-center">
+                                <span className="text-xs sm:text-sm font-bold text-green-800 uppercase tracking-wide">Gross</span>
+                                <span className="text-base sm:text-lg font-black text-green-700">{formatCurrency(liveGross)}</span>
                             </div>
                         </div>
 
-                        {/* Deductions */}
-                        <div className="bg-red-50/50 p-4 sm:p-5 rounded-xl border border-red-100 flex flex-col">
-                            <h3 className="text-xs md:text-[13px] font-bold text-red-600 uppercase tracking-wider mb-3 border-b border-red-100 pb-2 flex items-center gap-1.5">
-                                <FaMinusCircle /> Deductions
-                            </h3>
-                            <div className="space-y-2.5 flex-1">
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">EPF</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.epf)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">ESI</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.esi)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Health Insurance</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.healthInsurance)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Professional Tax</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.pt)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">TDS</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.tds)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[11px] sm:text-xs md:text-sm">
-                                    <span className="text-slate-600 font-medium truncate pr-2">Leaves</span>
-                                    <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(profileData.salary.leaves)}</span>
-                                </div>
+                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-5 rounded-2xl border border-red-100/80 overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-red-200/20 rounded-full blur-3xl pointer-events-none"></div>
+
+                            <div className="relative flex items-center gap-2 mb-4 pb-3 border-b border-red-100">
+                                <span className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
+                                    <FaMinusCircle className="text-red-600 text-xs" />
+                                </span>
+                                <h3 className="text-xs sm:text-[13px] font-bold text-red-700 uppercase tracking-wider">Deductions</h3>
                             </div>
-                            <div className="pt-2.5 mt-4 border-t border-red-200 flex justify-between items-center">
-                                <span className="text-xs md:text-sm font-bold text-red-800">Total Deductions</span>
-                                <span className="text-sm md:text-base font-black text-red-600">- {formatCurrency(liveDeductions)}</span>
+
+                            <div className="relative space-y-2.5">
+                                {[
+                                    ['EPF', profileData.salary.epf],
+                                    ['ESI', profileData.salary.esi],
+                                    ['Health Insurance', profileData.salary.healthInsurance],
+                                    ['Professional Tax', profileData.salary.pt],
+                                    ['TDS', profileData.salary.tds],
+                                    ['Leaves', profileData.salary.leaves],
+                                ].map(([label, val], i) => (
+                                    <div key={i} className="flex justify-between items-center text-xs sm:text-sm">
+                                        <span className="text-slate-600 font-medium truncate pr-2">{label}</span>
+                                        <span className="font-bold text-[#010a1f] shrink-0">{formatCurrency(val)}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="relative pt-3 mt-4 border-t border-red-200 flex justify-between items-center">
+                                <span className="text-xs sm:text-sm font-bold text-red-800 uppercase tracking-wide">Total Deductions</span>
+                                <span className="text-base sm:text-lg font-black text-red-600">- {formatCurrency(liveDeductions)}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Bank Information */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col h-full">
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                        <h2 className="text-sm md:text-base font-bold text-[#010a1f] flex items-center gap-1.5"><FaUniversity className="text-[#0437cc]" /> Bank & Statutory Info</h2>
-                        {!isEditing.bank ? (
-                            <button onClick={() => toggleEdit('bank')} className="text-xs font-semibold text-[#0437cc] hover:underline">Edit</button>
-                        ) : (
-                            <div className="flex gap-3">
-                                <button onClick={() => handleCancel('bank')} className="text-xs font-semibold text-slate-500 hover:underline">Cancel</button>
-                                <button onClick={() => handleSave('bank')} className="text-xs font-semibold text-green-600 hover:underline">Save</button>
-                            </div>
-                        )}
-                    </div>
+                {/* BANK INFO */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex flex-col h-full transition-shadow hover:shadow-md">
+                    <SectionHeader
+                        icon={FaUniversity}
+                        iconBg="bg-blue-50"
+                        iconColor="text-[#0437cc]"
+                        title="Bank & Statutory Info"
+                        action={
+                            !isEditing.bank ? (
+                                <button onClick={() => toggleEdit('bank')} className="text-[11px] sm:text-xs font-bold text-[#0437cc] hover:text-[#0437cc]/80 hover:underline transition-colors">
+                                    Edit
+                                </button>
+                            ) : (
+                                <div className="flex gap-3">
+                                    <button onClick={() => handleCancel('bank')} className="text-[11px] sm:text-xs font-bold text-slate-500 hover:underline">Cancel</button>
+                                    <button onClick={() => handleSave('bank')} className="text-[11px] sm:text-xs font-bold text-green-600 hover:underline">Save</button>
+                                </div>
+                            )
+                        }
+                    />
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
-                        <div className="sm:col-span-2 bg-blue-50/50 border border-blue-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-blue-600 uppercase tracking-wider mb-1">UAN NO (Universal Account Number)</p>
+
+                        <div className={`sm:col-span-2 bg-gradient-to-br from-blue-50 to-blue-50/50 border border-blue-100 p-3.5 rounded-xl min-w-0 ${isEditing.bank ? 'ring-1 ring-[#0437cc]/20 bg-white' : ''}`}>
+                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1.5">UAN No (Universal Account Number)</p>
                             {isEditing.bank ? (
                                 <input type="text" name="uan_no" value={editForm.bank.uan_no} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} placeholder="12-digit UAN" />
                             ) : (
-                                <p className="text-[13px] sm:text-sm md:text-base font-bold text-[#0437cc] truncate tracking-wide">{profileData.bank.uanNo}</p>
+                                <p className="text-base sm:text-lg font-black text-[#0437cc] truncate tracking-wider">{profileData.bank.uanNo}</p>
                             )}
                         </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Account Holder Name</p>
-                            {isEditing.bank ? (
-                                <input type="text" name="account_holder" value={editForm.bank.account_holder} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />
-                            ) : (
-                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{profileData.bank.accountHolder}</p>
-                            )}
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Bank Name</p>
-                            {isEditing.bank ? (
-                                <input type="text" name="bank_name" value={editForm.bank.bank_name} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />
-                            ) : (
-                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{profileData.bank.bankName}</p>
-                            )}
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Account Number</p>
+
+                        <InfoTile
+                            label="Account Holder Name"
+                            value={profileData.bank.accountHolder}
+                            editing={isEditing.bank}
+                            input={<input type="text" name="account_holder" value={editForm.bank.account_holder} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />}
+                        />
+
+                        <InfoTile
+                            label="Bank Name"
+                            value={profileData.bank.bankName}
+                            editing={isEditing.bank}
+                            input={<input type="text" name="bank_name" value={editForm.bank.bank_name} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />}
+                        />
+
+                        <div className={`bg-slate-50/70 border border-slate-100 p-3 rounded-xl min-w-0 ${isEditing.bank ? 'ring-1 ring-[#0437cc]/20 bg-white' : ''}`}>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Account Number</p>
                             {isEditing.bank ? (
                                 <input type="text" name="account_number" value={editForm.bank.account_number} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />
                             ) : (
                                 <p className="text-[13px] sm:text-sm font-mono font-bold text-slate-700 truncate">{profileData.bank.accountNumber}</p>
                             )}
                         </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">IFSC Code</p>
+
+                        <div className={`bg-slate-50/70 border border-slate-100 p-3 rounded-xl min-w-0 ${isEditing.bank ? 'ring-1 ring-[#0437cc]/20 bg-white' : ''}`}>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">IFSC Code</p>
                             {isEditing.bank ? (
                                 <input type="text" name="ifsc" value={editForm.bank.ifsc} onChange={(e) => handleInputChange('bank', e)} className={inputStyles} />
                             ) : (
@@ -608,61 +727,78 @@ const EmployeeMyProfileCom = () => {
                     </div>
                 </div>
 
-                {/* Emergency Contact */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 lg:p-6 flex flex-col h-full">
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                        <h2 className="text-sm md:text-base font-bold text-[#010a1f]">Emergency Contact</h2>
-                        {!isEditing.emergency ? (
-                            <button onClick={() => toggleEdit('emergency')} className="text-xs font-semibold text-[#0437cc] hover:underline">Edit</button>
-                        ) : (
-                            <div className="flex gap-3">
-                                <button onClick={() => handleCancel('emergency')} className="text-xs font-semibold text-slate-500 hover:underline">Cancel</button>
-                                <button onClick={() => handleSave('emergency')} className="text-xs font-semibold text-green-600 hover:underline">Save</button>
-                            </div>
-                        )}
-                    </div>
+                {/* EMERGENCY CONTACT */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex flex-col h-full transition-shadow hover:shadow-md">
+                    <SectionHeader
+                        icon={FaPhoneAlt}
+                        iconBg="bg-red-50"
+                        iconColor="text-red-500"
+                        title="Emergency Contact"
+                        action={
+                            !isEditing.emergency ? (
+                                <button onClick={() => toggleEdit('emergency')} className="text-[11px] sm:text-xs font-bold text-[#0437cc] hover:text-[#0437cc]/80 hover:underline transition-colors">
+                                    Edit
+                                </button>
+                            ) : (
+                                <div className="flex gap-3">
+                                    <button onClick={() => handleCancel('emergency')} className="text-[11px] sm:text-xs font-bold text-slate-500 hover:underline">Cancel</button>
+                                    <button onClick={() => handleSave('emergency')} className="text-[11px] sm:text-xs font-bold text-green-600 hover:underline">Save</button>
+                                </div>
+                            )
+                        }
+                    />
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
-                        <div className="sm:col-span-2 bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Name</p>
+                        <div className="sm:col-span-2 bg-red-50/50 border border-red-100/70 p-3 rounded-xl min-w-0">
+                            <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-1.5">Contact Name</p>
                             {isEditing.emergency ? (
                                 <input type="text" name="emergency_name" value={editForm.emergency.emergency_name} onChange={(e) => handleInputChange('emergency', e)} className={inputStyles} />
                             ) : (
                                 <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">{profileData.emergency.name}</p>
                             )}
                         </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Relation</p>
-                            {isEditing.emergency ? (
-                                <input type="text" name="emergency_relationship" value={editForm.emergency.emergency_relationship} onChange={(e) => handleInputChange('emergency', e)} className={inputStyles} />
-                            ) : (
-                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 truncate">{profileData.emergency.relationship}</p>
-                            )}
-                        </div>
-                        <div className="bg-slate-50 border border-slate-100 p-2.5 sm:p-3 rounded-xl min-w-0">
-                            <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone</p>
-                            {isEditing.emergency ? (
-                                <input type="tel" name="emergency_phone" value={editForm.emergency.emergency_phone} onChange={(e) => handleInputChange('emergency', e)} className={inputStyles} />
-                            ) : (
-                                <p className="text-[13px] sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate"><FaPhoneAlt className="text-slate-300 shrink-0" /> <span className="truncate">{profileData.emergency.phone}</span></p>
-                            )}
-                        </div>
+
+                        <InfoTile
+                            label="Relationship"
+                            value={profileData.emergency.relationship}
+                            editing={isEditing.emergency}
+                            input={<input type="text" name="emergency_relationship" value={editForm.emergency.emergency_relationship} onChange={(e) => handleInputChange('emergency', e)} className={inputStyles} />}
+                        />
+
+                        <InfoTile
+                            label="Phone"
+                            value={profileData.emergency.phone}
+                            icon={<FaPhoneAlt className="text-[10px]" />}
+                            editing={isEditing.emergency}
+                            input={<input type="tel" name="emergency_phone" value={editForm.emergency.emergency_phone} onChange={(e) => handleInputChange('emergency', e)} className={inputStyles} />}
+                        />
                     </div>
                 </div>
             </div>
 
-            {/* Hidden Photo Crop/Adjust Modal */}
+            {/* ==================== PHOTO CROP MODAL ==================== */}
             {photoModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#010a1f]/80 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-w-sm w-full relative animate-in zoom-in-95 duration-200">
-                        <button onClick={() => setPhotoModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors p-2 bg-slate-100 rounded-full z-10">
-                            <FaTimes />
+                    <div className="relative bg-white rounded-3xl shadow-2xl p-6 sm:p-7 max-w-sm w-full animate-in zoom-in-95 duration-200">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704] rounded-t-3xl"></div>
+
+                        <button
+                            onClick={() => setPhotoModalOpen(false)}
+                            className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors rounded-lg z-10"
+                        >
+                            <FaTimes className="text-sm" />
                         </button>
 
-                        <h2 className="text-lg sm:text-xl font-bold text-[#010a1f] mb-2 text-center">Adjust Profile Photo</h2>
-                        <p className="text-[11px] sm:text-xs text-slate-500 text-center mb-6">Drag and zoom to perfectly frame your avatar.</p>
+                        <div className="text-center mb-6">
+                            <div className="inline-flex w-12 h-12 rounded-2xl bg-blue-50 items-center justify-center mb-3">
+                                <FaUserEdit className="text-[#0437cc] text-lg" />
+                            </div>
+                            <h2 className="text-lg sm:text-xl font-bold text-[#010a1f] mb-1">Adjust Profile Photo</h2>
+                            <p className="text-[11px] sm:text-xs text-slate-500">Drag and zoom to perfectly frame your avatar.</p>
+                        </div>
 
                         <div className="flex justify-center mb-6">
-                            <div className="w-40 h-40 sm:w-48 sm:h-48 rounded-full overflow-hidden border-4 border-slate-100 shadow-inner relative bg-slate-50">
+                            <div className="w-44 h-44 sm:w-48 sm:h-48 rounded-full overflow-hidden border-4 border-slate-100 shadow-xl shadow-slate-200/60 relative bg-slate-50">
                                 <Cropper
                                     image={selectedPhoto}
                                     crop={crop}
@@ -677,10 +813,10 @@ const EmployeeMyProfileCom = () => {
                             </div>
                         </div>
 
-                        <div className="mb-6 px-2 sm:px-4">
-                            <label className="text-[11px] sm:text-xs font-bold text-slate-500 flex justify-between mb-2">
+                        <div className="mb-6 px-1">
+                            <label className="text-[11px] font-bold text-slate-500 flex justify-between mb-2">
                                 <span>Zoom Adjust</span>
-                                <span className="text-[#0437cc]">{Math.round(zoomLevel * 100)}%</span>
+                                <span className="text-[#0437cc] font-bold">{Math.round(zoomLevel * 100)}%</span>
                             </label>
                             <input
                                 type="range"
@@ -692,10 +828,10 @@ const EmployeeMyProfileCom = () => {
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-3 relative z-10">
-                            <Button variant="ghost" fullWidth onClick={() => setPhotoModalOpen(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 order-2 sm:order-1 text-sm py-2">
+                            <Button variant="ghost" fullWidth onClick={() => setPhotoModalOpen(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 order-2 sm:order-1 text-sm py-2 rounded-xl">
                                 Cancel
                             </Button>
-                            <Button variant="primary" fullWidth onClick={handlePhotoSave} disabled={isUploadingPhoto} className="shadow-lg shadow-[#0437cc]/25 order-1 sm:order-2 text-sm py-2">
+                            <Button variant="primary" fullWidth onClick={handlePhotoSave} disabled={isUploadingPhoto} className="shadow-lg shadow-[#0437cc]/25 order-1 sm:order-2 text-sm py-2 rounded-xl">
                                 {isUploadingPhoto ? 'Saving...' : 'Save Photo'}
                             </Button>
                         </div>

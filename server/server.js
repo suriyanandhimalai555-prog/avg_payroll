@@ -4,10 +4,7 @@ import dotenv from 'dotenv';
 import cluster from 'cluster';
 import os from 'os';
 
-// Load environment variables immediately
 dotenv.config();
-
-// Environment Variable Safety Check
 if (!process.env.JWT_SECRET) {
     console.error('FATAL ERROR: JWT_SECRET is not defined in the .env file. Shutting down to prevent insecure authentication.');
     process.exit(1);
@@ -27,6 +24,9 @@ import saAttendanceRoutes from './routes/superadmin/saAttendanceRoutes.js';
 import saHrUserRoutes from './routes/superadmin/saHrUserRoutes.js';
 import saManagerRoutes from './routes/superadmin/saManagerRoutes.js';
 import saReimbursementRoutes from './routes/superadmin/saReimbursementRoutes.js';
+
+import hrProfileRoutes from './routes/hr/hrProfileRoutes.js';
+import hrAttendanceRoutes from './routes/hr/hrAttendanceRoutes.js';
 
 import employeeProfileRoutes from './routes/employee/empProfileRoutes.js';
 import empAttendanceRoutes from './routes/employee/empAttendanceRoutes.js';
@@ -48,6 +48,8 @@ import initializeSALeavePolicyModel from './models/superadmin/SALeavePolicy.js';
 import initializeSAHrUserModel from './models/superadmin/SAHrUser.js';
 import initializeSAManagerModel from './models/superadmin/SAManager.js';
 
+import initializeHrAttendanceModel from './models/hr/HrAttendance.js';
+
 import initializeAttendanceModel from './models/employee/EmpAttendance.js';
 import initializeLeaveModels from './models/employee/EmpLeave.js';
 import initializeReimbursementModels from './models/employee/EmpReimbursement.js';
@@ -67,6 +69,8 @@ const initializeDatabase = async () => {
         await initializeSALeavePolicyModel();
         await initializeSAHrUserModel();
         await initializeSAManagerModel();
+
+        await initializeHrAttendanceModel();
 
         await initializeAttendanceModel();
         await initializeLeaveModels();
@@ -103,7 +107,6 @@ if (cluster.isPrimary) {
         optionsSuccessStatus: 200
     }));
 
-    // Limit set to 50mb to handle high-res receipt uploads
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -121,6 +124,9 @@ if (cluster.isPrimary) {
     app.use('/api/sa-hr-users', saHrUserRoutes);
     app.use('/api/sa-managers', saManagerRoutes);
     app.use('/api/sa-reimbursements', saReimbursementRoutes);
+
+    app.use('/api/hr-profile', hrProfileRoutes);
+    app.use('/api/hr-attendance', hrAttendanceRoutes);
 
     app.use('/api/employee-profile', employeeProfileRoutes);
     app.use('/api/attendance', empAttendanceRoutes);

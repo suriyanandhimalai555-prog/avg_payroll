@@ -20,8 +20,8 @@ export const createHrUser = async (req, res) => {
     try {
         const data = req.body;
         
-        if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.uanNo || !data.dob || !data.gender || !data.joiningDate) {
-            return res.status(400).json({ message: "Missing mandatory details. Please complete all fields marked with *." });
+        if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.shift || !data.uanNo || !data.dob || !data.gender || !data.joiningDate) {
+            return res.status(400).json({ message: "Missing mandatory details including target Shift. Please complete all fields marked with *." });
         }
 
         const currentYear = new Date().getFullYear();
@@ -36,7 +36,7 @@ export const createHrUser = async (req, res) => {
         let newSequence = 1;
         if (lastHrResult.rows.length > 0) {
             const lastId = lastHrResult.rows[0].hr_id;
-            const parts = lastId.split('-'); // e.g., AVG-HR-2026-001
+            const parts = lastId.split('-'); 
             newSequence = parseInt(parts[3], 10) + 1;
         }
 
@@ -44,24 +44,23 @@ export const createHrUser = async (req, res) => {
 
         const insertQuery = `
             INSERT INTO sa_hr_users (
-                hr_id, first_name, last_name, email, phone, dob, gender, joining_date, company, branch, department, designation, md, status,
+                hr_id, first_name, last_name, email, phone, dob, gender, joining_date, company, branch, department, designation, shift, md, status,
                 ctc, monthly_salary, basic_salary, hra, conveyance, medical, special_allowance, other_allowances, 
                 epf, esi, health_insurance, pt, tds, leaves,
-                uan_no, bank_name, account_holder, account_number, ifsc, permissions
+                uan_no, bank_name, account_holder, account_number, ifsc
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                $15, $16, $17, $18, $19, $20, $21, $22,
-                $23, $24, $25, $26, $27, $28,
-                $29, $30, $31, $32, $33, $34
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                $16, $17, $18, $19, $20, $21, $22, $23,
+                $24, $25, $26, $27, $28, $29,
+                $30, $31, $32, $33, $34
             ) RETURNING *;
         `;
 
         const values = [
-            generatedHrId, data.firstName, data.lastName, data.email, data.phone, data.dob, data.gender, data.joiningDate, data.company, data.branch, data.department, data.designation, data.md, data.status,
+            generatedHrId, data.firstName, data.lastName, data.email, data.phone, data.dob, data.gender, data.joiningDate, data.company, data.branch, data.department, data.designation, data.shift, data.md, data.status,
             parseNum(data.ctc), parseNum(data.monthlySalary), parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.specialAllowance), parseNum(data.otherAllowances),
             parseNum(data.epf), parseNum(data.esi), parseNum(data.healthInsurance), parseNum(data.pt), parseNum(data.tds), parseNum(data.leaves),
-            data.uanNo, data.bankName, data.accountHolder, data.accountNumber, data.ifsc,
-            JSON.stringify(data.permissions || {})
+            data.uanNo, data.bankName, data.accountHolder, data.accountNumber, data.ifsc
         ];
 
         const result = await pool.query(insertQuery, values);
@@ -131,14 +130,13 @@ export const updateHrUser = async (req, res) => {
 
         const updateQuery = `
             UPDATE sa_hr_users SET
-                first_name = $1, last_name = $2, email = $3, phone = $4, dob = $5, gender = $6, joining_date = $7, company = $8, branch = $9, department = $10, designation = $11, md = $12, status = $13,
-                ctc = $14, monthly_salary = $15, basic_salary = $16, hra = $17, conveyance = $18, medical = $19, special_allowance = $20, other_allowances = $21, 
-                epf = $22, esi = $23, health_insurance = $24, pt = $25, tds = $26, leaves = $27,
-                uan_no = $28, bank_name = $29, account_holder = $30, account_number = $31, ifsc = $32, permissions = $33
+                first_name = $1, last_name = $2, email = $3, phone = $4, dob = $5, gender = $6, joining_date = $7, company = $8, branch = $9, department = $10, designation = $11, shift = $12, md = $13, status = $14,
+                ctc = $15, monthly_salary = $16, basic_salary = $17, hra = $18, conveyance = $19, medical = $20, special_allowance = $21, other_allowances = $22, 
+                epf = $23, esi = $24, health_insurance = $25, pt = $26, tds = $27, leaves = $28,
+                uan_no = $29, bank_name = $30, account_holder = $31, account_number = $32, ifsc = $33
             WHERE id = $34 RETURNING *;
         `;
 
-        // Apply strict fallbacks to support both React components safely
         const values = [
             data.firstName || data.first_name, 
             data.lastName || data.last_name, 
@@ -151,6 +149,7 @@ export const updateHrUser = async (req, res) => {
             data.branch, 
             data.department, 
             data.designation, 
+            data.shift,
             data.md, 
             data.status,
             parseNum(data.ctc), 
@@ -172,7 +171,6 @@ export const updateHrUser = async (req, res) => {
             data.accountHolder || data.account_holder, 
             data.accountNumber || data.account_number, 
             data.ifsc, 
-            JSON.stringify(data.permissions || {}),
             id
         ];
 
