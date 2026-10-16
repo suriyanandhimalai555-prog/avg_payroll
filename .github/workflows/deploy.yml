@@ -1,5 +1,4 @@
-
-name: Deploy to Kubernetes
+name: Deploy AVG Payroll to Kubernetes
 
 on:
   workflow_run:
@@ -20,17 +19,20 @@ concurrency:
 jobs:
   deploy:
     name: Deploy AVG Payroll
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main'
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout the image build commit
+      - name: Checkout exact build commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Verify required SSH secrets
+      - name: Validate required SSH settings
         env:
           SSH_HOST: ${{ secrets.AVGPAYROLL_SSH_HOST }}
           SSH_USERNAME: ${{ secrets.AVGPAYROLL_SSH_USERNAME }}
@@ -42,142 +44,461 @@ jobs:
           test -n "$SSH_USERNAME"
           test -n "$SSH_PRIVATE_KEY"
           test -n "$SSH_FINGERPRINT"
-          echo "Required SSH secrets are configured."
+          echo "Required SSH settings are present."
 
-      - name: Configure SSH and verify VPS host
+      - name: Configure verified SSH connection
         env:
           SSH_HOST: ${{ secrets.AVGPAYROLL_SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.AVGPAYROLL_SSH_USERNAME }}
           SSH_PRIVATE_KEY: ${{ secrets.AVGPAYROLL_SSH_PRIVATE_KEY }}
           SSH_FINGERPRINT: ${{ secrets.AVGPAYROLL_SSH_FINGERPRINT }}
         run: |
           set -euo pipefail
-          umask 077
-          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/avgpayroll_key"
-          unset SSH_PRIVATE_KEY
-          chmod 600 "$RUNNER_TEMP/avgpayroll_key"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/avgpayroll_key"
+          chmod 600 "$HOME/.ssh/avgpayroll_key"
 
           ssh-keyscan -T 10 -t ed25519 "$SSH_HOST" \
-            2>/dev/null > "$RUNNER_TEMP/avgpayroll_known_hosts"
+            > "$HOME/.ssh/avgpayroll_known_hosts" 2>/dev/null
+          test -s "$HOME/.ssh/avgpayroll_known_hosts"
 
-          ACTUAL="$(ssh-keygen -lf "$RUNNER_TEMP/avgpayroll_known_hosts" | awk 'NR==1 {print $2}')"
-          if [ "$ACTUAL" != "$SSH_FINGERPRINT" ]; then
-            echo "VPS host fingerprint mismatch; refusing connection."
+          ACTUAL="$(
+            ssh-keygen -lf "$HOME/.ssh/avgpayroll_known_hosts" -E sha256 |
+            awk 'NR == 1 {print $2}'
+          )"
+
+          if [[ "$ACTUAL" != "$SSH_FINGERPRINT" ]]; then
+            echo "ERROR: SSH host fingerprint does not match."
             exit 1
           fi
-          echo "VPS host fingerprint verified."
 
-      - name: Validate deployment manifests
-        run: |
-          set -euo pipefail
-          test -f k8s/namespace.yaml
-          test -f k8s/backend.yaml
-          test -f k8s/frontend.yaml
-          test -f k8s/ingress.yaml
+          {
+            echo "SSH_HOST=$SSH_HOST"
+            echo "SSH_USERNAME=$SSH_USERNAME"
+          } >> "$GITHUB_ENV"
 
+          echo "SSH host fingerprint verified."
 
-      - name: Prepare manifests for this commit
+      - name: Prepare exact image tags
         env:
           IMAGE_TAG: sha-${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if [[ ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ ]]; then
-            echo "Invalid image tag."
-            exit 1
-          fi
 
-          sed -E "s|(image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-backend:).*|\1${IMAGE_TAG}|" \
+          [[ "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ ]] || {
+            echo "ERROR: Invalid image tag."
+            exit 1
+          }
+
+          for file in \
+            k8s/namespace.yaml \
+            k8s/backend.yaml \
+            k8s/frontend.yaml \
+            k8s/ingress.yaml; do
+            test -f "$file"
+          done
+
+          sed -E \
+            "s|(image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-backend:).*|\1${IMAGE_TAG}|" \
             k8s/backend.yaml > "$RUNNER_TEMP/avgpayroll-backend.yaml"
 
-          sed -E "s|(image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-frontend:).*|\1${IMAGE_TAG}|" \
+          sed -E \
+            "s|(image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-frontend:).*|\1${IMAGE_TAG}|" \
             k8s/frontend.yaml > "$RUNNER_TEMP/avgpayroll-frontend.yaml"
 
-          grep -F "avgpayroll-backend:${IMAGE_TAG}" "$RUNNER_TEMP/avgpayroll-backend.yaml"
-          grep -F "avgpayroll-frontend:${IMAGE_TAG}" "$RUNNER_TEMP/avgpayroll-frontend.yaml"
+          grep -F "avgpayroll-backend:${IMAGE_TAG}" \
+            "$RUNNER_TEMP/avgpayroll-backend.yaml"
+          grep -F "avgpayroll-frontend:${IMAGE_TAG}" \
+            "$RUNNER_TEMP/avgpayroll-frontend.yaml"
 
-      - name: Copy manifests to VPS
+          echo "Exact build image tags verified."
+
+      - name: Copy AVG Payroll manifests to server
         env:
-          SSH_HOST: ${{ secrets.AVGPAYROLL_SSH_HOST }}
-          SSH_USERNAME: ${{ secrets.AVGPAYROLL_SSH_USERNAME }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
+
           SSH_OPTS=(
-            -i "$RUNNER_TEMP/avgpayroll_key"
-            -o IdentitiesOnly=yes
-            -o BatchMode=yes
+            -i "$HOME/.ssh/avgpayroll_key"
+            -o UserKnownHostsFile="$HOME/.ssh/avgpayroll_known_hosts"
             -o StrictHostKeyChecking=yes
-            -o UserKnownHostsFile="$RUNNER_TEMP/avgpayroll_known_hosts"
+            -o IdentitiesOnly=yes
           )
 
-          scp "${SSH_OPTS[@]}" k8s/namespace.yaml \
-            "$SSH_USERNAME@$SSH_HOST:/tmp/avgpayroll-namespace-${GITHUB_SHA}.yaml"
-          scp "${SSH_OPTS[@]}" "$RUNNER_TEMP/avgpayroll-backend.yaml" \
-            "$SSH_USERNAME@$SSH_HOST:/tmp/avgpayroll-backend-${GITHUB_SHA}.yaml"
-          scp "${SSH_OPTS[@]}" "$RUNNER_TEMP/avgpayroll-frontend.yaml" \
-            "$SSH_USERNAME@$SSH_HOST:/tmp/avgpayroll-frontend-${GITHUB_SHA}.yaml"
-          scp "${SSH_OPTS[@]}" k8s/ingress.yaml \
-            "$SSH_USERNAME@$SSH_HOST:/tmp/avgpayroll-ingress-${GITHUB_SHA}.yaml"
+          REMOTE_DIR="/tmp/avgpayroll-deploy-${SHA}"
 
-      - name: Restore namespace and deploy resources
+          ssh "${SSH_OPTS[@]}" "$SSH_USERNAME@$SSH_HOST" \
+            "mkdir -p '$REMOTE_DIR' && chmod 700 '$REMOTE_DIR'"
+
+          scp "${SSH_OPTS[@]}" \
+            k8s/namespace.yaml \
+            "$RUNNER_TEMP/avgpayroll-backend.yaml" \
+            "$RUNNER_TEMP/avgpayroll-frontend.yaml" \
+            k8s/ingress.yaml \
+            "$SSH_USERNAME@$SSH_HOST:$REMOTE_DIR/"
+
+          echo "AVG Payroll manifests copied."
+
+      - name: Validate and deploy AVG Payroll
+        id: remote_deploy
         env:
-          SSH_HOST: ${{ secrets.AVGPAYROLL_SSH_HOST }}
-          SSH_USERNAME: ${{ secrets.AVGPAYROLL_SSH_USERNAME }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
+
           SSH_OPTS=(
-            -i "$RUNNER_TEMP/avgpayroll_key"
-            -o IdentitiesOnly=yes
-            -o BatchMode=yes
+            -i "$HOME/.ssh/avgpayroll_key"
+            -o UserKnownHostsFile="$HOME/.ssh/avgpayroll_known_hosts"
             -o StrictHostKeyChecking=yes
-            -o UserKnownHostsFile="$RUNNER_TEMP/avgpayroll_known_hosts"
+            -o IdentitiesOnly=yes
           )
 
           ssh "${SSH_OPTS[@]}" "$SSH_USERNAME@$SSH_HOST" \
-            "set -eu
-             if [ ! -f /home/ubuntu/office/apps/avg_payroll/server/.env ]; then
-               echo 'Required server/.env file is missing.'
-               exit 1
-             fi
-             if ! grep -qE '^[[:space:]]*DATABASE_URL=' /home/ubuntu/office/apps/avg_payroll/server/.env; then
-               echo 'Required variable DATABASE_URL is missing.'
-               exit 1
-             fi
+            bash -s -- "$SHA" <<'REMOTE'
+          set -Eeuo pipefail
 
-             if ! grep -qE '^[[:space:]]*JWT_SECRET=' /home/ubuntu/office/apps/avg_payroll/server/.env; then
-               echo 'Required variable JWT_SECRET is missing.'
-               exit 1
-             fi
+          SHA="$1"
+          REPO_DIR="/home/ubuntu/office/apps/avg_payroll"
+          ENV_FILE="$REPO_DIR/server/.env"
+          REMOTE_DIR="/tmp/avgpayroll-deploy-${SHA}"
+          STATE_DIR="/tmp/avgpayroll-rollback-${SHA}"
+          NORMALIZED_ENV="$(mktemp /tmp/avgpayroll-env.XXXXXX)"
+          DEPLOY_STARTED=0
 
-             kubectl apply -f /tmp/avgpayroll-namespace-${GITHUB_SHA}.yaml
+          cleanup() {
+            RC=$?
+            trap - EXIT
+            set +e
 
-             kubectl apply --dry-run=server -f /tmp/avgpayroll-backend-${GITHUB_SHA}.yaml
-             kubectl apply --dry-run=server -f /tmp/avgpayroll-frontend-${GITHUB_SHA}.yaml
-             kubectl apply --dry-run=server -f /tmp/avgpayroll-ingress-${GITHUB_SHA}.yaml
+            if [[ "$RC" -ne 0 && "$DEPLOY_STARTED" -eq 1 ]]; then
+              echo "ERROR: Deployment failed; restoring previous AVG Payroll state."
 
-             kubectl create secret generic avgpayroll-backend-env \
-               --namespace avgpayroll \
-               --from-env-file=/home/ubuntu/office/apps/avg_payroll/server/.env \
-               --dry-run=client -o yaml | kubectl apply -f -
+              if [[ -s "$STATE_DIR/images" && -s "$STATE_DIR/secret.json" ]]; then
+                mapfile -t PREVIOUS < "$STATE_DIR/images"
 
-             kubectl apply -f /tmp/avgpayroll-backend-${GITHUB_SHA}.yaml
-             kubectl apply -f /tmp/avgpayroll-frontend-${GITHUB_SHA}.yaml
-             kubectl apply -f /tmp/avgpayroll-ingress-${GITHUB_SHA}.yaml
+                if [[ "${#PREVIOUS[@]}" -eq 4 ]] &&
+                   [[ "${PREVIOUS[0]}" == "backend" ]] &&
+                   [[ "${PREVIOUS[1]}" =~ ^ghcr\.io/suriyanandhimalai555-prog/avgpayroll-backend:[a-zA-Z0-9._-]+$ ]] &&
+                   [[ "${PREVIOUS[2]}" == "frontend" ]] &&
+                   [[ "${PREVIOUS[3]}" =~ ^ghcr\.io/suriyanandhimalai555-prog/avgpayroll-frontend:[a-zA-Z0-9._-]+$ ]]; then
 
-             kubectl -n avgpayroll rollout status deployment/avgpayroll-backend --timeout=300s
-             kubectl -n avgpayroll rollout status deployment/avgpayroll-frontend --timeout=300s
+                  kubectl apply -f "$STATE_DIR/secret.json"
+                  SECRET_RC=$?
 
-             kubectl -n avgpayroll get deployments,pods,services,ingress
+                  kubectl -n avgpayroll set image \
+                    deployment/avgpayroll-backend \
+                    "backend=${PREVIOUS[1]}"
+                  BACKEND_RC=$?
 
-             rm -f /tmp/avgpayroll-namespace-${GITHUB_SHA}.yaml \
-                   /tmp/avgpayroll-backend-${GITHUB_SHA}.yaml \
-                   /tmp/avgpayroll-frontend-${GITHUB_SHA}.yaml \
-                   /tmp/avgpayroll-ingress-${GITHUB_SHA}.yaml"
+                  kubectl -n avgpayroll set image \
+                    deployment/avgpayroll-frontend \
+                    "frontend=${PREVIOUS[3]}"
+                  FRONTEND_RC=$?
 
-      - name: Verify public API health
+                  if [[ "$SECRET_RC" -eq 0 && "$BACKEND_RC" -eq 0 ]]; then
+                    kubectl -n avgpayroll rollout restart \
+                      deployment/avgpayroll-backend
+                    SECRET_RC=$?
+                  fi
+
+                  if [[ "$BACKEND_RC" -eq 0 && "$SECRET_RC" -eq 0 ]]; then
+                    kubectl -n avgpayroll rollout status \
+                      deployment/avgpayroll-backend --timeout=240s
+                    BACKEND_RC=$?
+                  fi
+
+                  if [[ "$FRONTEND_RC" -eq 0 ]]; then
+                    kubectl -n avgpayroll rollout status \
+                      deployment/avgpayroll-frontend --timeout=240s
+                    FRONTEND_RC=$?
+                  fi
+
+                  if [[ "$SECRET_RC" -eq 0 && "$BACKEND_RC" -eq 0 && "$FRONTEND_RC" -eq 0 ]]; then
+                    echo "Previous AVG Payroll images and Secret restored."
+                  else
+                    echo "CRITICAL: Automatic rollback was incomplete."
+                    kubectl -n avgpayroll get deployments,pods
+                  fi
+                else
+                  echo "CRITICAL: Rollback image state is invalid."
+                fi
+              else
+                echo "CRITICAL: Rollback backup is missing."
+              fi
+            fi
+
+            rm -f "$NORMALIZED_ENV"
+            rm -rf "$REMOTE_DIR"
+            exit "$RC"
+          }
+          trap cleanup EXIT
+
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "ERROR: Invalid commit SHA."
+            exit 1
+          }
+
+          test -f "$ENV_FILE" || {
+            echo "ERROR: AVG Payroll server/.env is missing."
+            exit 1
+          }
+
+          # Parse and validate environment without printing secret values.
+          node - "$ENV_FILE" "$NORMALIZED_ENV" <<'NODE'
+          const fs = require('fs');
+          const [source, destination] = process.argv.slice(2);
+          const values = new Map();
+
+          for (const rawLine of fs.readFileSync(source, 'utf8').split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith('#')) continue;
+
+            const index = line.indexOf('=');
+            if (index < 1) continue;
+
+            const key = line.slice(0, index).trim();
+            let value = line.slice(index + 1).trim();
+
+            if (value.length >= 2 &&
+                ((value.startsWith('"') && value.endsWith('"')) ||
+                 (value.startsWith("'") && value.endsWith("'")))) {
+              value = value.slice(1, -1);
+            }
+
+            values.set(key, value);
+          }
+
+          for (const key of ['DATABASE_URL', 'JWT_SECRET']) {
+            if (!values.get(key)) {
+              console.error(`ERROR: Required variable ${key} is missing.`);
+              process.exit(1);
+            }
+          }
+
+          let db;
+          try {
+            db = new URL(values.get('DATABASE_URL'));
+          } catch {
+            console.error('ERROR: DATABASE_URL is invalid.');
+            process.exit(1);
+          }
+
+          if (!['postgres:', 'postgresql:'].includes(db.protocol) ||
+              db.hostname !== 'altaria.proxy.rlwy.net' ||
+              db.port !== '44072' || !db.username || !db.password) {
+            console.error('ERROR: DATABASE_URL does not match the expected database endpoint.');
+            process.exit(1);
+          }
+
+          fs.writeFileSync(
+            destination,
+            [...values.entries()].map(([k, v]) => `${k}=${v}`).join('\n') + '\n',
+            { mode: 0o600 }
+          );
+          console.log('Environment validation passed; values were not printed.');
+          NODE
+
+          chmod 600 "$NORMALIZED_ENV"
+
+          # Validate manifests before making application changes.
+          kubectl apply --dry-run=server -f "$REMOTE_DIR/namespace.yaml"
+          kubectl apply --dry-run=server \
+            -f "$REMOTE_DIR/avgpayroll-backend.yaml" \
+            -f "$REMOTE_DIR/avgpayroll-frontend.yaml" \
+            -f "$REMOTE_DIR/ingress.yaml"
+
+          # Require the existing production Secret and both deployments.
+          kubectl -n avgpayroll get secret avgpayroll-backend-env >/dev/null
+          kubectl -n avgpayroll get deployment avgpayroll-backend >/dev/null
+          kubectl -n avgpayroll get deployment avgpayroll-frontend >/dev/null
+
+          install -d -m 700 "$STATE_DIR"
+          chmod 700 "$STATE_DIR"
+
+          # Save the previous images before touching the workloads.
+          BACKEND_IMAGE="$(
+            kubectl -n avgpayroll get deployment avgpayroll-backend \
+              -o jsonpath='{.spec.template.spec.containers[?(@.name=="backend")].image}'
+          )"
+          FRONTEND_IMAGE="$(
+            kubectl -n avgpayroll get deployment avgpayroll-frontend \
+              -o jsonpath='{.spec.template.spec.containers[?(@.name=="frontend")].image}'
+          )"
+
+          [[ "$BACKEND_IMAGE" =~ ^ghcr\.io/suriyanandhimalai555-prog/avgpayroll-backend:[a-zA-Z0-9._-]+$ ]]
+          [[ "$FRONTEND_IMAGE" =~ ^ghcr\.io/suriyanandhimalai555-prog/avgpayroll-frontend:[a-zA-Z0-9._-]+$ ]]
+
+          printf '%s\n%s\n%s\n%s\n' \
+            backend "$BACKEND_IMAGE" frontend "$FRONTEND_IMAGE" \
+            > "$STATE_DIR/images"
+          chmod 600 "$STATE_DIR/images"
+
+          # Back up only the Secret fields needed to recreate it.
+          kubectl -n avgpayroll get secret avgpayroll-backend-env -o json |
+            node -e '
+              let s = "";
+              process.stdin.on("data", d => s += d);
+              process.stdin.on("end", () => {
+                const x = JSON.parse(s);
+                const out = {
+                  apiVersion: "v1",
+                  kind: "Secret",
+                  metadata: {
+                    name: "avgpayroll-backend-env",
+                    namespace: "avgpayroll"
+                  },
+                  type: x.type || "Opaque",
+                  data: x.data || {}
+                };
+                process.stdout.write(JSON.stringify(out) + "\n");
+              });
+            ' > "$STATE_DIR/secret.json"
+
+          chmod 600 "$STATE_DIR/secret.json"
+          test -s "$STATE_DIR/secret.json"
+
+          # From this point onward, failures trigger automatic rollback.
+          DEPLOY_STARTED=1
+
+          kubectl apply -f "$REMOTE_DIR/namespace.yaml"
+
+          kubectl -n avgpayroll create secret generic avgpayroll-backend-env \
+            --from-env-file="$NORMALIZED_ENV" \
+            --dry-run=client -o yaml |
+            kubectl apply -f -
+
+          kubectl apply -f "$REMOTE_DIR/avgpayroll-backend.yaml"
+          kubectl apply -f "$REMOTE_DIR/avgpayroll-frontend.yaml"
+          kubectl apply -f "$REMOTE_DIR/ingress.yaml"
+
+          # Restart backend pods to load the Secret values.
+          kubectl -n avgpayroll rollout restart deployment/avgpayroll-backend
+
+          kubectl -n avgpayroll rollout status \
+            deployment/avgpayroll-backend --timeout=240s
+          kubectl -n avgpayroll rollout status \
+            deployment/avgpayroll-frontend --timeout=240s
+
+          kubectl -n avgpayroll get deployments,pods,services,ingress
+          echo "AVG Payroll rollout completed."
+          REMOTE
+
+      - name: Check public API and frontend health
+        id: public_health
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error \
-            --retry 5 --retry-delay 5 --retry-connrefused \
-            https://api.avgpayroll.com/health
+
+          for url in \
+            "https://api.avgpayroll.com/health" \
+            "https://avgpayroll.com/" \
+            "https://www.avgpayroll.com/"; do
+
+            echo "Checking ${url}"
+            healthy=0
+
+            for attempt in $(seq 1 12); do
+              if curl --fail --silent --show-error \
+                --connect-timeout 10 --max-time 20 \
+                "$url" -o /dev/null; then
+                echo "PASS: ${url}"
+                healthy=1
+                break
+              fi
+
+              echo "Attempt ${attempt}/12 failed for ${url}."
+              sleep 10
+            done
+
+            if [[ "$healthy" -ne 1 ]]; then
+              echo "ERROR: Public health check failed for ${url}"
+              exit 1
+            fi
+          done
+
+          echo "All public endpoints passed."
+
+      - name: Roll back after public health failure
+        if: failure() && steps.remote_deploy.outcome == 'success' && steps.public_health.outcome == 'failure'
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          SSH_OPTS=(
+            -i "$HOME/.ssh/avgpayroll_key"
+            -o UserKnownHostsFile="$HOME/.ssh/avgpayroll_known_hosts"
+            -o StrictHostKeyChecking=yes
+            -o IdentitiesOnly=yes
+          )
+
+          ssh "${SSH_OPTS[@]}" "$SSH_USERNAME@$SSH_HOST" \
+            bash -s -- "$SHA" <<'REMOTE'
+          set -euo pipefail
+
+          SHA="$1"
+          STATE_DIR="/tmp/avgpayroll-rollback-${SHA}"
+
+          if [[ ! -s "$STATE_DIR/images" || ! -s "$STATE_DIR/secret.json" ]]; then
+            echo "CRITICAL: Rollback backup is missing."
+            exit 1
+          fi
+
+          mapfile -t PREVIOUS < "$STATE_DIR/images"
+
+          if [[ "${#PREVIOUS[@]}" -ne 4 ]] ||
+             [[ "${PREVIOUS[0]}" != "backend" ]] ||
+             [[ ! "${PREVIOUS[1]}" =~ ^ghcr\.io/suriyanandhimalai555-prog/avgpayroll-backend:[a-zA-Z0-9._-]+$ ]] ||
+             [[ "${PREVIOUS[2]}" != "frontend" ]] ||
+             [[ ! "${PREVIOUS[3]}" =~ ^ghcr\.io/suriyanandhimalai555-prog/avgpayroll-frontend:[a-zA-Z0-9._-]+$ ]]; then
+            echo "CRITICAL: Rollback image state failed validation."
+            exit 1
+          fi
+
+          echo "Restoring previous AVG Payroll Secret and images."
+
+          kubectl apply -f "$STATE_DIR/secret.json"
+
+          kubectl -n avgpayroll set image \
+            deployment/avgpayroll-backend "backend=${PREVIOUS[1]}"
+          kubectl -n avgpayroll set image \
+            deployment/avgpayroll-frontend "frontend=${PREVIOUS[3]}"
+
+          kubectl -n avgpayroll rollout restart deployment/avgpayroll-backend
+
+          kubectl -n avgpayroll rollout status \
+            deployment/avgpayroll-backend --timeout=240s
+          kubectl -n avgpayroll rollout status \
+            deployment/avgpayroll-frontend --timeout=240s
+
+          kubectl -n avgpayroll get deployments,pods
+          echo "Previous AVG Payroll images and Secret restored."
+          REMOTE
+
+      - name: Remove rollback backup after successful health checks
+        if: success()
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          SSH_OPTS=(
+            -i "$HOME/.ssh/avgpayroll_key"
+            -o UserKnownHostsFile="$HOME/.ssh/avgpayroll_known_hosts"
+            -o StrictHostKeyChecking=yes
+            -o IdentitiesOnly=yes
+          )
+
+          ssh "${SSH_OPTS[@]}" "$SSH_USERNAME@$SSH_HOST" \
+            "rm -rf -- '/tmp/avgpayroll-rollback-${SHA}'"
+
+          echo "Temporary rollback backup removed."
+
+      - name: Remove temporary SSH files
+        if: always()
+        run: |
+          rm -f "$HOME/.ssh/avgpayroll_key"
+          rm -f "$HOME/.ssh/avgpayroll_known_hosts"
 
   notify-success:
     name: Email deployment success
@@ -185,7 +506,7 @@ jobs:
     if: needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Send success notification
+      - name: Send success email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: ${{ secrets.AVGPAYROLL_SMTP_HOST }}
@@ -195,25 +516,26 @@ jobs:
           password: ${{ secrets.AVGPAYROLL_SMTP_PASSWORD }}
           from: devops@avgprimetech.com
           to: devops@avgprimetech.com, ranjithram878@gmail.com
-          subject: "AVG Payroll Deployment Successful"
+          subject: "AVG Payroll deployment succeeded"
           html_body: |
-            <h2>AVG Payroll Deployment Successful</h2>
-            <table border="1" cellpadding="8">
-              <tr><td><b>Repository</b></td><td>${{ github.repository }}</td></tr>
-              <tr><td><b>Branch</b></td><td>${{ github.event.workflow_run.head_branch }}</td></tr>
-              <tr><td><b>Commit</b></td><td>${{ github.event.workflow_run.head_sha }}</td></tr>
-              <tr><td><b>Developer</b></td><td>${{ github.actor }}</td></tr>
-              <tr><td><b>Architecture</b></td><td>ARM64</td></tr>
-              <tr><td><b>Status</b></td><td>SUCCESS</td></tr>
-            </table>
+            <h2>AVG Payroll deployment succeeded</h2>
+            <p>Branch: ${{ github.event.workflow_run.head_branch }}</p>
+            <p>Commit: ${{ github.event.workflow_run.head_sha }}</p>
+            <p>API and both frontend health checks passed.</p>
+            <p><a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">View deployment run</a></p>
 
   notify-failure:
-    name: Email deployment failure
+    name: Email build or deployment failure
     needs: deploy
-    if: always() && needs.deploy.result == 'failure'
+    if: >-
+      always() &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       needs.deploy.result == 'failure')
     runs-on: ubuntu-latest
     steps:
-      - name: Send failure notification
+      - name: Send failure email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: ${{ secrets.AVGPAYROLL_SMTP_HOST }}
@@ -223,10 +545,10 @@ jobs:
           password: ${{ secrets.AVGPAYROLL_SMTP_PASSWORD }}
           from: devops@avgprimetech.com
           to: devops@avgprimetech.com, ranjithram878@gmail.com
-          subject: "AVG Payroll Deployment Failed"
-          body: |
-            AVG Payroll automatic deployment did not complete successfully.
-            Repository: ${{ github.repository }}
-            Branch: ${{ github.event.workflow_run.head_branch }}
-            Commit: ${{ github.event.workflow_run.head_sha }}
-            Check the GitHub Actions run for details.
+          subject: "AVG Payroll build or deployment failed"
+          html_body: |
+            <h2>AVG Payroll build or deployment failed</h2>
+            <p>Branch: ${{ github.event.workflow_run.head_branch }}</p>
+            <p>Commit: ${{ github.event.workflow_run.head_sha }}</p>
+            <p>Review the build/deployment logs and rollback result.</p>
+            <p><a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">Open workflow run</a></p>
