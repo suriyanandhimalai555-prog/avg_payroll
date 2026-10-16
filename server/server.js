@@ -83,24 +83,42 @@ const initializeDatabase = async () => {
     }
 };
 
-const numCPUs = os.cpus().length;
+//const numCPUs = os.cpus().length;
+const numCPUs = Math.max(
+    1,
+    Number.parseInt(process.env.WORKERS || '1', 10)
+);
 const PORT = process.env.PORT || 5000;
 
 if (cluster.isPrimary) {
     console.log(`Primary Master Process ${process.pid} is running.`);
-    initializeDatabase().then(() => {
-        console.log(`Database ready. Forking traffic across ${numCPUs} CPU cores...`);
+
+    const startWorkers = () => {
+        console.log(`Starting traffic workers across ${numCPUs} CPU cores...`);
         for (let i = 0; i < numCPUs; i++) cluster.fork();
         cluster.on('exit', (worker) => {
             console.warn(`Worker ${worker.process.pid} died. Restarting automatically...`);
             cluster.fork();
         });
-    });
+    };
+
+    if (process.env.RUN_DB_INITIALIZERS === 'true') {
+        console.warn('RUN_DB_INITIALIZERS=true: startup schema initializers are enabled.');
+        initializeDatabase().then(startWorkers);
+    } else {
+        console.log('Startup schema initializers skipped; RUN_DB_INITIALIZERS is not true.');
+        startWorkers();
+    }
 } else {
     const app = express();
 
     app.use(cors({
-        origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5173/'],
+        origin: [
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            'https://avgpayroll.com',
+            'https://www.avgpayroll.com'
+        ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
         credentials: true,
