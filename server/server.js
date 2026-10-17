@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import cluster from 'cluster';
 import os from 'os';
+import pool from './config/db.js';
 
 dotenv.config();
 if (!process.env.JWT_SECRET) {
@@ -127,6 +128,22 @@ if (cluster.isPrimary) {
 
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+    // Kubernetes health checks: liveness does not depend on the database.
+    app.get('/health/live', (_req, res) => {
+        res.status(200).json({ status: 'ok' });
+    });
+
+    // Readiness requires a successful, read-only PostgreSQL query.
+    app.get('/health/ready', async (_req, res) => {
+        try {
+            await pool.query({ text: 'SELECT 1', query_timeout: 2000 });
+            res.status(200).json({ status: 'ready' });
+        } catch {
+            res.status(503).json({ status: 'not_ready' });
+        }
+    });
+
 
     app.use('/api/auth', authRoutes);
     app.use('/api/sa-employees', saEmployeeRoutes);

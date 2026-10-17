@@ -1,0 +1,29 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies and build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+.DS_Store
+coverage/
+
+# Local editor files
+.vscode/
+.idea/
+
+# Local backup copies
+*.before-*
+*.bak
