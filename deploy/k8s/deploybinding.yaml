@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: avgpayroll-ci-deployer
+  namespace: avgpayroll-fresh
+subjects:
+  - kind: ServiceAccount
+    name: avgpayroll-ci-deployer
+    namespace: avgpayroll-fresh
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: avgpayroll-ci-deployer

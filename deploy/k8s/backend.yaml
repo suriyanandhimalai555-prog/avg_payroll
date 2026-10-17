@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: avgpayroll-backend
+  namespace: avgpayroll-fresh
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: avgpayroll-backend
+  template:
+    metadata:
+      labels:
+        app: avgpayroll-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/suriyanandhimalai555-prog/avgpayroll-backend:sha-d3d9173055647bfeb17530addf927d6c76665e9b
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "5000"
+            - name: WORKERS
+              value: "1"
+            - name: RUN_DB_INITIALIZERS
+              value: "false"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: avgpayroll-app-secrets
+                  key: JWT_SECRET
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: avgpayroll-app-secrets
+                  key: DATABASE_URL
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: avgpayroll-backend
+  namespace: avgpayroll-fresh
+spec:
+  type: ClusterIP
+  selector:
+    app: avgpayroll-backend
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
