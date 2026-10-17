@@ -1,4 +1,3 @@
-
 name: AVG Payroll - Deploy Fresh Test
 
 on:
@@ -68,7 +67,7 @@ jobs:
           ssh-keygen -F "$DEPLOY_HOST" -f "$HOME/.ssh/known_hosts" || true
           ssh-keygen -F "[$DEPLOY_HOST]:22" -f "$HOME/.ssh/known_hosts" || true
 
-      - name: Diagnose SSH host key matching
+      - name: Deploy exact built commit
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.AVGPAYROLL_DEPLOY_HOST }}
