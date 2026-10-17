@@ -76,6 +76,19 @@ export const activateAccount = async (req, res) => {
 export const login = async (req, res) => {
     try {
         const { identifier, password, role } = req.body;
+
+        if (
+            typeof identifier !== 'string' ||
+            !identifier.trim() ||
+            typeof password !== 'string' ||
+            !password ||
+            !['superadmin', 'hr', 'manager', 'employee'].includes(role)
+        ) {
+            return res.status(400).json({
+                message: 'Identifier, password, and a valid login role are required.'
+            });
+        }
+
         let values = [identifier.trim()];
         let result;
 
