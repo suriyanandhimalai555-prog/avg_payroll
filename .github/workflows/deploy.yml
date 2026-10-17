@@ -1,0 +1,79 @@
+name: AVG Payroll - Deploy Fresh Test
+
+on:
+  workflow_run:
+    workflows:
+      - AVG Payroll - Build and Publish Images
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avgpayroll-fresh-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to avgpayroll-fresh
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == 'suriyanandhimalai555-prog/avg_payroll'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Validate source commit
+        shell: bash
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: Invalid commit SHA"
+            exit 1
+          fi
+          echo "Deploying source commit: $DEPLOY_SHA"
+
+      - name: Configure restricted SSH access
+        shell: bash
+        env:
+          DEPLOY_KEY: ${{ secrets.AVGPAYROLL_DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.AVGPAYROLL_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.AVGPAYROLL_DEPLOY_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.AVGPAYROLL_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" || { echo "Missing deployment key"; exit 1; }
+          test -n "$DEPLOY_HOST" || { echo "Missing deployment host"; exit 1; }
+          test -n "$DEPLOY_USER" || { echo "Missing deployment user"; exit 1; }
+          test -n "$DEPLOY_KNOWN_HOSTS" || { echo "Missing pinned SSH host key"; exit 1; }
+
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/avgpayroll_deploy"
+          chmod 600 "$HOME/.ssh/avgpayroll_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          ssh-keygen -y -f "$HOME/.ssh/avgpayroll_deploy" >/dev/null
+          ssh-keygen -lf "$HOME/.ssh/known_hosts" >/dev/null
+
+      - name: Deploy exact built commit
+        shell: bash
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_HOST: ${{ secrets.AVGPAYROLL_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.AVGPAYROLL_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$HOME/.ssh/avgpayroll_deploy" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=10 \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "deploy $DEPLOY_SHA"
