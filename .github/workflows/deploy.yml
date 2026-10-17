@@ -1,3 +1,4 @@
+
 name: AVG Payroll - Deploy Fresh Test
 
 on:
@@ -57,8 +58,37 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
+          echo "===== VALIDATE DEPLOYMENT PRIVATE KEY ====="
           ssh-keygen -y -f "$HOME/.ssh/avgpayroll_deploy" >/dev/null
-          ssh-keygen -lf "$HOME/.ssh/known_hosts" >/dev/null
+
+          echo "===== KNOWN HOSTS FINGERPRINTS ====="
+          ssh-keygen -lf "$HOME/.ssh/known_hosts"
+
+          echo "===== MATCHING HOST ENTRIES ====="
+          ssh-keygen -F "$DEPLOY_HOST" -f "$HOME/.ssh/known_hosts" || true
+          ssh-keygen -F "[$DEPLOY_HOST]:22" -f "$HOME/.ssh/known_hosts" || true
+
+      - name: Diagnose SSH host key matching
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.AVGPAYROLL_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.AVGPAYROLL_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+
+          echo "===== SSH TARGET ====="
+          printf 'Configured host: <%s>\n' "$DEPLOY_HOST"
+          printf 'Configured user: <%s>\n' "$DEPLOY_USER"
+
+          echo "===== VERIFY SERVER HOST KEY ====="
+          ssh -vv \
+            -i "$HOME/.ssh/avgpayroll_deploy" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=10 \
+            "$DEPLOY_USER@$DEPLOY_HOST" true
 
       - name: Deploy exact built commit
         shell: bash
