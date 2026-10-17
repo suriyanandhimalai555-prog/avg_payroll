@@ -52,7 +52,7 @@ jobs:
           test -n "$DEPLOY_KNOWN_HOSTS" || { echo "Missing pinned SSH host key"; exit 1; }
 
           install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/avgpayroll_deploy"
+          printf '%s' "$DEPLOY_KEY" | base64 --decode > "$HOME/.ssh/avgpayroll_deploy"
           chmod 600 "$HOME/.ssh/avgpayroll_deploy"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
