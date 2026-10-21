@@ -5,11 +5,6 @@ import { createActivationToken } from '../../utils/activationToken.js';
 
 dotenv.config();
 
-// ============================================================================
-// FORCE TABLE INITIALIZATION
-// Bypasses the RUN_DB_INITIALIZERS flag to guarantee the foreign key patch runs.
-// ============================================================================
-initializeSAEmployeeModel();
 
 // Explicitly configured for Hostinger Webmail
 const transporter = nodemailer.createTransport({
