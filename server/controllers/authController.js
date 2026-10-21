@@ -138,7 +138,6 @@ export const login = async (req, res) => {
             } else if (role === 'hr') {
                 result = await pool.query(`SELECT * FROM sa_hr_users WHERE email ILIKE $1 OR hr_id ILIKE $1`, values);
             } else if (role === 'manager') {
-                // Try checking manager_id first. If it fails, fallback to just email.
                 try {
                     result = await pool.query(`SELECT * FROM sa_managers WHERE email ILIKE $1 OR manager_id ILIKE $1`, values);
                 } catch (e) {
@@ -196,9 +195,20 @@ export const login = async (req, res) => {
             { expiresIn: '1d' }
         );
 
+        // ============================================================
+        // SUPER SECURITY PROTOCOL: HTTP-ONLY COOKIE
+        // Token is locked in the browser. JavaScript cannot read it.
+        // ============================================================
+        res.cookie('token', token, {
+            httpOnly: true, 
+            secure: process.env.NODE_ENV === 'production', 
+            sameSite: 'strict', 
+            maxAge: 24 * 60 * 60 * 1000 // 1 day
+        });
+
+        // Notice: `token` is NO LONGER sent in the JSON body. It is completely hidden from frontend code.
         res.status(200).json({
             message: 'Login successful',
-            token,
             user: userPayload
         });
 
@@ -534,4 +544,14 @@ export const updateProfile = async (req, res) => {
             message: 'Server error while updating profile.'
         });
     }
+};
+
+// Properly destroys the HttpOnly cookie upon logout
+export const logout = (req, res) => {
+    res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+    });
+    res.status(200).json({ message: 'Logged out successfully' });
 };

@@ -5,6 +5,12 @@ import { createActivationToken } from '../../utils/activationToken.js';
 
 dotenv.config();
 
+// ============================================================================
+// FORCE TABLE INITIALIZATION
+// Bypasses the RUN_DB_INITIALIZERS flag to guarantee the foreign key patch runs.
+// ============================================================================
+initializeSAHrUserModel();
+
 const transporter = nodemailer.createTransport({
     host: 'smtp.hostinger.com',
     port: 465,
@@ -21,27 +27,10 @@ export const createHrUser = async (req, res) => {
     try {
         const data = req.body;
         
-        if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.shift || !data.uanNo || !data.dob || !data.gender || !data.joiningDate) {
-            return res.status(400).json({ message: "Missing mandatory details including target Shift. Please complete all fields marked with *." });
+        // Ensure hrId is manually passed from frontend
+        if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.shift || !data.uanNo || !data.dob || !data.gender || !data.joiningDate || !data.hrId) {
+            return res.status(400).json({ message: "Missing mandatory details including HR ID. Please complete all fields marked with *." });
         }
-
-        const currentYear = new Date().getFullYear();
-
-        const lastHrQuery = `
-            SELECT hr_id FROM sa_hr_users
-            WHERE hr_id LIKE $1
-            ORDER BY id DESC LIMIT 1;
-        `;
-        const lastHrResult = await pool.query(lastHrQuery, [`AVG-HR-${currentYear}-%`]);
-
-        let newSequence = 1;
-        if (lastHrResult.rows.length > 0) {
-            const lastId = lastHrResult.rows[0].hr_id;
-            const parts = lastId.split('-'); 
-            newSequence = parseInt(parts[3], 10) + 1;
-        }
-
-        const generatedHrId = `AVG-HR-${currentYear}-${String(newSequence).padStart(3, '0')}`;
 
         const insertQuery = `
             INSERT INTO sa_hr_users (
@@ -58,7 +47,8 @@ export const createHrUser = async (req, res) => {
         `;
 
         const values = [
-            generatedHrId, data.firstName, data.lastName, data.email, data.phone, data.dob, data.gender, data.joiningDate, data.company, data.branch, data.department, data.designation, data.shift, data.md, data.status,
+            data.hrId, // Manual ID from frontend
+            data.firstName, data.lastName, data.email, data.phone, data.dob, data.gender, data.joiningDate, data.company, data.branch, data.department, data.designation, data.shift, data.md, data.status,
             parseNum(data.ctc), parseNum(data.monthlySalary), parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.specialAllowance), parseNum(data.otherAllowances),
             parseNum(data.epf), parseNum(data.esi), parseNum(data.healthInsurance), parseNum(data.pt), parseNum(data.tds), parseNum(data.leaves),
             data.uanNo, data.bankName, data.accountHolder, data.accountNumber, data.ifsc
@@ -85,7 +75,7 @@ export const createHrUser = async (req, res) => {
                             <p style="color: #475569; line-height: 1.6;">You have been granted HR Administrative access. Please activate your account and set up your secure password by clicking the button below:</p>
                             
                             <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0; border: 1px solid #e2e8f0;">
-                                <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>HR ID:</strong> <span style="color: #0437cc; font-family: monospace; font-size: 16px;">${generatedHrId}</span></p>
+                                <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>HR ID:</strong> <span style="color: #0437cc; font-family: monospace; font-size: 16px;">${data.hrId}</span></p>
                                 <p style="margin: 0; color: #010a1f; font-size: 15px;"><strong>Branch:</strong> ${data.branch}</p>
                             </div>
                             
@@ -109,7 +99,8 @@ export const createHrUser = async (req, res) => {
     } catch (error) {
         console.error('HR Creation Error:', error);
         if (error.code === '23505') {
-            return res.status(400).json({ message: 'An HR user with this email address already exists.' });
+            if (error.constraint === 'sa_hr_users_email_key') return res.status(400).json({ message: 'An HR user with this email address already exists.' });
+            if (error.constraint === 'sa_hr_users_hr_id_key') return res.status(400).json({ message: 'This HR ID is already taken. Please enter a unique ID.' });
         }
         res.status(500).json({ message: 'Error creating HR user', error: error.message });
     }
@@ -129,49 +120,56 @@ export const updateHrUser = async (req, res) => {
         const { id } = req.params;
         const data = req.body;
 
+        const existingRes = await pool.query('SELECT * FROM sa_hr_users WHERE id = $1', [id]);
+        if (existingRes.rows.length === 0) {
+            return res.status(404).json({ message: 'HR user not found.' });
+        }
+        const existing = existingRes.rows[0];
+
         const updateQuery = `
             UPDATE sa_hr_users SET
                 first_name = $1, last_name = $2, email = $3, phone = $4, dob = $5, gender = $6, joining_date = $7, company = $8, branch = $9, department = $10, designation = $11, shift = $12, md = $13, status = $14,
                 ctc = $15, monthly_salary = $16, basic_salary = $17, hra = $18, conveyance = $19, medical = $20, special_allowance = $21, other_allowances = $22, 
                 epf = $23, esi = $24, health_insurance = $25, pt = $26, tds = $27, leaves = $28,
-                uan_no = $29, bank_name = $30, account_holder = $31, account_number = $32, ifsc = $33
-            WHERE id = $34 RETURNING *;
+                uan_no = $29, bank_name = $30, account_holder = $31, account_number = $32, ifsc = $33, hr_id = $34
+            WHERE id = $35 RETURNING *;
         `;
 
         const values = [
-            data.firstName || data.first_name, 
-            data.lastName || data.last_name, 
-            data.email, 
-            data.phone, 
-            data.dob, 
-            data.gender, 
-            data.joiningDate || data.joining_date,
-            data.company, 
-            data.branch, 
-            data.department, 
-            data.designation, 
-            data.shift,
-            data.md, 
-            data.status,
-            parseNum(data.ctc), 
-            parseNum(data.monthlySalary ?? data.monthly_salary), 
-            parseNum(data.basic ?? data.basic_salary), 
-            parseNum(data.hra), 
-            parseNum(data.conveyance), 
-            parseNum(data.medical), 
-            parseNum(data.specialAllowance ?? data.special_allowance), 
-            parseNum(data.otherAllowances ?? data.other_allowances),
-            parseNum(data.epf), 
-            parseNum(data.esi), 
-            parseNum(data.healthInsurance ?? data.health_insurance), 
-            parseNum(data.pt), 
-            parseNum(data.tds), 
-            parseNum(data.leaves),
-            data.uanNo || data.uan_no, 
-            data.bankName || data.bank_name, 
-            data.accountHolder || data.account_holder, 
-            data.accountNumber || data.account_number, 
-            data.ifsc, 
+            data.firstName ?? data.first_name ?? existing.first_name, 
+            data.lastName ?? data.last_name ?? existing.last_name, 
+            data.email ?? existing.email, 
+            data.phone ?? existing.phone, 
+            data.dob ?? existing.dob, 
+            data.gender ?? existing.gender, 
+            data.joiningDate ?? data.joining_date ?? existing.joining_date,
+            data.company ?? existing.company, 
+            data.branch ?? existing.branch, 
+            data.department ?? existing.department, 
+            data.designation ?? existing.designation, 
+            data.shift ?? existing.shift,
+            data.md ?? existing.md, 
+            data.status ?? existing.status,
+            parseNum(data.ctc ?? existing.ctc), 
+            parseNum(data.monthlySalary ?? data.monthly_salary ?? existing.monthly_salary), 
+            parseNum(data.basic ?? data.basic_salary ?? existing.basic_salary), 
+            parseNum(data.hra ?? existing.hra), 
+            parseNum(data.conveyance ?? existing.conveyance), 
+            parseNum(data.medical ?? existing.medical), 
+            parseNum(data.specialAllowance ?? data.special_allowance ?? existing.special_allowance), 
+            parseNum(data.otherAllowances ?? data.other_allowances ?? existing.other_allowances),
+            parseNum(data.epf ?? existing.epf), 
+            parseNum(data.esi ?? existing.esi), 
+            parseNum(data.healthInsurance ?? data.health_insurance ?? existing.health_insurance), 
+            parseNum(data.pt ?? existing.pt), 
+            parseNum(data.tds ?? existing.tds), 
+            parseNum(data.leaves ?? existing.leaves),
+            data.uanNo ?? data.uan_no ?? existing.uan_no, 
+            data.bankName ?? data.bank_name ?? existing.bank_name, 
+            data.accountHolder ?? data.account_holder ?? existing.account_holder, 
+            data.accountNumber ?? data.account_number ?? existing.account_number, 
+            data.ifsc ?? existing.ifsc, 
+            data.hrId ?? data.hr_id ?? existing.hr_id, // <-- FIX: Safe Fallback for ID Mapping
             id
         ];
 
@@ -179,6 +177,9 @@ export const updateHrUser = async (req, res) => {
         res.status(200).json({ message: 'HR user updated', user: result.rows[0] });
     } catch (error) {
         console.error("Update HR Error:", error);
+        if (error.code === '23505' && error.constraint === 'sa_hr_users_hr_id_key') {
+            return res.status(400).json({ message: 'This HR ID is already taken by another user.' });
+        }
         res.status(500).json({ message: 'Error updating HR user' });
     }
 };

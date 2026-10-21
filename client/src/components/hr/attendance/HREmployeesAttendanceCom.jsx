@@ -5,7 +5,6 @@ import {
     FaTimes, FaBuilding, FaMapMarkerAlt, FaDesktop,
     FaExclamationTriangle, FaUsers, FaSignInAlt, FaSignOutAlt
 } from 'react-icons/fa';
-import Button from '../../common/Button';
 
 const HREmployeesAttendanceCom = () => {
     // UI & Data States

@@ -1,4 +1,4 @@
-import SuperAdminHolidaysCom from "../../../components/superadmin/attendance/SuperAdminHolidaysCom"
+import SuperAdminHolidaysCom from "../../../components/superadmin/leave/SuperAdminHolidaysCom"
 
 const SuperAdminHolidays = () => {
     return (

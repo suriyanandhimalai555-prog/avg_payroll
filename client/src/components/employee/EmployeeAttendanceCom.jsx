@@ -5,7 +5,8 @@ import {
     FaClock, FaCalendarDay, FaHistory, FaCalendarAlt,
     FaSignOutAlt, FaSignInAlt, FaTasks, FaFingerprint,
     FaBusinessTime, FaWalking, FaExclamationTriangle,
-    FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp, FaTimes, FaCheck, FaEdit, FaFilter
+    FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp, FaTimes, FaCheck, FaEdit, FaFilter,
+    FaUmbrellaBeach
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -19,7 +20,9 @@ const EmployeeAttendanceCom = () => {
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [todayLogs, setTodayLogs] = useState([]);
     const [fullHistory, setFullHistory] = useState([]);
+    const [holidays, setHolidays] = useState([]);
     const [shiftDetails, setShiftDetails] = useState(null);
+    const [joiningDate, setJoiningDate] = useState(null);
 
     // Accordion State
     const [expandedDates, setExpandedDates] = useState([]);
@@ -48,7 +51,7 @@ const EmployeeAttendanceCom = () => {
             return;
         }
         try {
-            const [attRes, profRes, shiftRes] = await Promise.all([
+            const [attRes, profRes, shiftRes, holRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`).catch(() => ({ data: { history: [] } })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } }).catch(() => ({ data: {} })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`).catch(() => ({ data: [] }))
@@ -56,6 +59,16 @@ const EmployeeAttendanceCom = () => {
 
             const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
             setFullHistory(fetchedHistory);
+            setHolidays(holRes.data || []);
+
+            // Establish Employee Joining Date for Calendar Boundary
+            const profile = profRes.data || {};
+            const joinStr = profile.joining_date || profile.created_at || user?.joining_date || user?.created_at;
+            if (joinStr) {
+                const jd = new Date(joinStr);
+                jd.setHours(0, 0, 0, 0); // Normalize to midnight
+                setJoiningDate(jd);
+            }
 
             const todayDateStr = new Date().toLocaleDateString('en-CA');
             const todays = fetchedHistory.filter(record => {
@@ -89,6 +102,7 @@ const EmployeeAttendanceCom = () => {
 
     useEffect(() => {
         if (user?.employee_id) fetchAttendanceData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const latestRecord = todayLogs.length > 0 ? todayLogs[0] : null;
@@ -163,7 +177,6 @@ const EmployeeAttendanceCom = () => {
 
     const handleCheckIn = async () => {
         if (isActionLoading) return;
-
         const now = new Date();
         const currentHour = now.getHours();
 
@@ -250,97 +263,128 @@ const EmployeeAttendanceCom = () => {
         setIsEditEodModalOpen(true);
     };
 
-    const groupedFullHistory = useMemo(() => {
-        const groups = {};
-        fullHistory.forEach(record => {
-            const dateStr = new Date(record.date).toLocaleDateString('en-CA');
-            if (!groups[dateStr]) {
-                groups[dateStr] = {
-                    date: record.date,
-                    dateStr: dateStr,
-                    sessions: [],
-                    first_clock_in: null,
-                    last_clock_out: null,
-                    status: record.status,
-                    late_minutes: 0,
-                    is_working: false
-                };
-            }
-            groups[dateStr].sessions.push(record);
-        });
+    // Build standard month options based on the past 12 months
+    const monthOptions = useMemo(() => {
+        const options = [];
+        const curr = new Date();
+        for (let i = 0; i < 12; i++) {
+            const d = new Date(curr.getFullYear(), curr.getMonth() - i, 1);
+            options.push(`${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}`);
+        }
+        if (!selectedMonthYear && options.length > 0) setSelectedMonthYear(options[0]);
+        return options;
+    }, [selectedMonthYear]);
 
-        Object.values(groups).forEach(group => {
-            group.sessions.sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
+    // ====================================================================================
+    // ADVANCED DATE CONTINUITY GENERATOR
+    // ====================================================================================
+    const getDisplayedHistory = () => {
+        let startDate, endDate;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-            group.first_clock_in = group.sessions[0].clock_in;
-            const lastSession = group.sessions[group.sessions.length - 1];
-            group.last_clock_out = lastSession.clock_out;
-            group.is_working = !lastSession.clock_out;
-            group.late_minutes = group.sessions[0].late_minutes || 0;
+        if (activeTab === 'today') {
+            startDate = new Date(today);
+            endDate = new Date(today);
+        } else if (activeTab === 'history' || activeTab === 'timesheet') {
+            startDate = new Date(today);
+            startDate.setDate(today.getDate() - 9); // Last 10 days
+            endDate = new Date(today);
+        } else if (activeTab === 'monthly' && selectedMonthYear) {
+            const [monthStr, yearStr] = selectedMonthYear.split(' ');
+            const monthIdx = new Date(`${monthStr} 1, ${yearStr}`).getMonth();
+            startDate = new Date(yearStr, monthIdx, 1);
+            endDate = new Date(yearStr, monthIdx + 1, 0);
+            if (endDate > today) endDate = new Date(today); // Cap at today
+        } else {
+            startDate = new Date(today);
+            endDate = new Date(today);
+        }
+
+        // ==================================================================
+        // ONBOARDING BOUNDARY LOGIC
+        // Prevent showing "Absent" for days before the employee joined.
+        // ==================================================================
+        if (joiningDate && startDate < joiningDate) {
+            startDate = new Date(joiningDate);
+        }
+
+        const dateArray = [];
+        for (let d = new Date(endDate); d >= startDate; d.setDate(d.getDate() - 1)) {
+            dateArray.push(new Date(d));
+        }
+
+        const displayData = dateArray.map(dateObj => {
+            const dateStr = dateObj.toLocaleDateString('en-CA');
+            const sessions = fullHistory.filter(r => new Date(r.date).toLocaleDateString('en-CA') === dateStr);
+            const holidayRecord = holidays.find(h => new Date(h.holiday_date).toLocaleDateString('en-CA') === dateStr && h.status !== 'Draft');
 
             let totalMins = 0;
-            group.sessions.forEach(s => {
-                if (s.total_hours) {
-                    const [h, m] = s.total_hours.replace(' Hrs', '').split(':').map(Number);
-                    if (!isNaN(h)) totalMins += (h * 60) + (m || 0);
-                }
-            });
+            let first_clock_in = null;
+            let last_clock_out = null;
+            let late_minutes = 0;
+            let is_working = false;
 
+            if (sessions.length > 0) {
+                sessions.sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
+                first_clock_in = sessions[0].clock_in;
+                const lastSession = sessions[sessions.length - 1];
+                last_clock_out = lastSession.clock_out;
+                is_working = !lastSession.clock_out;
+                late_minutes = sessions[0].late_minutes || 0;
+
+                sessions.forEach(s => {
+                    if (s.total_hours && s.total_hours !== 'In Progress' && s.total_hours !== 'Missed Checkout') {
+                        const [h, m] = s.total_hours.replace(' Hrs', '').split(':').map(Number);
+                        if (!isNaN(h)) totalMins += (h * 60) + (m || 0);
+                    }
+                });
+            }
+
+            let total_hours_sum = null;
             if (totalMins > 0) {
                 const hrs = Math.floor(totalMins / 60).toString().padStart(2, '0');
                 const mins = (totalMins % 60).toString().padStart(2, '0');
-                group.total_hours_sum = `${hrs}:${mins} Hrs`;
-            } else {
-                group.total_hours_sum = null;
+                total_hours_sum = `${hrs}:${mins} Hrs`;
             }
+
+            // Core Status Evaluation Logic
+            let status = 'Absent';
+            if (sessions.length > 0) {
+                status = late_minutes > 0 ? 'Late' : 'Present';
+            } else if (holidayRecord) {
+                status = (holidayRecord.type === 'WEEKLY_OFF' || holidayRecord.type === 'Weekend Holiday') ? 'Week Off' : 'Holiday';
+            } else if (dateObj.getDay() === 0 || dateObj.getDay() === 6) {
+                status = 'Week Off'; // Fallback if weekend generation was not run
+            }
+
+            return {
+                date: dateObj.toISOString(),
+                dateStr: dateStr,
+                sessions: sessions,
+                first_clock_in,
+                last_clock_out,
+                is_working,
+                late_minutes,
+                total_hours_sum,
+                status,
+                holidayName: holidayRecord ? holidayRecord.holiday_name : null
+            };
         });
 
-        return Object.values(groups).sort((a, b) => new Date(b.dateStr) - new Date(a.dateStr));
-    }, [fullHistory]);
-
-    const monthOptions = useMemo(() => {
-        const options = new Set();
-        groupedFullHistory.forEach(group => {
-            const d = new Date(group.date);
-            options.add(`${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}`);
-        });
-
-        const curr = new Date();
-        options.add(`${curr.toLocaleString('en-US', { month: 'long' })} ${curr.getFullYear()}`);
-        const sortedOptions = Array.from(options).sort((a, b) => new Date(b) - new Date(a));
-
-        if (!selectedMonthYear && sortedOptions.length > 0) setSelectedMonthYear(sortedOptions[0]);
-        return sortedOptions;
-    }, [groupedFullHistory, selectedMonthYear]);
-
-    const getDisplayedHistory = () => {
-        let dataToDisplay = groupedFullHistory;
-        if (activeTab === 'today') {
-            const todayStr = new Date().toLocaleDateString('en-CA');
-            dataToDisplay = groupedFullHistory.filter(g => g.dateStr === todayStr);
-        } else if (activeTab === 'timesheet' || activeTab === 'history') {
-            dataToDisplay = groupedFullHistory.slice(0, 10);
-
-            if (activeTab === 'history' && (historyFilterMonth !== 'All' || historyFilterStatus !== 'All')) {
-                dataToDisplay = groupedFullHistory.filter(g => {
-                    const gMonth = `${new Date(g.date).toLocaleString('en-US', { month: 'long' })} ${new Date(g.date).getFullYear()}`;
-                    const matchMonth = historyFilterMonth === 'All' || gMonth === historyFilterMonth;
-                    const matchStatus = historyFilterStatus === 'All' || g.status === historyFilterStatus;
-                    return matchMonth && matchStatus;
-                });
-            }
-        } else if (activeTab === 'monthly' && selectedMonthYear) {
-            dataToDisplay = groupedFullHistory.filter(g => {
-                const d = new Date(g.date);
-                return `${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}` === selectedMonthYear;
-            });
+        // Filter Logic
+        let finalData = displayData;
+        if (activeTab === 'history' && historyFilterStatus !== 'All') {
+            finalData = finalData.filter(g => g.status === historyFilterStatus || (historyFilterStatus === 'Late' && g.status === 'Late'));
         }
-        return dataToDisplay;
+        return finalData;
     };
 
     const toggleAccordion = (idStr) => setExpandedDates(prev => prev.includes(idStr) ? prev.filter(d => d !== idStr) : [...prev, idStr]);
+
     const formatTime = (timestamp) => !timestamp ? '—' : new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
     const format12Hour = (time24) => {
         if (!time24) return '—';
         if (time24.toUpperCase().includes('AM') || time24.toUpperCase().includes('PM')) return time24;
@@ -349,6 +393,24 @@ const EmployeeAttendanceCom = () => {
         const ampm = hour >= 12 ? 'PM' : 'AM';
         hour = hour ? (hour % 12 || 12) : 12;
         return `${hour < 10 ? '0' + hour : hour}:${minute} ${ampm}`;
+    };
+
+    const getStatusStyle = (status) => {
+        if (status === 'Present') return 'text-teal-700 bg-teal-50 border-teal-200';
+        if (status === 'Late') return 'text-orange-700 bg-orange-50 border-orange-200';
+        if (status === 'Absent') return 'text-red-700 bg-red-50 border-red-200';
+        if (status === 'Week Off') return 'text-purple-700 bg-purple-50 border-purple-200';
+        if (status === 'Holiday') return 'text-[#0437cc] bg-blue-50 border-blue-200';
+        return 'text-slate-600 bg-slate-50 border-slate-200';
+    };
+
+    const getStatusDot = (status) => {
+        if (status === 'Present') return 'bg-teal-500';
+        if (status === 'Late') return 'bg-orange-500';
+        if (status === 'Absent') return 'bg-red-500';
+        if (status === 'Week Off') return 'bg-purple-500';
+        if (status === 'Holiday') return 'bg-[#0437cc]';
+        return 'bg-slate-500';
     };
 
     const tabsNav = [
@@ -875,8 +937,10 @@ const EmployeeAttendanceCom = () => {
                                         >
                                             <option value="All">All Statuses</option>
                                             <option value="Present">Present</option>
+                                            <option value="Late">Late</option>
                                             <option value="Absent">Absent</option>
-                                            <option value="Late (Pending Approval)">Late</option>
+                                            <option value="Week Off">Week Off</option>
+                                            <option value="Holiday">Holiday</option>
                                         </select>
                                     </div>
                                 </div>
@@ -926,7 +990,7 @@ const EmployeeAttendanceCom = () => {
                                                             </div>
                                                             <div className="flex items-center gap-2 shrink-0">
                                                                 <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded-lg text-[#0437cc] shadow-sm">
-                                                                    {group.total_hours_sum || 'In Progress'}
+                                                                    {group.total_hours_sum || (group.status === 'Week Off' || group.status === 'Holiday' ? group.status : 'No Data')}
                                                                 </span>
                                                                 <span className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${isExpanded ? 'bg-[#0437cc] text-white' : 'bg-white text-slate-400 border border-slate-200'}`}>
                                                                     {isExpanded ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
@@ -936,42 +1000,57 @@ const EmployeeAttendanceCom = () => {
 
                                                         {isExpanded && (
                                                             <div className="p-4 space-y-3 bg-white border-t border-slate-100">
-                                                                {group.sessions.map((session, sIdx) => (
-                                                                    <div key={sIdx} className="relative bg-gradient-to-br from-slate-50 to-white border border-slate-200 p-4 rounded-xl shadow-sm mt-3">
-                                                                        <span className="absolute -top-2.5 left-3 bg-white border border-slate-200 text-[#010a1f] px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
-                                                                            Session {sIdx + 1}
-                                                                        </span>
-                                                                        <div className="mt-2 space-y-2.5">
-                                                                            {session.clock_out ? (
-                                                                                <div className="group">
-                                                                                    <div className="flex justify-between items-start mb-2">
-                                                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                                                                            <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center">
-                                                                                                <FaCheck className="text-green-500 text-[8px]" />
-                                                                                            </span>
-                                                                                            End of Day Update
+                                                                {group.sessions.length > 0 ? (
+                                                                    group.sessions.map((session, sIdx) => (
+                                                                        <div key={sIdx} className="relative bg-gradient-to-br from-slate-50 to-white border border-slate-200 p-4 rounded-xl shadow-sm mt-3">
+                                                                            <span className="absolute -top-2.5 left-3 bg-white border border-slate-200 text-[#010a1f] px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                                                                                Session {sIdx + 1}
+                                                                            </span>
+                                                                            <div className="mt-2 space-y-2.5">
+                                                                                {session.clock_out ? (
+                                                                                    <div className="group">
+                                                                                        <div className="flex justify-between items-start mb-2">
+                                                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                                                                <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center">
+                                                                                                    <FaCheck className="text-green-500 text-[8px]" />
+                                                                                                </span>
+                                                                                                End of Day Update
+                                                                                            </p>
+                                                                                            <button
+                                                                                                onClick={(e) => { e.stopPropagation(); openEditEodModal(session); }}
+                                                                                                className="text-slate-400 hover:text-[#0437cc] opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity bg-white p-1.5 rounded-lg shadow-sm border border-slate-200 shrink-0 hover:border-[#0437cc]/30"
+                                                                                                title="Edit Log"
+                                                                                            >
+                                                                                                <FaEdit size={10} />
+                                                                                            </button>
+                                                                                        </div>
+                                                                                        <p className="text-xs text-slate-700 leading-relaxed bg-white p-3 rounded-xl border border-slate-200 whitespace-pre-wrap shadow-sm">
+                                                                                            {session.eod_update || <span className="text-slate-400 italic">No EOD update provided. Click edit to add notes.</span>}
                                                                                         </p>
-                                                                                        <button
-                                                                                            onClick={(e) => { e.stopPropagation(); openEditEodModal(session); }}
-                                                                                            className="text-slate-400 hover:text-[#0437cc] opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity bg-white p-1.5 rounded-lg shadow-sm border border-slate-200 shrink-0 hover:border-[#0437cc]/30"
-                                                                                            title="Edit Log"
-                                                                                        >
-                                                                                            <FaEdit size={10} />
-                                                                                        </button>
                                                                                     </div>
-                                                                                    <p className="text-xs text-slate-700 leading-relaxed bg-white p-3 rounded-xl border border-slate-200 whitespace-pre-wrap shadow-sm">
-                                                                                        {session.eod_update || <span className="text-slate-400 italic">No EOD update provided. Click edit to add notes.</span>}
-                                                                                    </p>
-                                                                                </div>
+                                                                                ) : (
+                                                                                    <div className="flex items-center gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+                                                                                        <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                                                                                        <p className="text-[11px] text-blue-700 font-semibold">Session is currently active. EOD update will be logged upon clock out.</p>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div className="text-center py-4">
+                                                                        <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-2 border border-slate-100">
+                                                                            {group.status === 'Holiday' || group.status === 'Week Off' ? (
+                                                                                <FaUmbrellaBeach className="text-purple-400" />
                                                                             ) : (
-                                                                                <div className="flex items-center gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
-                                                                                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                                                                                    <p className="text-[11px] text-blue-700 font-semibold">Session is currently active. EOD update will be logged upon clock out.</p>
-                                                                                </div>
+                                                                                <FaTimes className="text-red-400" />
                                                                             )}
                                                                         </div>
+                                                                        <p className="text-xs font-semibold text-slate-400">
+                                                                            No punches recorded for this day.
+                                                                        </p>
                                                                     </div>
-                                                                ))}
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
@@ -1011,6 +1090,11 @@ const EmployeeAttendanceCom = () => {
                                                     >
                                                         <td className="px-4 py-3.5">
                                                             <p className="text-xs font-bold text-[#010a1f] whitespace-nowrap">{formatDate(group.date)}</p>
+                                                            {group.holidayName && (
+                                                                <span className="text-[9px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-purple-100">
+                                                                    {group.holidayName}
+                                                                </span>
+                                                            )}
                                                             {group.sessions.length > 1 && (
                                                                 <span className="text-[9px] text-[#0437cc] font-bold bg-blue-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-blue-100">
                                                                     {group.sessions.length} Sessions
@@ -1028,7 +1112,7 @@ const EmployeeAttendanceCom = () => {
                                                             </p>
                                                         </td>
                                                         <td className="px-4 py-3.5">
-                                                            <p className={`text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${group.last_clock_out ? 'text-slate-700' : 'text-green-600'}`}>
+                                                            <p className={`text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${group.last_clock_out ? 'text-slate-700' : (group.is_working ? 'text-green-600' : 'text-slate-400')}`}>
                                                                 {group.is_working && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
                                                                 {group.is_working ? 'Working...' : formatTime(group.last_clock_out)}
                                                             </p>
@@ -1039,16 +1123,9 @@ const EmployeeAttendanceCom = () => {
                                                             </p>
                                                         </td>
                                                         <td className="px-4 py-3.5 text-center">
-                                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap border ${group.status === 'Present'
-                                                                ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                                : group.status?.includes('Pending')
-                                                                    ? 'text-orange-700 bg-orange-50 border-orange-200'
-                                                                    : 'text-red-700 bg-red-50 border-red-200'
-                                                                }`}>
-                                                                <span className={`w-1.5 h-1.5 rounded-full ${group.status === 'Present' ? 'bg-teal-500'
-                                                                    : group.status?.includes('Pending') ? 'bg-orange-500' : 'bg-red-500'
-                                                                    }`}></span>
-                                                                {group.status || 'Present'}
+                                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap border ${getStatusStyle(group.status)}`}>
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(group.status)}`}></span>
+                                                                {group.status}
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3.5 text-right">
@@ -1066,58 +1143,74 @@ const EmployeeAttendanceCom = () => {
                                                         <tr>
                                                             <td colSpan="6" className="bg-gradient-to-b from-[#f8fafc] to-white border-b border-slate-100 px-4 py-4">
                                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                                    {group.sessions.map((session, idx) => (
-                                                                        <div key={idx} className="relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm mt-3 hover:shadow-md transition-shadow">
-                                                                            <span className="absolute -top-2.5 left-3 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
-                                                                                Session {idx + 1}
-                                                                            </span>
+                                                                    {group.sessions.length > 0 ? (
+                                                                        group.sessions.map((session, idx) => (
+                                                                            <div key={idx} className="relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm mt-3 hover:shadow-md transition-shadow">
+                                                                                <span className="absolute -top-2.5 left-3 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                                                                                    Session {idx + 1}
+                                                                                </span>
 
-                                                                            <div className="mt-2 grid grid-cols-2 gap-3">
-                                                                                <div className="min-w-0">
-                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                                                                                        <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center">
-                                                                                            <FaSignInAlt className="text-green-500 text-[8px]" />
-                                                                                        </span>
-                                                                                        In
-                                                                                    </p>
-                                                                                    <p className="text-xs font-bold text-slate-700 truncate">{formatTime(session.clock_in)}</p>
-                                                                                    <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_in_location || session.location_in}>
-                                                                                        <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_in_location || session.location_in || 'No Location'}
-                                                                                    </p>
-                                                                                    <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
-                                                                                        <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_in_device || session.device_in || 'No Device'}
-                                                                                    </p>
+                                                                                <div className="mt-2 grid grid-cols-2 gap-3">
+                                                                                    <div className="min-w-0">
+                                                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                                                                                            <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center">
+                                                                                                <FaSignInAlt className="text-green-500 text-[8px]" />
+                                                                                            </span>
+                                                                                            In
+                                                                                        </p>
+                                                                                        <p className="text-xs font-bold text-slate-700 truncate">{formatTime(session.clock_in)}</p>
+                                                                                        <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_in_location || session.location_in}>
+                                                                                            <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_in_location || session.location_in || 'No Location'}
+                                                                                        </p>
+                                                                                        <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                            <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_in_device || session.device_in || 'No Device'}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                    <div className="min-w-0 border-l border-slate-100 pl-3">
+                                                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                                                                                            <span className="w-5 h-5 rounded-md bg-red-50 flex items-center justify-center">
+                                                                                                <FaSignOutAlt className="text-red-400 text-[8px]" />
+                                                                                            </span>
+                                                                                            Out
+                                                                                        </p>
+                                                                                        <p className="text-xs font-bold text-slate-700 truncate">
+                                                                                            {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>Working</span>}
+                                                                                        </p>
+                                                                                        {session.clock_out && (
+                                                                                            <>
+                                                                                                <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location || session.location_out}>
+                                                                                                    <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || session.location_out || 'No Location'}
+                                                                                                </p>
+                                                                                                <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                                    <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || session.device_out || 'No Device'}
+                                                                                                </p>
+                                                                                            </>
+                                                                                        )}
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="min-w-0 border-l border-slate-100 pl-3">
-                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                                                                                        <span className="w-5 h-5 rounded-md bg-red-50 flex items-center justify-center">
-                                                                                            <FaSignOutAlt className="text-red-400 text-[8px]" />
-                                                                                        </span>
-                                                                                        Out
-                                                                                    </p>
-                                                                                    <p className="text-xs font-bold text-slate-700 truncate">
-                                                                                        {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>Working</span>}
-                                                                                    </p>
-                                                                                    {session.clock_out && (
-                                                                                        <>
-                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location || session.location_out}>
-                                                                                                <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || session.location_out || 'No Location'}
-                                                                                            </p>
-                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
-                                                                                                <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || session.device_out || 'No Device'}
-                                                                                            </p>
-                                                                                        </>
-                                                                                    )}
-                                                                                </div>
+                                                                                {session.total_hours && (
+                                                                                    <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
+                                                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Duration</span>
+                                                                                        <span className="text-sm font-bold text-[#0437cc]">{session.total_hours}</span>
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
-                                                                            {session.total_hours && (
-                                                                                <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
-                                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Duration</span>
-                                                                                    <span className="text-sm font-bold text-[#0437cc]">{session.total_hours}</span>
-                                                                                </div>
-                                                                            )}
+                                                                        ))
+                                                                    ) : (
+                                                                        <div className="col-span-2 text-center py-6">
+                                                                            <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-2 border border-slate-100">
+                                                                                {group.status === 'Holiday' || group.status === 'Week Off' ? (
+                                                                                    <FaUmbrellaBeach className="text-purple-400" />
+                                                                                ) : (
+                                                                                    <FaTimes className="text-red-400" />
+                                                                                )}
+                                                                            </div>
+                                                                            <p className="text-xs font-semibold text-slate-400">
+                                                                                No punches recorded for this day.
+                                                                            </p>
                                                                         </div>
-                                                                    ))}
+                                                                    )
+                                                                    }
                                                                 </div>
                                                             </td>
                                                         </tr>

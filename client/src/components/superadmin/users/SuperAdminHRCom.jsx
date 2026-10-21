@@ -22,11 +22,9 @@ const FieldWrapper = ({ error, children }) => (
 );
 
 const SuperAdminHRCom = () => {
-    const currentYear = new Date().getFullYear();
-
     const INITIAL_FORM_STATE = {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '',
-        hrId: `AVG-HR-${currentYear}-XXX (Auto)`, joiningDate: '',
+        hrId: '', joiningDate: '', // Removed auto generation default
         company: '', branch: '', department: '', designation: '', shift: '', md: '', status: 'Active',
         ctc: '', monthlySalary: '', basic: '', hra: '', conveyance: '', medical: '', specialAllowance: '', otherAllowances: '', 
         epf: '', esi: '', healthInsurance: '', pt: '', tds: '', leaves: '',
@@ -112,7 +110,7 @@ const SuperAdminHRCom = () => {
         let newErrors = {};
 
         const requiredFields = [
-            'firstName', 'lastName', 'email', 'phone', 'dob', 'gender', 'joiningDate',
+            'firstName', 'lastName', 'email', 'phone', 'dob', 'gender', 'joiningDate', 'hrId',
             'company', 'branch', 'shift', 'status',
             'ctc', 'monthlySalary', 'basic', 'hra', 'conveyance', 'medical', 'otherAllowances',
             'epf', 'uanNo',
@@ -195,7 +193,7 @@ const SuperAdminHRCom = () => {
         setFormData({
             firstName: hr.first_name, lastName: hr.last_name, email: hr.email, phone: hr.phone,
             dob: formattedDob, gender: hr.gender || '',
-            hrId: hr.hr_id || `AVG-HR-${currentYear}-XXX`, joiningDate: formattedJoining,
+            hrId: hr.hr_id || '', joiningDate: formattedJoining,
             company: hr.company, branch: hr.branch, department: hr.department || '', designation: hr.designation || '', shift: hr.shift || '', md: hr.md || '', status: hr.status,
             ctc: hr.ctc || '', monthlySalary: hr.monthly_salary || '', basic: hr.basic_salary || '', hra: hr.hra || '', conveyance: hr.conveyance || 0, medical: hr.medical || 0, specialAllowance: hr.special_allowance || 0, otherAllowances: hr.other_allowances || 0,
             epf: hr.epf || 0, esi: hr.esi || 0, healthInsurance: hr.health_insurance || 0, pt: hr.pt || 0, tds: hr.tds || 0, leaves: hr.leaves || 0,
@@ -496,7 +494,10 @@ const SuperAdminHRCom = () => {
                         </div>
                     </div>
                     <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                        <Input label="HR ID" name="hrId" value={formData.hrId} disabled className="bg-slate-100 font-mono text-[#0437cc]" />
+                        <FieldWrapper error={errors.hrId}>
+                            <Input label={<>HR ID <span className="text-red-500">*</span></>} name="hrId" value={formData.hrId} onChange={handleInputChange} placeholder="e.g. AVG-HR-2026-001" className="font-mono text-[#0437cc]" />
+                        </FieldWrapper>
+
                         <FieldWrapper error={errors.joiningDate}><Input label={<>Joining Date <span className="text-red-500">*</span></>} type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} /></FieldWrapper>
 
                         <FieldWrapper error={errors.company}>

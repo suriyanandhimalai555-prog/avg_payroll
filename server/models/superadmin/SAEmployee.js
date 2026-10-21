@@ -95,12 +95,33 @@ const initializeSAEmployeeModel = async () => {
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS leaves NUMERIC DEFAULT 0;
     `;
 
+    // ============================================================================
+    // CASCADING FOREIGN KEY PATCH
+    // Dynamically upgrades the emp_attendance table to cascade ID updates & deletes
+    // ============================================================================
+    const patchFKQuery = `
+        DO $$ 
+        BEGIN 
+            IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'emp_attendance') THEN
+                ALTER TABLE emp_attendance DROP CONSTRAINT IF EXISTS emp_attendance_employee_id_fkey;
+                
+                ALTER TABLE emp_attendance 
+                    ADD CONSTRAINT emp_attendance_employee_id_fkey 
+                    FOREIGN KEY (employee_id) 
+                    REFERENCES sa_employees(employee_id) 
+                    ON UPDATE CASCADE 
+                    ON DELETE CASCADE;
+            END IF;
+        END $$;
+    `;
+
     try {
         await pool.query(createTableQuery);
         await pool.query(alterQueries);
-        console.log('SAEmployee (SuperAdmin) table checked/updated successfully.');
+        await pool.query(patchFKQuery);
+        console.log('SAEmployee (SuperAdmin) table & foreign keys checked/updated successfully.');
     } catch (error) {
-        console.error('Error updating SAEmployee table:', error);
+        console.error('Error updating SAEmployee table constraints:', error);
     }
 };
 

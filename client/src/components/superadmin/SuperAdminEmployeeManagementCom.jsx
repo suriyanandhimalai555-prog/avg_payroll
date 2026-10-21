@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaUsers, FaInfoCircle, FaSearch, FaUser, FaMoneyCheckAlt,
-    FaEye, FaSitemap, FaBriefcase, FaFileInvoiceDollar, FaFilter, 
+    FaEye, FaSitemap, FaBriefcase, FaFilter, 
     FaIdBadge, FaTimes, FaHistory, FaClock, FaPlusCircle, FaMinusCircle, 
-    FaCheckCircle, FaUniversity, FaPhoneAlt, FaLaptop, FaMobileAlt, FaKey, FaBox
+    FaCheckCircle, FaUniversity, FaPhoneAlt, FaLaptop, FaMobileAlt, FaKey, FaBox,
+    FaDownload, FaChevronDown, FaChevronUp, FaExclamationTriangle, FaSignInAlt, FaSignOutAlt, FaMapMarkerAlt, FaDesktop
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 
@@ -42,6 +43,7 @@ const SuperAdminEmployeeManagementCom = () => {
     const [attendanceRecords, setAttendanceRecords] = useState([]);
     const [loadingAttendance, setLoadingAttendance] = useState(false);
     const [approvingId, setApprovingId] = useState(null);
+    const [expandedDates, setExpandedDates] = useState([]); // Accordion State
 
     // Dossier Modal States
     const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
@@ -99,6 +101,7 @@ const SuperAdminEmployeeManagementCom = () => {
             let combined = [...hrData, ...mgrData, ...empData].sort((a, b) => new Date(b._joining) - new Date(a._joining));
 
             if (combined.length === 0) {
+                // Fallback Mock Data if DB is empty
                 combined = [
                     {
                         id: 1, first_name: 'Pooja', last_name: 'Sharma', email: 'pooja.hr@avg.com', phone: '+91 9876543210',
@@ -110,17 +113,6 @@ const SuperAdminEmployeeManagementCom = () => {
                         uan_no: '100412345678', _joining: '2026-05-15T00:00:00.000Z', _manager: 'Super Admin', status: 'Active',
                         bank_name: 'HDFC Bank', account_holder: 'Pooja Sharma', account_number: '501002345678', ifsc: 'HDFC0001234',
                         emergency_name: 'Ravi Sharma', emergency_relationship: 'Husband', emergency_phone: '+91 9876543299', profile_photo: null
-                    },
-                    {
-                        id: 2, first_name: 'Prabhu', last_name: 'Mayakanan', email: 'prabhu.mgr@avg.com', phone: '+91 9876543211',
-                        _displayId: 'MGR-001', _roleType: 'Manager', _roleColor: 'text-[#f77704] bg-orange-50 border-orange-200',
-                        designation: 'Engineering Lead', department: 'Development', branch: 'Bangalore HQ', company: 'AVG Prime Tech',
-                        location: 'Koramangala HQ', shift: 'General Shift',
-                        ctc: 1020000, monthly_salary: 85000, basic_salary: 40000, hra: 20000, conveyance: 5000, medical: 5000, special_allowance: 10000, other_allowances: 5000,
-                        epf: 1800, esi: 0, health_insurance: 1500, pt: 200, tds: 5000, leaves: 0,
-                        uan_no: '100412345679', _joining: '2026-06-01T00:00:00.000Z', _manager: 'Super Admin / HR', status: 'Active',
-                        bank_name: 'ICICI Bank', account_holder: 'Prabhu Mayakanan', account_number: '000123456789', ifsc: 'ICIC0000001',
-                        emergency_name: 'Anjali Mayakanan', emergency_relationship: 'Wife', emergency_phone: '+91 9876543288', profile_photo: null
                     },
                     {
                         id: 3, first_name: 'Ranjith', last_name: 'Kumar', email: 'ranjith.dev@avg.com', phone: '+91 9876543212',
@@ -149,26 +141,93 @@ const SuperAdminEmployeeManagementCom = () => {
         fetchEmployees();
     }, []);
 
+    // ==================== ATTENDANCE MODAL & GROUPING LOGIC ====================
     const handleViewAttendance = async (emp) => {
         setSelectedEmp(emp);
         setIsAttendanceModalOpen(true);
         setLoadingAttendance(true);
+        setExpandedDates([]); // Reset accordion
         try {
-            const targetId = emp.employee_id || emp.email;
+            const targetId = emp.employee_id || emp.email || emp._displayId;
             const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${targetId}`);
             setAttendanceRecords(res.data.history || []);
         } catch (err) {
             console.error("Failed to fetch attendance", err);
+            // Mock data for UI demonstration if backend fails
             const today = new Date();
             const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
 
             setAttendanceRecords([
-                { id: 99, date: today.toISOString(), clock_in: new Date(today).setHours(13, 15, 0), clock_out: null, total_hours: null, status: 'Absent (Pending Approval)', late_minutes: 0 },
-                { id: 98, date: yesterday.toISOString(), clock_in: new Date(yesterday).setHours(9, 30, 0), clock_out: new Date(yesterday).setHours(18, 15, 0), total_hours: '08:45 Hrs', status: 'Present', late_minutes: 30 }
+                { id: 99, date: today.toISOString(), clock_in: new Date(today).setHours(13, 15, 0), clock_out: null, total_hours: null, status: 'Late (Pending Approval)', late_minutes: 45, clock_in_location: 'Office HQ', clock_in_device: 'Windows 11' },
+                { id: 98, date: yesterday.toISOString(), clock_in: new Date(yesterday).setHours(9, 30, 0), clock_out: new Date(yesterday).setHours(13, 0, 0), total_hours: '03:30 Hrs', status: 'Present', late_minutes: 0, clock_in_location: 'Remote', clock_in_device: 'Mac OS' },
+                { id: 97, date: yesterday.toISOString(), clock_in: new Date(yesterday).setHours(14, 0, 0), clock_out: new Date(yesterday).setHours(18, 15, 0), total_hours: '04:15 Hrs', status: 'Present', late_minutes: 0, clock_in_location: 'Remote', clock_in_device: 'Mac OS' }
             ]);
         } finally {
             setLoadingAttendance(false);
         }
+    };
+
+    // Grouping attendance history by date for accordion view
+    const groupedHistory = useMemo(() => {
+        const groups = {};
+        attendanceRecords.forEach(record => {
+            const dateStr = new Date(record.date).toLocaleDateString('en-CA');
+            if (!groups[dateStr]) {
+                groups[dateStr] = {
+                    date: record.date,
+                    dateStr: dateStr,
+                    sessions: [],
+                    first_clock_in: null,
+                    last_clock_out: null,
+                    status: record.status,
+                    late_minutes: 0,
+                    is_working: false
+                };
+            }
+            groups[dateStr].sessions.push(record);
+        });
+
+        Object.values(groups).forEach(group => {
+            group.sessions.sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
+            group.first_clock_in = group.sessions[0].clock_in;
+            const lastSession = group.sessions[group.sessions.length - 1];
+            group.last_clock_out = lastSession.clock_out;
+            group.is_working = !lastSession.clock_out;
+            
+            // Calculate total late minutes for the day
+            group.late_minutes = group.sessions.reduce((acc, s) => acc + (s.late_minutes || 0), 0);
+
+            // Sum up total hours for the day
+            let totalMins = 0;
+            group.sessions.forEach(s => {
+                if (s.total_hours && s.total_hours !== 'In Progress' && s.total_hours !== 'Missed Checkout') {
+                    const [h, m] = s.total_hours.replace(' Hrs', '').split(':').map(Number);
+                    if (!isNaN(h)) totalMins += (h * 60) + (m || 0);
+                }
+            });
+
+            if (totalMins > 0) {
+                const hrs = Math.floor(totalMins / 60).toString().padStart(2, '0');
+                const mins = (totalMins % 60).toString().padStart(2, '0');
+                group.total_hours_sum = `${hrs}:${mins} Hrs`;
+            } else {
+                group.total_hours_sum = null;
+            }
+
+            // Status Logic: If any session is pending/late, bubble it up to the day status
+            const pendingSession = group.sessions.find(s => s.status?.includes('Pending'));
+            if (pendingSession) {
+                group.status = pendingSession.status;
+            } else {
+                group.status = group.sessions[0].status || 'Present';
+            }
+        });
+
+        return Object.values(groups).sort((a, b) => new Date(b.dateStr) - new Date(a.dateStr));
+    }, [attendanceRecords]);
+
+    const toggleAccordion = (dateStr) => {
+        setExpandedDates(prev => prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr]);
     };
 
     const handleApproveAttendance = async (recordId) => {
@@ -185,6 +244,46 @@ const SuperAdminEmployeeManagementCom = () => {
         }
     };
 
+    // ==================== EXCEL / CSV EXPORT LOGIC ====================
+    const handleExportExcel = () => {
+        if (!attendanceRecords || attendanceRecords.length === 0) return;
+        
+        let csvContent = "Date,Session No,Clock In,Clock Out,Location In,Location Out,Device In,Device Out,Late Minutes,Total Hours,Status,EOD Update\n";
+
+        // Export all sessions detailed
+        groupedHistory.forEach(group => {
+            group.sessions.forEach((record, index) => {
+                const date = new Date(record.date).toLocaleDateString('en-CA');
+                const clockIn = record.clock_in ? new Date(record.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                const clockOut = record.clock_out ? new Date(record.clock_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'In Progress';
+                
+                // Clean strings to prevent CSV format breaks
+                const locIn = (record.clock_in_location || record.location_in || 'N/A').replace(/,/g, ' ');
+                const locOut = (record.clock_out_location || record.location_out || 'N/A').replace(/,/g, ' ');
+                const devIn = (record.clock_in_device || record.device_in || 'N/A').replace(/,/g, ' ');
+                const devOut = (record.clock_out_device || record.device_out || 'N/A').replace(/,/g, ' ');
+                
+                const lateMins = record.late_minutes || 0;
+                const totalHrs = record.total_hours || 'N/A';
+                const status = record.status || 'N/A';
+                const eod = (record.eod_update || 'N/A').replace(/,/g, ';').replace(/\n/g, ' '); // Clean commas and newlines
+
+                csvContent += `${date},${index + 1},${clockIn},${clockOut},${locIn},${locOut},${devIn},${devOut},${lateMins},${totalHrs},${status},${eod}\n`;
+            });
+        });
+
+        // Create Blob and Download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Attendance_${selectedEmp.first_name}_${selectedEmp.last_name}_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // ==================== MODAL VIEW HANDLERS ====================
     const handleViewDossier = (emp) => {
         setViewEmployee(emp);
         setIsDossierModalOpen(true);
@@ -202,30 +301,19 @@ const SuperAdminEmployeeManagementCom = () => {
                 let photos = asset.asset_photos || [];
                 if (typeof photos === 'string') photos = JSON.parse(photos);
                 if (photos.length === 0 && asset.asset_photo) photos = [asset.asset_photo];
-
                 return { ...asset, parsedPhotos: photos };
             });
 
             setEmpAssets(parsedAssets || []);
         } catch (err) {
             console.error("Failed to fetch assets", err);
-            setEmpAssets([
-                {
-                    id: 1,
-                    asset_type: 'Laptop',
-                    brand_model: 'Apple MacBook Pro 14"',
-                    serial_number: 'C02XG543JGH',
-                    condition: 'Working',
-                    assigned_date: '2025-01-15',
-                    remarks: 'Standard issue',
-                    parsedPhotos: []
-                }
-            ]);
+            setEmpAssets([]);
         } finally {
             setLoadingAssets(false);
         }
     };
 
+    // ==================== FORMATTERS ====================
     const filteredEmployees = employees.filter(emp => {
         const searchString = `${emp.first_name} ${emp.last_name} ${emp._displayId} ${emp.department || 'All Departments'} ${emp.designation} ${emp._roleType} ${emp.branch} ${emp.company}`.toLowerCase();
         return searchString.includes(searchTerm.toLowerCase());
@@ -389,7 +477,7 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
             )}
 
-            {/* ==================== ATTENDANCE MODAL ==================== */}
+            {/* ==================== ATTENDANCE ACCORDION MODAL ==================== */}
             {isAttendanceModalOpen && selectedEmp && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -407,12 +495,22 @@ const SuperAdminEmployeeManagementCom = () => {
                                     </p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => setIsAttendanceModalOpen(false)}
-                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                            >
-                                <FaTimes className="text-sm" />
-                            </button>
+                            <div className="flex items-center gap-3 shrink-0">
+                                <Button 
+                                    variant="outline" 
+                                    icon={FaDownload} 
+                                    onClick={handleExportExcel}
+                                    className="border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white text-[11px] py-1.5 px-3 rounded-lg hidden sm:flex"
+                                >
+                                    Export Excel
+                                </Button>
+                                <button
+                                    onClick={() => setIsAttendanceModalOpen(false)}
+                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                    <FaTimes className="text-sm" />
+                                </button>
+                            </div>
                         </div>
 
                         <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 bg-white">
@@ -421,76 +519,152 @@ const SuperAdminEmployeeManagementCom = () => {
                                     <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mb-3"></div>
                                     <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading attendance…</p>
                                 </div>
-                            ) : attendanceRecords.length === 0 ? (
+                            ) : groupedHistory.length === 0 ? (
                                 <div className="py-16 text-center flex flex-col items-center justify-center">
-                                    <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mb-3">
+                                    <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mb-3 border border-slate-100">
                                         <FaClock className="text-xl text-slate-300" />
                                     </div>
                                     <p className="text-xs sm:text-sm font-semibold text-slate-400">No attendance or login records found for this user.</p>
                                 </div>
                             ) : (
                                 <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm custom-scrollbar">
-                                    <table className="w-full text-left border-collapse min-w-[560px]">
+                                    <table className="w-full text-left border-collapse min-w-[650px]">
                                         <thead>
                                             <tr className="border-b border-slate-200 text-[10px] text-slate-500 uppercase tracking-wider bg-slate-50/70">
                                                 <th className="px-5 py-3.5 font-bold whitespace-nowrap">Date</th>
-                                                <th className="px-5 py-3.5 font-bold whitespace-nowrap">Check In</th>
-                                                <th className="px-5 py-3.5 font-bold whitespace-nowrap">Check Out</th>
+                                                <th className="px-5 py-3.5 font-bold whitespace-nowrap">First In</th>
+                                                <th className="px-5 py-3.5 font-bold whitespace-nowrap">Last Out</th>
                                                 <th className="px-5 py-3.5 font-bold whitespace-nowrap">Total Hours</th>
                                                 <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                                <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Details</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {attendanceRecords.map((log, idx) => (
-                                                <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                                                    <td className="px-5 py-4">
-                                                        <p className="text-xs sm:text-sm font-bold text-[#010a1f] whitespace-nowrap">{formatDate(log.date)}</p>
-                                                    </td>
-                                                    <td className="px-5 py-4">
-                                                        <p className="text-xs sm:text-sm font-semibold text-slate-700 whitespace-nowrap">
-                                                            {formatTime(log.clock_in)}
-                                                        </p>
-                                                        {log.late_minutes > 0 && (
-                                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-100 mt-1.5 whitespace-nowrap">
-                                                                Late {log.late_minutes}m
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-5 py-4">
-                                                        <p className={`text-xs sm:text-sm font-semibold whitespace-nowrap flex items-center gap-1.5 ${log.clock_out ? 'text-slate-700' : 'text-green-600'}`}>
-                                                            {!log.clock_out && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
-                                                            {log.clock_out ? formatTime(log.clock_out) : 'Working...'}
-                                                        </p>
-                                                    </td>
-                                                    <td className="px-5 py-4">
-                                                        <p className={`text-xs sm:text-sm font-bold whitespace-nowrap tabular-nums ${log.total_hours ? 'text-[#0437cc]' : 'text-slate-400'}`}>
-                                                            {log.total_hours || 'In Progress'}
-                                                        </p>
-                                                    </td>
-                                                    <td className="px-5 py-4 text-center">
-                                                        <div className="flex flex-col items-center gap-2">
-                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${log.status === 'Present'
-                                                                ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                                : log.status.includes('Pending')
-                                                                    ? 'text-orange-700 bg-orange-50 border-orange-200'
-                                                                    : 'text-red-700 bg-red-50 border-red-200'
-                                                                }`}>
-                                                                <span className={`w-1.5 h-1.5 rounded-full ${log.status === 'Present' ? 'bg-teal-500' : log.status.includes('Pending') ? 'bg-orange-500' : 'bg-red-500'}`}></span>
-                                                                {log.status}
-                                                            </span>
-                                                            {log.status === 'Absent (Pending Approval)' && (
-                                                                <button
-                                                                    onClick={() => handleApproveAttendance(log.id)}
-                                                                    disabled={approvingId === log.id}
-                                                                    className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-3 py-1.5 rounded-lg shadow-md shadow-[#0437cc]/20 hover:shadow-lg hover:shadow-[#0437cc]/30 transition-all disabled:opacity-50 whitespace-nowrap"
-                                                                >
-                                                                    <FaCheckCircle className="shrink-0 text-[9px]" />
-                                                                    {approvingId === log.id ? 'Approving...' : 'Approve Late In'}
-                                                                </button>
+                                            {groupedHistory.map((group, i) => (
+                                                <React.Fragment key={i}>
+                                                    <tr 
+                                                        className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
+                                                        onClick={() => toggleAccordion(group.dateStr)}
+                                                    >
+                                                        <td className="px-5 py-3.5">
+                                                            <p className="text-xs font-bold text-[#010a1f] whitespace-nowrap">{formatDate(group.date)}</p>
+                                                            {group.sessions.length > 1 && (
+                                                                <span className="text-[9px] text-[#0437cc] font-bold bg-blue-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-blue-100">
+                                                                    {group.sessions.length} Sessions
+                                                                </span>
                                                             )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                                                        </td>
+                                                        <td className="px-5 py-3.5">
+                                                            <p className="text-xs font-semibold flex flex-col text-slate-700 whitespace-nowrap">
+                                                                {formatTime(group.first_clock_in)}
+                                                                {group.late_minutes > 0 && (
+                                                                    <span className="inline-flex items-center gap-1 text-[9px] text-red-600 font-bold mt-1 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 w-max">
+                                                                        <FaExclamationTriangle className="text-[7px]" /> Late {group.late_minutes}m
+                                                                    </span>
+                                                                )}
+                                                            </p>
+                                                        </td>
+                                                        <td className="px-5 py-3.5">
+                                                            <p className={`text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${group.last_clock_out ? 'text-slate-700' : 'text-green-600'}`}>
+                                                                {group.is_working && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
+                                                                {group.is_working ? 'Working...' : formatTime(group.last_clock_out)}
+                                                            </p>
+                                                        </td>
+                                                        <td className="px-5 py-3.5">
+                                                            <p className={`text-xs font-bold whitespace-nowrap tabular-nums ${group.total_hours_sum || group.is_working ? 'text-[#0437cc]' : 'text-slate-400'}`}>
+                                                                {group.is_working ? (group.total_hours_sum ? `${group.total_hours_sum} (In Progress)` : 'In Progress') : (group.total_hours_sum || '—')}
+                                                            </p>
+                                                        </td>
+                                                        <td className="px-5 py-3.5 text-center">
+                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${
+                                                                group.status === 'Present' ? 'text-teal-700 bg-teal-50 border-teal-200' :
+                                                                group.status?.includes('Pending') ? 'text-orange-700 bg-orange-50 border-orange-200' :
+                                                                'text-red-700 bg-red-50 border-red-200'
+                                                            }`}>
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${group.status === 'Present' ? 'bg-teal-500' : group.status?.includes('Pending') ? 'bg-orange-500' : 'bg-red-500'}`}></span>
+                                                                {group.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-5 py-3.5 text-right">
+                                                            <button className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all ${expandedDates.includes(group.dateStr)
+                                                                ? 'bg-[#0437cc] text-white'
+                                                                : 'bg-slate-50 text-slate-400 group-hover:bg-white group-hover:border group-hover:border-slate-200'
+                                                                }`}>
+                                                                {expandedDates.includes(group.dateStr) ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+
+                                                    {/* Expanded Session View */}
+                                                    {expandedDates.includes(group.dateStr) && (
+                                                        <tr>
+                                                            <td colSpan="6" className="bg-gradient-to-b from-[#f8fafc] to-white border-b border-slate-100 px-5 py-4">
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                    {group.sessions.map((session, idx) => (
+                                                                        <div key={idx} className="relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm mt-3 hover:shadow-md transition-shadow">
+                                                                            <span className="absolute -top-2.5 left-3 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                                                                                Session {idx + 1}
+                                                                            </span>
+
+                                                                            <div className="mt-2 grid grid-cols-2 gap-3">
+                                                                                <div className="min-w-0">
+                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                                                                                        <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center"><FaSignInAlt className="text-green-500 text-[8px]" /></span> In
+                                                                                    </p>
+                                                                                    <p className="text-xs font-bold text-slate-700 truncate">{formatTime(session.clock_in)}</p>
+                                                                                    <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_in_location || session.location_in}>
+                                                                                        <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_in_location || session.location_in || 'No Location'}
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                        <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_in_device || session.device_in || 'No Device'}
+                                                                                    </p>
+                                                                                </div>
+                                                                                <div className="min-w-0 border-l border-slate-100 pl-3">
+                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                                                                                        <span className="w-5 h-5 rounded-md bg-red-50 flex items-center justify-center"><FaSignOutAlt className="text-red-400 text-[8px]" /></span> Out
+                                                                                    </p>
+                                                                                    <p className="text-xs font-bold text-slate-700 truncate">
+                                                                                        {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>Working</span>}
+                                                                                    </p>
+                                                                                    {session.clock_out && (
+                                                                                        <>
+                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location || session.location_out}>
+                                                                                                <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || session.location_out || 'No Location'}
+                                                                                            </p>
+                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                                <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || session.device_out || 'No Device'}
+                                                                                            </p>
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Total Hours & Late Approval Action */}
+                                                                            <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center gap-2">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Duration:</span>
+                                                                                    <span className="text-sm font-bold text-[#0437cc]">{session.total_hours || 'In Progress'}</span>
+                                                                                </div>
+                                                                                
+                                                                                {/* Late Approval Button specifically for this session */}
+                                                                                {session.status?.includes('Pending') && (
+                                                                                    <button
+                                                                                        onClick={(e) => { e.stopPropagation(); handleApproveAttendance(session.id); }}
+                                                                                        disabled={approvingId === session.id}
+                                                                                        className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-gradient-to-r from-[#f77704] to-orange-500 text-white px-3 py-1.5 rounded-lg shadow-md shadow-orange-500/20 hover:shadow-lg hover:shadow-orange-500/30 transition-all disabled:opacity-50 whitespace-nowrap"
+                                                                                    >
+                                                                                        <FaCheckCircle className="shrink-0 text-[9px]" />
+                                                                                        {approvingId === session.id ? 'Approving...' : 'Approve Late In'}
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
                                             ))}
                                         </tbody>
                                     </table>

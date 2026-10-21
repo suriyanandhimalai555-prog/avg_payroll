@@ -3,7 +3,8 @@ import axios from 'axios';
 import {
     FaUserPlus, FaUser, FaBriefcase, FaMoneyCheckAlt,
     FaUniversity, FaTimes, FaCheck, FaListUl, FaEnvelope, FaPhoneAlt,
-    FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle
+    FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle,
+    FaLaptop, FaMobileAlt, FaIdBadge, FaKey, FaBox, FaHistory
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -21,12 +22,32 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-const SuperAdminEmployeeCom = () => {
-    const currentYear = new Date().getFullYear();
+// Helper for asset icons
+const getAssetIcon = (type) => {
+    switch (type) {
+        case 'Laptop': return <FaLaptop className="text-blue-500" />;
+        case 'Mobile Phone': return <FaMobileAlt className="text-purple-500" />;
+        case 'ID Card': return <FaIdBadge className="text-teal-500" />;
+        case 'Access Key': return <FaKey className="text-orange-500" />;
+        default: return <FaBox className="text-slate-500" />;
+    }
+};
 
+// Helper for asset icon tile backgrounds
+const getAssetIconBg = (type) => {
+    switch (type) {
+        case 'Laptop': return 'bg-blue-50 border-blue-100';
+        case 'Mobile Phone': return 'bg-purple-50 border-purple-100';
+        case 'ID Card': return 'bg-teal-50 border-teal-100';
+        case 'Access Key': return 'bg-orange-50 border-orange-100';
+        default: return 'bg-slate-50 border-slate-100';
+    }
+};
+
+const SuperAdminEmployeeCom = () => {
     const INITIAL_FORM_STATE = {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '', address: '',
-        employeeId: `AVG-${currentYear}-XXX (Auto)`, joiningDate: '',
+        employeeId: '', joiningDate: '', // Removed auto-generation logic
         company: '', branch: '', department: '', designation: '', manager: '', empType: '', location: '', shift: '', status: 'Pending Activation',
         ctc: '', monthlySalary: '', basic: '', hra: '', conveyance: '', medical: '', specialAllowance: '', otherAllowances: '',
         epf: '', esi: '', healthInsurance: '', pt: '', tds: '', leaves: '',
@@ -88,22 +109,6 @@ const SuperAdminEmployeeCom = () => {
         try {
             const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`);
             let data = response.data || [];
-
-            if (data.length === 0) {
-                data = [{
-                    id: 999,
-                    first_name: 'John', last_name: 'Doe',
-                    email: 'john.doe@avg.com', phone: '+91 9876543210',
-                    employee_id: `AVG-${currentYear}-001`,
-                    company: 'AVG Prime Tech', branch: 'Bangalore Branch',
-                    department: 'Engineering', designation: 'Frontend Developer',
-                    location: 'Koramangala HQ', shift: 'General Shift',
-                    status: 'Active', joining_date: new Date().toISOString(),
-                    ctc: 360000, monthly_salary: 30000, basic_salary: 15000, hra: 6000, conveyance: 2000, medical: 2000, special_allowance: 2000, other_allowances: 3000,
-                    epf: 1800, esi: 0, health_insurance: 1000, pt: 200, tds: 0, leaves: 0,
-                    uan_no: '100412345678'
-                }];
-            }
             setEmployees(data);
         } catch (error) {
             console.error('Error fetching employees:', error);
@@ -149,7 +154,7 @@ const SuperAdminEmployeeCom = () => {
 
         const requiredFields = [
             'firstName', 'lastName', 'email', 'phone', 'dob', 'gender', 'address',
-            'joiningDate', 'company', 'branch', 'department', 'designation', 'empType', 'location', 'shift', 'status',
+            'employeeId', 'joiningDate', 'company', 'branch', 'department', 'designation', 'empType', 'location', 'shift', 'status',
             'ctc', 'monthlySalary', 'basic', 'hra', 'conveyance', 'medical', 'otherAllowances',
             'epf', 'uanNo',
             'bankName', 'accountHolder', 'accountNumber', 'ifsc'
@@ -521,7 +526,11 @@ const SuperAdminEmployeeCom = () => {
                         </div>
                     </div>
                     <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                        <Input label="Employee ID" name="employeeId" value={formData.employeeId} disabled className="bg-slate-100 font-mono text-[#0437cc]" />
+                        {/* MANUAL EMPLOYEE ID INPUT */}
+                        <FieldWrapper error={errors.employeeId}>
+                            <Input label={<>Employee ID <span className="text-red-500">*</span></>} name="employeeId" value={formData.employeeId} onChange={handleInputChange} placeholder="e.g. AVG-2026-001" className="font-mono" />
+                        </FieldWrapper>
+
                         <FieldWrapper error={errors.joiningDate}><Input label={<>Joining Date <span className="text-red-500">*</span></>} type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} /></FieldWrapper>
 
                         <FieldWrapper error={errors.company}>

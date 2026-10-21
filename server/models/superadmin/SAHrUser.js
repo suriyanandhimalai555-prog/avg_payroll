@@ -89,10 +89,30 @@ const initializeSAHrUserModel = async () => {
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS account_number VARCHAR(100);
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS ifsc VARCHAR(50);
         
-        -- Fix: Appends the profile_photo column
         ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS profile_photo TEXT;
         
         ALTER TABLE sa_hr_users DROP COLUMN IF EXISTS permissions;
+    `;
+
+    // ============================================================================
+    // CASCADING FOREIGN KEY PATCH
+    // Dynamically upgrades the hr_attendance table to cascade ID updates & deletes
+    // ============================================================================
+    const patchFKQuery = `
+        DO $$ 
+        BEGIN 
+            IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'hr_attendance') THEN
+                ALTER TABLE hr_attendance DROP CONSTRAINT IF EXISTS hr_attendance_hr_id_fkey;
+                
+                -- We assume hr_attendance's hr_id matches sa_hr_users's hr_id
+                ALTER TABLE hr_attendance 
+                    ADD CONSTRAINT hr_attendance_hr_id_fkey 
+                    FOREIGN KEY (hr_id) 
+                    REFERENCES sa_hr_users(hr_id) 
+                    ON UPDATE CASCADE 
+                    ON DELETE CASCADE;
+            END IF;
+        END $$;
     `;
 
     try {
@@ -100,8 +120,9 @@ const initializeSAHrUserModel = async () => {
         await pool.query(alterTableQueries);
         
         await pool.query(`UPDATE sa_hr_users SET hr_id = 'LEGACY-' || id WHERE hr_id IS NULL;`);
+        await pool.query(patchFKQuery);
         
-        console.log('SAHrUser table checked/updated successfully.');
+        console.log('SAHrUser table & constraints checked/updated successfully.');
     } catch (error) {
         console.error('Error updating SAHrUser table:', error);
     }

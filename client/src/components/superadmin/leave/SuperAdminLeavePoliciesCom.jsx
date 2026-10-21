@@ -16,7 +16,7 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-const SuperAdminLeaveSettingsCom = () => {
+const SuperAdminLeavePoliciesCom = () => {
     // Reusable Initial State
     const INITIAL_FORM_STATE = {
         casualLeave: '',
@@ -318,4 +318,4 @@ const SuperAdminLeaveSettingsCom = () => {
     );
 };
 
-export default SuperAdminLeaveSettingsCom;
+export default SuperAdminLeavePoliciesCom;

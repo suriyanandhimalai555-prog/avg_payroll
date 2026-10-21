@@ -83,13 +83,16 @@ const CommonLogin = () => {
                 password, 
                 role: loginRole
             });
+            
             if (response.status === 200) {
                 // Clear lockout data on successful login
                 localStorage.removeItem('common_login_attempts');
                 localStorage.removeItem('common_lockout_until');
                 setLoginAttempts(0);
                 
-                login(response.data.user, response.data.token);
+                // Pass ONLY user metadata to the Auth Context. Token is handled securely by backend cookies.
+                login(response.data.user);
+                
                 if (loginRole === 'hr') navigate('/hr');
                 else if (loginRole === 'manager') navigate('/manager');
                 else navigate('/employee');

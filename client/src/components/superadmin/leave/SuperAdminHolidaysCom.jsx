@@ -4,11 +4,11 @@ import {
     FaUmbrellaBeach, FaInfoCircle, FaCheck, FaTimes,
     FaListUl, FaSearch, FaTree, FaBuilding, FaSitemap,
     FaNetworkWired, FaEye, FaEdit, FaTrash, FaCalendarAlt,
-    FaChevronDown, FaChevronUp, FaThLarge, FaMagic, FaPlusCircle
+    FaChevronDown, FaChevronUp, FaThLarge, FaMagic, FaLandmark
 } from 'react-icons/fa';
-import Button from '../../../components/common/Button';
-import Input from '../../../components/common/Input';
-import Select from '../../../components/common/Select';
+import Button from '../../common/Button';
+import Input from '../../common/Input';
+import Select from '../../common/Select';
 
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full min-w-0">
@@ -29,7 +29,7 @@ const SuperAdminHolidaysCom = () => {
         departmentId: '',
         holidayName: '',
         holidayDate: '',
-        type: 'Central Government Holiday',
+        type: 'GAZETTED',
         status: 'Active'
     };
 
@@ -44,7 +44,13 @@ const SuperAdminHolidaysCom = () => {
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    
+    // Auto-Generation States
     const [isGeneratingWeekends, setIsGeneratingWeekends] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const [autoGenYear, setAutoGenYear] = useState(new Date().getFullYear());
+    const [saturdayRule, setSaturdayRule] = useState('SECOND_FOURTH');
+    const [showAutoTools, setShowAutoTools] = useState(false);
 
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState(null);
@@ -166,15 +172,15 @@ const SuperAdminHolidaysCom = () => {
             return;
         }
 
-        const currentYear = new Date().getFullYear();
-        if (!window.confirm(`Auto-generate all Sundays and Even Saturdays (2nd & 4th) for the year ${currentYear}?`)) return;
+        if (!window.confirm(`Generate Weekends for ${autoGenYear}?\nRule: ${saturdayRule}`)) return;
 
         setIsGeneratingWeekends(true);
         try {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-holidays/auto-weekends`, {
                 companyId: formData.companyId,
                 branchId: formData.branchId || null,
-                year: currentYear
+                year: autoGenYear,
+                saturdayRule: saturdayRule
             });
             setSuccessMsg(response.data.message);
             fetchHolidays();
@@ -184,6 +190,33 @@ const SuperAdminHolidaysCom = () => {
             setTimeout(() => setApiError(''), 5000);
         } finally {
             setIsGeneratingWeekends(false);
+        }
+    };
+
+    const handleImportGovHolidays = async () => {
+        if (!formData.companyId) {
+            setApiError('Please select a Company first to import Government holidays.');
+            setTimeout(() => setApiError(''), 5000);
+            return;
+        }
+
+        if (!window.confirm(`Import DoPT Central Govt Holidays for ${autoGenYear}? They will be inserted as 'Draft'.`)) return;
+
+        setIsImporting(true);
+        try {
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-holidays/import-government`, {
+                companyId: formData.companyId,
+                branchId: formData.branchId || null,
+                year: autoGenYear
+            });
+            setSuccessMsg(response.data.message);
+            fetchHolidays();
+            setTimeout(() => setSuccessMsg(''), 6000);
+        } catch (error) {
+            setApiError(error.response?.data?.message || 'Failed to import government holidays.');
+            setTimeout(() => setApiError(''), 5000);
+        } finally {
+            setIsImporting(false);
         }
     };
 
@@ -199,6 +232,7 @@ const SuperAdminHolidaysCom = () => {
         });
         setIsEditing(true);
         setEditId(holiday.id);
+        setShowAutoTools(false);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -242,10 +276,12 @@ const SuperAdminHolidaysCom = () => {
     const groupedHolidays = filteredHolidays.reduce((acc, curr) => {
         const comp = curr.company_name || 'Global / Unassigned';
         if (!acc[comp]) {
-            acc[comp] = { standard: [], weekends: [] };
+            acc[comp] = { standard: [], weekends: [], drafts: [] };
         }
-        if (curr.type === 'Weekend Holiday') {
+        if (curr.type === 'WEEKLY_OFF') {
             acc[comp].weekends.push(curr);
+        } else if (curr.status === 'Draft') {
+            acc[comp].drafts.push(curr);
         } else {
             acc[comp].standard.push(curr);
         }
@@ -253,10 +289,10 @@ const SuperAdminHolidaysCom = () => {
     }, {});
 
     const getTypeStyle = (type) => {
-        if (type.includes('Central') || type.includes('National')) return 'text-[#0437cc] bg-blue-50 border-blue-200';
-        if (type.includes('State')) return 'text-teal-700 bg-teal-50 border-teal-200';
-        if (type.includes('Weekend')) return 'text-purple-700 bg-purple-50 border-purple-200';
-        if (type.includes('Festival')) return 'text-[#f77704] bg-orange-50 border-orange-200';
+        if (type === 'GAZETTED') return 'text-[#0437cc] bg-blue-50 border-blue-200';
+        if (type === 'RESTRICTED') return 'text-[#f77704] bg-orange-50 border-orange-200';
+        if (type === 'STATE_HOLIDAY') return 'text-teal-700 bg-teal-50 border-teal-200';
+        if (type === 'WEEKLY_OFF') return 'text-purple-700 bg-purple-50 border-purple-200';
         return 'text-slate-600 bg-slate-100 border-slate-200';
     };
 
@@ -276,9 +312,16 @@ const SuperAdminHolidaysCom = () => {
             </td>
             <td className="px-5 py-4">
                 <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{holiday.holiday_name}</p>
-                <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold tracking-wide border ${getTypeStyle(holiday.type)}`}>
-                    {holiday.type}
-                </span>
+                <div className="flex items-center gap-2 mt-1.5">
+                    <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold tracking-wide border ${getTypeStyle(holiday.type)}`}>
+                        {holiday.type.replace('_', ' ')}
+                    </span>
+                    {holiday.source === 'OFFICIAL_IMPORT' && (
+                        <a href={holiday.official_source_url} target="_blank" rel="noopener noreferrer" className="text-[9px] font-bold text-slate-400 hover:text-[#0437cc] flex items-center gap-1">
+                            <FaLandmark /> Verified Source
+                        </a>
+                    )}
+                </div>
             </td>
             <td className="px-5 py-4 min-w-0">
                 <p className="text-[11px] sm:text-xs font-bold text-slate-700 truncate flex items-center gap-1.5">
@@ -291,6 +334,12 @@ const SuperAdminHolidaysCom = () => {
                         <span className="truncate">{holiday.department_name}</span>
                     </p>
                 )}
+            </td>
+            <td className="px-5 py-4 text-center">
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold border ${holiday.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' : holiday.status === 'Draft' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${holiday.status === 'Active' ? 'bg-green-500' : holiday.status === 'Draft' ? 'bg-orange-500' : 'bg-red-500'}`}></span>
+                    {holiday.status}
+                </span>
             </td>
             <td className="px-5 py-4 text-right">
                 <div className="flex gap-1 justify-end">
@@ -363,7 +412,7 @@ const SuperAdminHolidaysCom = () => {
                                             {formatDate(viewHoliday.holiday_date).day}
                                         </p>
                                         <span className={`inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${getTypeStyle(viewHoliday.type)}`}>
-                                            {viewHoliday.type}
+                                            {viewHoliday.type.replace('_', ' ')}
                                         </span>
                                     </div>
                                 </div>
@@ -392,15 +441,18 @@ const SuperAdminHolidaysCom = () => {
                                 )}
                             </div>
 
-                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${viewHoliday.status === 'Active'
-                                    ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                    : 'text-red-700 bg-red-50 border-red-200'
-                                    }`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${viewHoliday.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
-                                    {viewHoliday.status}
-                                </span>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${viewHoliday.status === 'Active' ? 'text-teal-700 bg-teal-50 border-teal-200' : viewHoliday.status === 'Draft' ? 'text-orange-700 bg-orange-50 border-orange-200' : 'text-red-700 bg-red-50 border-red-200'}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${viewHoliday.status === 'Active' ? 'bg-teal-500' : viewHoliday.status === 'Draft' ? 'bg-orange-500' : 'bg-red-500'}`}></span>
+                                        {viewHoliday.status}
+                                    </span>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Creation Source</p>
+                                    <p className="text-xs font-bold text-slate-700">{viewHoliday.source.replace('_', ' ')}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -448,12 +500,12 @@ const SuperAdminHolidaysCom = () => {
                             </Button>
                         ) : (
                             <Button
-                                variant="ghost"
-                                icon={FaTimes}
-                                onClick={() => setFormData(INITIAL_FORM_STATE)}
-                                className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2"
+                                variant="outline"
+                                icon={showAutoTools ? FaTimes : FaMagic}
+                                onClick={() => setShowAutoTools(!showAutoTools)}
+                                className={`w-full sm:w-auto rounded-xl text-xs sm:text-sm py-2 ${showAutoTools ? 'bg-slate-100 text-slate-600' : 'border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white'}`}
                             >
-                                Clear
+                                {showAutoTools ? 'Close Auto Tools' : 'Auto-Generate Tools'}
                             </Button>
                         )}
                         <Button
@@ -463,30 +515,15 @@ const SuperAdminHolidaysCom = () => {
                             onClick={handleSubmit}
                             disabled={isSubmitting}
                         >
-                            {isSubmitting ? 'Saving...' : (isEditing ? 'Update Holiday' : 'Add Holiday')}
+                            {isSubmitting ? 'Saving...' : (isEditing ? 'Update Holiday' : 'Add Custom Holiday')}
                         </Button>
                     </div>
                 </div>
             </div>
 
-            {/* ==================== INFO BANNER ==================== */}
-            <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start shadow-sm overflow-hidden">
-                <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
-
-                <span className="relative w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-blue-100 mt-0.5">
-                    <FaInfoCircle className="text-blue-500 text-sm" />
-                </span>
-                <div className="relative min-w-0">
-                    <p className="text-sm font-bold text-[#010a1f]">Automated System Impact & Auto-Generation</p>
-                    <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                        Managing company holidays correctly ensures that the Attendance System does not flag employees as <strong className="text-[#010a1f]">"Absent"</strong> on these days. You can manually specify Central or State Government holidays. Use the <strong className="text-[#010a1f]">Auto-Generate</strong> button below to instantly mark all <strong className="text-[#010a1f]">Sundays and Even Saturdays (2nd & 4th)</strong> as holidays for the selected Company.
-                    </p>
-                </div>
-            </div>
-
             {/* ==================== MESSAGES ==================== */}
             {successMsg && (
-                <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
+                <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden animate-in fade-in">
                     <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
                         <FaCheck className="text-green-600 text-xs" />
                     </span>
@@ -495,7 +532,7 @@ const SuperAdminHolidaysCom = () => {
             )}
 
             {apiError && (
-                <div className="relative bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
+                <div className="relative bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden animate-in fade-in">
                     <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-red-200 shrink-0">
                         <FaTimes className="text-red-600 text-xs" />
                     </span>
@@ -515,41 +552,19 @@ const SuperAdminHolidaysCom = () => {
                             </span>
                             <div className="min-w-0">
                                 <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Holiday Details</h2>
-                                <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Configure holiday information and deployment</p>
+                                <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Configure standard company holidays</p>
                             </div>
                         </div>
-
-                        {!isEditing && (
-                            <button
-                                type="button"
-                                onClick={handleAutoGenerateWeekends}
-                                disabled={isGeneratingWeekends || !formData.companyId}
-                                className="group inline-flex items-center justify-center gap-2 w-full sm:w-auto bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md shadow-[#0437cc]/25 hover:shadow-lg hover:shadow-[#0437cc]/30 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 transition-all shrink-0"
-                            >
-                                {isGeneratingWeekends ? (
-                                    <>
-                                        <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
-                                        Generating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <FaMagic className="text-xs" />
-                                        Auto-Generate Weekends
-                                    </>
-                                )}
-                            </button>
-                        )}
                     </div>
 
                     <div className="relative p-5 space-y-6">
-
                         {/* Org Deployment */}
                         <div>
                             <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
                                 <span className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center">
                                     <FaBuilding className="text-[#0437cc] text-[10px]" />
                                 </span>
-                                <h3 className="text-[11px] font-bold text-[#010a1f] uppercase tracking-wider">Organizational Deployment</h3>
+                                <h3 className="text-[11px] font-bold text-[#010a1f] uppercase tracking-wider">Organizational Deployment Target</h3>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                 <FieldWrapper error={errors.companyId}>
@@ -599,7 +614,7 @@ const SuperAdminHolidaysCom = () => {
                                     <Input
                                         label="Holiday Name *"
                                         name="holidayName"
-                                        placeholder="e.g., Independence Day"
+                                        placeholder="e.g., Company Anniversary"
                                         value={formData.holidayName}
                                         onChange={handleInputChange}
                                     />
@@ -617,16 +632,16 @@ const SuperAdminHolidaysCom = () => {
 
                                 <FieldWrapper error={errors.type}>
                                     <Select
-                                        label="Holiday Type *"
+                                        label="Holiday Category *"
                                         name="type"
                                         value={formData.type}
                                         onChange={handleInputChange}
                                         options={[
-                                            { value: 'Central Government Holiday', label: 'Central Government Holiday' },
-                                            { value: 'State Government Holiday', label: 'State Government Holiday' },
-                                            { value: 'Festival Holiday', label: 'Festival Holiday' },
-                                            { value: 'Weekend Holiday', label: 'Weekend Holiday' },
-                                            { value: 'Optional Holiday', label: 'Optional Holiday' }
+                                            { value: 'GAZETTED', label: 'Gazetted Holiday' },
+                                            { value: 'RESTRICTED', label: 'Restricted Holiday' },
+                                            { value: 'STATE_HOLIDAY', label: 'State Holiday' },
+                                            { value: 'COMPANY_HOLIDAY', label: 'Company Custom Holiday' },
+                                            { value: 'WEEKLY_OFF', label: 'Weekend / Weekly Off' }
                                         ]}
                                     />
                                 </FieldWrapper>
@@ -638,7 +653,8 @@ const SuperAdminHolidaysCom = () => {
                                         value={formData.status}
                                         onChange={handleInputChange}
                                         options={[
-                                            { value: 'Active', label: 'Active' },
+                                            { value: 'Active', label: 'Active (Published)' },
+                                            { value: 'Draft', label: 'Draft (Hidden)' },
                                             { value: 'Inactive', label: 'Inactive' }
                                         ]}
                                     />
@@ -646,6 +662,75 @@ const SuperAdminHolidaysCom = () => {
                             </div>
                         </div>
                     </div>
+                    
+                    {/* AUTO GENERATION TOOLS EXPANSION */}
+                    {showAutoTools && !isEditing && (
+                        <div className="bg-slate-50 border-t border-slate-200 p-5 space-y-5 animate-in slide-in-from-top-4 duration-300">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="w-6 h-6 rounded-md bg-[#0437cc]/10 flex items-center justify-center">
+                                    <FaMagic className="text-[#0437cc] text-[10px]" />
+                                </span>
+                                <h3 className="text-[11px] font-bold text-[#010a1f] uppercase tracking-wider">Automated Bulk Generation</h3>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end">
+                                <FieldWrapper>
+                                    <Select
+                                        label="Target Year"
+                                        name="autoGenYear"
+                                        value={autoGenYear}
+                                        onChange={(e) => setAutoGenYear(e.target.value)}
+                                        options={[
+                                            { value: new Date().getFullYear(), label: new Date().getFullYear() },
+                                            { value: new Date().getFullYear() + 1, label: new Date().getFullYear() + 1 }
+                                        ]}
+                                    />
+                                </FieldWrapper>
+                                
+                                <FieldWrapper>
+                                    <Select
+                                        label="Saturday Policy Rule"
+                                        name="saturdayRule"
+                                        value={saturdayRule}
+                                        onChange={(e) => setSaturdayRule(e.target.value)}
+                                        options={[
+                                            { value: 'ALL', label: 'Every Saturday Off' },
+                                            { value: 'SECOND_FOURTH', label: '2nd & 4th Saturday Off' },
+                                            { value: 'SECOND', label: 'Only 2nd Saturday Off' },
+                                            { value: 'FOURTH', label: 'Only 4th Saturday Off' },
+                                            { value: 'NONE', label: 'No Saturdays Off (Only Sundays)' }
+                                        ]}
+                                    />
+                                </FieldWrapper>
+                                
+                                <Button
+                                    type="button"
+                                    onClick={handleAutoGenerateWeekends}
+                                    disabled={isGeneratingWeekends || !formData.companyId}
+                                    className="w-full bg-[#010a1f] hover:bg-slate-800 text-white rounded-xl py-3 shadow-md"
+                                >
+                                    {isGeneratingWeekends ? 'Generating...' : 'Execute Weekend Generation'}
+                                </Button>
+                            </div>
+
+                            <div className="border-t border-slate-200 pt-5 mt-5">
+                                <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                                    <div className="text-left">
+                                        <p className="text-sm font-bold text-[#010a1f] flex items-center gap-2"><FaLandmark className="text-teal-600" /> Official DoPT Gov Import</p>
+                                        <p className="text-xs text-slate-500 mt-1">Safely import verified India Central Govt holidays for the selected year. (Imports as Drafts)</p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        onClick={handleImportGovHolidays}
+                                        disabled={isImporting || !formData.companyId}
+                                        className="w-full md:w-auto bg-teal-600 hover:bg-teal-700 text-white rounded-xl py-2.5 shadow-md"
+                                    >
+                                        {isImporting ? 'Importing Data...' : 'Import Government Holidays'}
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </form>
 
@@ -745,12 +830,12 @@ const SuperAdminHolidaysCom = () => {
                                     </div>
                                     <span className="inline-flex items-center gap-1.5 bg-[#0437cc]/10 text-[#0437cc] text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-full border border-[#0437cc]/20 shrink-0 w-max">
                                         <span className="w-1.5 h-1.5 rounded-full bg-[#0437cc]"></span>
-                                        {data.standard.length + data.weekends.length} Holidays
+                                        {data.standard.length + data.weekends.length + data.drafts.length} Total Holidays
                                     </span>
                                 </div>
 
                                 {/* Standard Holidays Table */}
-                                {data.standard.length > 0 ? (
+                                {data.standard.length > 0 || data.drafts.length > 0 ? (
                                     <div className="relative overflow-x-auto w-full custom-scrollbar">
                                         <table className="w-full text-left border-collapse min-w-[700px]">
                                             <thead>
@@ -758,12 +843,17 @@ const SuperAdminHolidaysCom = () => {
                                                     <th className="px-5 py-3.5 font-bold whitespace-nowrap">Date</th>
                                                     <th className="px-5 py-3.5 font-bold whitespace-nowrap">Holiday Name</th>
                                                     <th className="px-5 py-3.5 font-bold whitespace-nowrap">Deployment Target</th>
+                                                    <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
                                                     <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
+                                                {/* Drafts visually separated first */}
+                                                {data.drafts.map((holiday, i) => (
+                                                    <HolidayTableRow key={`draft-${i}`} holiday={holiday} />
+                                                ))}
                                                 {data.standard.map((holiday, i) => (
-                                                    <HolidayTableRow key={i} holiday={holiday} />
+                                                    <HolidayTableRow key={`std-${i}`} holiday={holiday} />
                                                 ))}
                                             </tbody>
                                         </table>
@@ -787,11 +877,11 @@ const SuperAdminHolidaysCom = () => {
                                                     <FaCalendarAlt className="text-purple-600 text-xs" />
                                                 </span>
                                                 <span className="min-w-0 text-left">
-                                                    <span className="block text-[11px] sm:text-xs font-bold text-slate-700 truncate">Weekend Holidays</span>
-                                                    <span className="block text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5 truncate">Sundays & Even Saturdays</span>
+                                                    <span className="block text-[11px] sm:text-xs font-bold text-slate-700 truncate">Auto-Generated Weekends</span>
+                                                    <span className="block text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5 truncate">Sundays & Saturdays</span>
                                                 </span>
                                                 <span className="shrink-0 ml-2 inline-flex items-center gap-1 bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-purple-200">
-                                                    {data.weekends.length}
+                                                    {data.weekends.length} Off Days
                                                 </span>
                                             </span>
                                             <span className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isWeekendExpanded

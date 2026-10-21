@@ -5,6 +5,12 @@ import { createActivationToken } from '../../utils/activationToken.js';
 
 dotenv.config();
 
+// ============================================================================
+// FORCE TABLE INITIALIZATION
+// Bypasses the RUN_DB_INITIALIZERS flag to guarantee the foreign key patch runs.
+// ============================================================================
+initializeSAEmployeeModel();
+
 // Explicitly configured for Hostinger Webmail
 const transporter = nodemailer.createTransport({
     host: 'smtp.hostinger.com',
@@ -22,28 +28,10 @@ export const createEmployee = async (req, res) => {
     try {
         const data = req.body;
 
-        if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.department || !data.uanNo) {
-            return res.status(400).json({ message: "Missing required employee details including UAN NO. Please complete all mandatory fields." });
+        // Ensure employeeId is passed manually from the frontend
+        if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.department || !data.uanNo || !data.employeeId) {
+            return res.status(400).json({ message: "Missing required employee details including Employee ID and UAN NO. Please complete all mandatory fields." });
         }
-
-        const currentYear = new Date().getFullYear();
-
-        const lastEmpQuery = `
-            SELECT employee_id FROM sa_employees
-            WHERE employee_id LIKE $1
-            ORDER BY id DESC LIMIT 1;
-        `;
-        const lastEmpResult = await pool.query(lastEmpQuery, [`AVG-${currentYear}-%`]);
-
-        let newSequence = 1;
-        if (lastEmpResult.rows.length > 0) {
-            const lastId = lastEmpResult.rows[0].employee_id;
-            const parts = lastId.split('-');
-            const parsedSeq = parseInt(parts[parts.length - 1], 10);
-            if (!isNaN(parsedSeq)) newSequence = parsedSeq + 1;
-        }
-
-        const generatedEmployeeId = `AVG-${currentYear}-${String(newSequence).padStart(3, '0')}`;
 
         const insertQuery = `
             INSERT INTO sa_employees (
@@ -68,7 +56,7 @@ export const createEmployee = async (req, res) => {
             data.dob || null,
             data.gender || 'Other',
             data.address || 'N/A',
-            generatedEmployeeId,
+            data.employeeId, // The manual ID from frontend
             data.joiningDate || data.joining_date || new Date().toISOString().split('T')[0],
             data.company,
             data.branch,
@@ -123,7 +111,7 @@ export const createEmployee = async (req, res) => {
                             <p style="color: #475569; line-height: 1.6; font-size: 15px;">We are thrilled to welcome you aboard. Your official employee profile has been successfully generated in our system.</p>
                             
                             <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0; border: 1px solid #e2e8f0;">
-                                <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Employee ID:</strong> <span style="color: #0437cc; font-family: monospace; font-size: 16px;">${generatedEmployeeId}</span></p>
+                                <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Employee ID:</strong> <span style="color: #0437cc; font-family: monospace; font-size: 16px;">${data.employeeId}</span></p>
                                 <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Role:</strong> ${data.designation}</p>
                                 <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Department:</strong> ${data.department}</p>
                                 <p style="margin: 0; color: #010a1f; font-size: 15px;"><strong>Location:</strong> ${data.location || data.branch} (${data.branch})</p>
@@ -145,15 +133,20 @@ export const createEmployee = async (req, res) => {
         } catch (emailError) {
             console.error('SMTP Email Error:', emailError);
             res.status(201).json({
-                message: `Employee created successfully with ID: ${generatedEmployeeId}, but the activation email failed to send. Check SMTP settings.`,
+                message: `Employee created successfully with ID: ${data.employeeId}, but the activation email failed to send. Check SMTP settings.`,
                 employee: newEmployee
             });
         }
 
     } catch (error) {
         console.error('Creation Error:', error);
-        if (error.code === '23505' && error.constraint === 'sa_employees_email_key') {
-            return res.status(400).json({ message: 'An employee with this email address already exists.' });
+        if (error.code === '23505') {
+            if (error.constraint === 'sa_employees_email_key') {
+                return res.status(400).json({ message: 'An employee with this email address already exists.' });
+            }
+            if (error.constraint === 'sa_employees_employee_id_key') {
+                return res.status(400).json({ message: 'This Employee ID is already taken. Please enter a unique ID.' });
+            }
         }
         res.status(500).json({ message: 'Error creating employee', error: error.message });
     }
@@ -164,7 +157,6 @@ export const updateEmployee = async (req, res) => {
         const { id } = req.params;
         const data = req.body;
 
-        // Fetch existing employee first so missing fields in partial updates don't overwrite with NULL
         const existingRes = await pool.query('SELECT * FROM sa_employees WHERE id = $1', [id]);
         if (existingRes.rows.length === 0) {
             return res.status(404).json({ message: 'Employee not found.' });
@@ -178,8 +170,8 @@ export const updateEmployee = async (req, res) => {
                 location = $15, shift = $16, status = $17, 
                 ctc = $18, monthly_salary = $19, basic_salary = $20, hra = $21, conveyance = $22, medical = $23, special_allowance = $24, other_allowances = $25, allowances = 0,
                 epf = $26, pf = 0, esi = $27, health_insurance = $28, pt = $29, tds = $30, leaves = $31, other_deductions = 0, 
-                uan_no = $32, bank_name = $33, account_holder = $34, account_number = $35, ifsc = $36, permissions = $37
-            WHERE id = $38 RETURNING *;
+                uan_no = $32, bank_name = $33, account_holder = $34, account_number = $35, ifsc = $36, permissions = $37, employee_id = $38
+            WHERE id = $39 RETURNING *;
         `;
 
         const values = [
@@ -220,6 +212,7 @@ export const updateEmployee = async (req, res) => {
             data.accountNumber ?? data.account_number ?? existing.account_number ?? '',
             data.ifsc ?? existing.ifsc ?? '',
             JSON.stringify(data.permissions ?? existing.permissions ?? {}),
+            data.employeeId ?? existing.employee_id, // Manual ID update support
             id
         ];
 
@@ -228,6 +221,9 @@ export const updateEmployee = async (req, res) => {
         res.status(200).json({ message: 'Employee updated successfully.', employee: result.rows[0] });
     } catch (error) {
         console.error('Update Error:', error);
+        if (error.code === '23505' && error.constraint === 'sa_employees_employee_id_key') {
+            return res.status(400).json({ message: 'This Employee ID is already taken by another employee.' });
+        }
         res.status(500).json({ message: 'Error updating employee', error: error.message });
     }
 };

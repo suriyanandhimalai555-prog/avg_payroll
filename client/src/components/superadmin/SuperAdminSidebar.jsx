@@ -46,16 +46,17 @@ const menuItems = [
         title: 'Attendance Management', icon: FaCalendarCheck,
         subItems: [
             { name: 'Attendance Overview', path: '/superadmin/attendance/overview' },
-            { name: 'Work Shifts', path: '/superadmin/attendance/shifts' },
-            { name: 'Holidays', path: '/superadmin/attendance/holidays' }
+            { name: 'Work Shifts', path: '/superadmin/attendance/shifts' }
         ]
     },
     {
         title: 'Leave Management', icon: FaPlaneDeparture,
         subItems: [
             { name: 'Leave Overview', path: '/superadmin/leave/overview' },
-            { name: 'Leave Policies', path: '/superadmin/settings/leave' },
-            { name: 'Leave Requests', path: '/superadmin/leave/requests' }
+            { name: 'Leave Policies', path: '/superadmin/leave/policies' },
+            { name: 'Leave Requests', path: '/superadmin/leave/requests' },
+            { name: 'Assign Leave', path: '/superadmin/leave/assign' },
+            { name: 'Holidays Calendar', path: '/superadmin/leave/holidays' }
         ]
     },
     { title: 'Expenses & Reimbursements', icon: FaFileInvoiceDollar, path: '/superadmin/expenses' },

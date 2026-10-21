@@ -56,7 +56,7 @@ const SuperAdminLogin = () => {
 
         try {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
-                identifier: credentials.email,
+                identifier: credentials.email.trim(),
                 password: credentials.password,
                 role: 'superadmin'
             });
@@ -66,7 +66,8 @@ const SuperAdminLogin = () => {
             localStorage.removeItem('sa_lockout_until');
             setLoginAttempts(0);
             
-            login(response.data.user, response.data.token);
+            // Pass ONLY user metadata to the Auth Context. Token is handled securely by backend cookies.
+            login(response.data.user);
             navigate('/superadmin');
 
         } catch (err) {
@@ -198,7 +199,7 @@ const SuperAdminLogin = () => {
                                         Authenticating...
                                     </span>
                                 ) : blockCountdown > 0 ? (
-                                    <span className="flex items-center justify-center gap-2 font-bold text-white tracking-wider">
+                                    <span className="flex items-center justify-center gap-2 font-bold text-red-600 tracking-wider">
                                         <FaLock className="text-sm" /> LOCKED ({blockCountdown}s)
                                     </span>
                                 ) : (

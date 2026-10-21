@@ -31,9 +31,14 @@ import SuperAdminPayslips from '../pages/superadmin/payroll/SuperAdminPayslips';
 // Super Admin Attendance
 import SuperAdminAttendanceOverview from '../pages/superadmin/attendance/SuperAdminAttendanceOverview';
 import SuperAdminWorkShifts from '../pages/superadmin/attendance/SuperAdminWorkShifts';
-import SuperAdminHolidays from '../pages/superadmin/attendance/SuperAdminHolidays';
 import SuperAdminLeaveManagement from '../pages/superadmin/attendance/SuperAdminLeaveManagement';
-
+// Super Admin Leave Policies
+import SuperAdminLeaveOverview from '../pages/superadmin/leave/SuperAdminLeaveOverview';
+import SuperAdminLeavePolicies from '../pages/superadmin/leave/SuperAdminLeavePolicies';
+import SuperAdminLeaveRequest from '../pages/superadmin/leave/SuperAdminLeaveRequest';
+import SuperAdminAssignLeave from '../pages/superadmin/leave/SuperAdminAssignLeave';
+import SuperAdminHolidays from '../pages/superadmin/leave/SuperAdminHolidays';
+// Super Admin Expenses & Reimbursements
 import SuperAdminExpensesReimbursements from '../pages/superadmin/SuperAdminExpensesReimbursements';
 import SuperAdminLoansAdvances from '../pages/superadmin/SuperAdminLoansAdvances';
 // Super Admin Reports
@@ -45,7 +50,6 @@ import SuperAdminFinancialReports from '../pages/superadmin/reports/SuperAdminFi
 // Super Admin Settings
 import SuperAdminPayrollSettings from '../pages/superadmin/settings/SuperAdminPayrollSettings';
 import SuperAdminTaxSettings from '../pages/superadmin/settings/SuperAdminTaxSettings';
-import SuperAdminLeaveSettings from '../pages/superadmin/settings/SuperAdminLeaveSettings';
 import SuperAdminNotificationSettings from '../pages/superadmin/settings/SuperAdminNotificationSettings';
 import SuperAdminSystemSettings from '../pages/superadmin/settings/SuperAdminSystemSettings';
 
@@ -137,9 +141,16 @@ const AppRoutes = () => {
                 {/* Attendance */}
                 <Route path="attendance/overview" element={<SuperAdminAttendanceOverview />} />
                 <Route path="attendance/shifts" element={<SuperAdminWorkShifts />} />
-                <Route path="attendance/holidays" element={<SuperAdminHolidays />} />
                 <Route path="attendance/leave" element={<SuperAdminLeaveManagement />} />
 
+                {/* Leave Policies */}
+                <Route path="leave/overview" element={<SuperAdminLeaveOverview />} />
+                <Route path="leave/policies" element={<SuperAdminLeavePolicies />} />
+                <Route path="leave/requests" element={<SuperAdminLeaveRequest />} />
+                <Route path="leave/assign" element={<SuperAdminAssignLeave />} />
+                <Route path="leave/holidays" element={<SuperAdminHolidays />} />
+
+                {/* Expenses & Reimbursements */}
                 <Route path="expenses" element={<SuperAdminExpensesReimbursements />} />
                 <Route path="loans" element={<SuperAdminLoansAdvances />} />
 
@@ -153,7 +164,6 @@ const AppRoutes = () => {
                 {/* Settings */}
                 <Route path="settings/payroll" element={<SuperAdminPayrollSettings />} />
                 <Route path="settings/tax" element={<SuperAdminTaxSettings />} />
-                <Route path="settings/leave" element={<SuperAdminLeaveSettings />} />
                 <Route path="settings/notifications" element={<SuperAdminNotificationSettings />} />
                 <Route path="settings/system" element={<SuperAdminSystemSettings />} />
 

@@ -22,6 +22,17 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Helper function to dynamically grab the auth token to prevent 401 Unauthorized errors in production
+const getAuthConfig = () => {
+    const token = localStorage.getItem('token') || localStorage.getItem('authToken') || sessionStorage.getItem('token');
+    return {
+        headers: {
+            Authorization: `Bearer ${token}`
+        },
+        withCredentials: true
+    };
+};
+
 const SuperAdminBranchesCom = () => {
     const INITIAL_FORM_STATE = {
         companyId: '',
@@ -56,8 +67,8 @@ const SuperAdminBranchesCom = () => {
         setIsLoading(true);
         try {
             const [companyRes, branchRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig())
             ]);
 
             setCompanies(companyRes.data || []);
@@ -122,11 +133,11 @@ const SuperAdminBranchesCom = () => {
         setIsSubmitting(true);
         try {
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-branches/${editId}`, formData);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-branches/${editId}`, formData, getAuthConfig());
                 setSuccessMsg('Branch updated successfully.');
                 handleCancelEdit();
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-branches/create`, formData);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-branches/create`, formData, getAuthConfig());
                 setSuccessMsg(`Branch "${formData.branchName}" created successfully!`);
                 setFormData({ ...INITIAL_FORM_STATE, companyId: companies[0]?.id || '' });
             }
@@ -160,7 +171,7 @@ const SuperAdminBranchesCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this branch? It may impact associated employees.")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-branches/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-branches/${id}`, getAuthConfig());
             fetchCoreData();
             setSuccessMsg('Branch deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);

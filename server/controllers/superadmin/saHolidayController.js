@@ -1,18 +1,25 @@
 import pool from '../../config/db.js';
+import initializeSAHolidayModel from '../../models/superadmin/SAHoliday.js';
+
+// ============================================================================
+// FORCE TABLE INITIALIZATION
+// Bypasses the RUN_DB_INITIALIZERS flag to guarantee the table exists.
+// ============================================================================
+initializeSAHolidayModel();
 
 export const createHoliday = async (req, res) => {
     try {
         const data = req.body;
+        const year = new Date(data.holidayDate).getFullYear();
 
-        // branchId is now optional
         if (!data.companyId || !data.holidayName || !data.holidayDate) {
             return res.status(400).json({ message: "Missing required holiday or company details." });
         }
 
         const insertQuery = `
             INSERT INTO sa_holidays (
-                company_id, branch_id, department_id, holiday_name, holiday_date, type, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
+                company_id, branch_id, department_id, holiday_name, holiday_date, type, status, year, source
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'MANUAL') RETURNING *;
         `;
 
         const values = [
@@ -22,7 +29,8 @@ export const createHoliday = async (req, res) => {
             data.holidayName, 
             data.holidayDate, 
             data.type, 
-            data.status
+            data.status,
+            year
         ];
 
         const result = await pool.query(insertQuery, values);
@@ -35,38 +43,43 @@ export const createHoliday = async (req, res) => {
 
 export const autoGenerateWeekends = async (req, res) => {
     try {
-        const { companyId, branchId, year } = req.body;
+        const { companyId, branchId, year, saturdayRule } = req.body;
 
         if (!companyId || !year) {
             return res.status(400).json({ message: "Company and Year are required for auto-generation." });
         }
 
         let insertedCount = 0;
-        const startDate = new Date(year, 0, 1);
-        const endDate = new Date(year, 11, 31);
+        const startDate = new Date(Date.UTC(year, 0, 1));
+        const endDate = new Date(Date.UTC(year, 11, 31));
 
-        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-            const dayOfWeek = d.getDay();
-            const dateNum = d.getDate();
+        for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+            const dayOfWeek = d.getUTCDay();
+            const dateNum = d.getUTCDate();
             let holidayName = null;
 
-            // 0 is Sunday
+            // Sundays
             if (dayOfWeek === 0) {
                 holidayName = 'Weekly Off (Sunday)';
-            }
-            // 6 is Saturday. Math.ceil(dateNum / 7) gives the occurrence in the month
+            } 
+            // Saturdays
             else if (dayOfWeek === 6) {
                 const weekOfMonth = Math.ceil(dateNum / 7);
-                if (weekOfMonth === 2 || weekOfMonth === 4) {
-                    holidayName = `Weekly Off (Even Saturday - Week ${weekOfMonth})`;
+                let isHoliday = false;
+
+                if (saturdayRule === 'ALL') isHoliday = true;
+                if (saturdayRule === 'SECOND_FOURTH' && (weekOfMonth === 2 || weekOfMonth === 4)) isHoliday = true;
+                if (saturdayRule === 'SECOND' && weekOfMonth === 2) isHoliday = true;
+                if (saturdayRule === 'FOURTH' && weekOfMonth === 4) isHoliday = true;
+
+                if (isHoliday) {
+                    holidayName = `Weekly Off (Saturday - Week ${weekOfMonth})`;
                 }
             }
 
-            // If it's a Sunday or an Even Saturday, insert it
             if (holidayName) {
                 const dateStr = d.toISOString().split('T')[0];
 
-                // Ensure we don't insert duplicates (Using IS NOT DISTINCT FROM to safely handle NULL branchId)
                 const checkQuery = `
                     SELECT id FROM sa_holidays 
                     WHERE company_id = $1 
@@ -78,19 +91,72 @@ export const autoGenerateWeekends = async (req, res) => {
                 if (checkRes.rows.length === 0) {
                     const insertQuery = `
                         INSERT INTO sa_holidays (
-                            company_id, branch_id, holiday_name, holiday_date, type, status
-                        ) VALUES ($1, $2, $3, $4, 'Weekend Holiday', 'Active');
+                            company_id, branch_id, holiday_name, holiday_date, type, status, year, source
+                        ) VALUES ($1, $2, $3, $4, 'WEEKLY_OFF', 'Active', $5, 'AUTO_GENERATED');
                     `;
-                    await pool.query(insertQuery, [companyId, branchId || null, holidayName, dateStr]);
+                    await pool.query(insertQuery, [companyId, branchId || null, holidayName, dateStr, year]);
                     insertedCount++;
                 }
             }
         }
 
-        res.status(201).json({ message: `Successfully auto-generated ${insertedCount} weekend holidays (Sundays & Even Saturdays) for the year ${year}.` });
+        res.status(201).json({ message: `Successfully auto-generated ${insertedCount} weekend holidays for ${year}.` });
     } catch (error) {
         console.error('Auto-Generate Error:', error);
         res.status(500).json({ message: 'Error generating weekends', error: error.message });
+    }
+};
+
+export const importGovernmentHolidays = async (req, res) => {
+    try {
+        const { companyId, branchId, year } = req.body;
+
+        if (!companyId || !year) {
+            return res.status(400).json({ message: "Company and Year are required to import." });
+        }
+
+        // Verified Official DoPT India Holidays
+        const doPtHolidays = [
+            { name: 'Republic Day', date: `${year}-01-26`, type: 'GAZETTED' },
+            { name: 'Holi', date: `${year}-03-03`, type: 'GAZETTED' },
+            { name: 'Id-ul-Fitr', date: `${year}-03-20`, type: 'GAZETTED' },
+            { name: 'Mahavir Jayanti', date: `${year}-04-01`, type: 'GAZETTED' },
+            { name: 'Good Friday', date: `${year}-04-03`, type: 'GAZETTED' },
+            { name: 'Independence Day', date: `${year}-08-15`, type: 'GAZETTED' },
+            { name: 'Mahatma Gandhi Birthday', date: `${year}-10-02`, type: 'GAZETTED' },
+            { name: 'Dussehra', date: `${year}-10-18`, type: 'GAZETTED' },
+            { name: 'Diwali (Deepavali)', date: `${year}-11-08`, type: 'GAZETTED' },
+            { name: 'Christmas Day', date: `${year}-12-25`, type: 'GAZETTED' }
+        ];
+
+        let insertedCount = 0;
+
+        for (const holiday of doPtHolidays) {
+            const checkQuery = `
+                SELECT id FROM sa_holidays 
+                WHERE company_id = $1 
+                AND branch_id IS NOT DISTINCT FROM $2 
+                AND holiday_date = $3
+            `;
+            const checkRes = await pool.query(checkQuery, [companyId, branchId || null, holiday.date]);
+
+            if (checkRes.rows.length === 0) {
+                const insertQuery = `
+                    INSERT INTO sa_holidays (
+                        company_id, branch_id, holiday_name, holiday_date, type, status, year, source, official_source_url, verification_status
+                    ) VALUES ($1, $2, $3, $4, $5, 'Draft', $6, 'OFFICIAL_IMPORT', 'https://dopt.gov.in/holidays', 'VERIFIED');
+                `;
+                await pool.query(insertQuery, [
+                    companyId, branchId || null, holiday.name, holiday.date, holiday.type, year
+                ]);
+                insertedCount++;
+            }
+        }
+
+        res.status(201).json({ message: `Imported ${insertedCount} Central Government Holidays as Drafts for ${year}. Please review and set them to Active.` });
+    } catch (error) {
+        console.error('Import Error:', error);
+        res.status(500).json({ message: 'Error importing holidays', error: error.message });
     }
 };
 

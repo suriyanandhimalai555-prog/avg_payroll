@@ -29,6 +29,17 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Helper function to dynamically grab the auth token to prevent 401 Unauthorized errors in production
+const getAuthConfig = () => {
+    const token = localStorage.getItem('token') || localStorage.getItem('authToken') || sessionStorage.getItem('token');
+    return {
+        headers: {
+            Authorization: `Bearer ${token}`
+        },
+        withCredentials: true
+    };
+};
+
 const SuperAdminCompanyProfileCom = () => {
     const INITIAL_FORM_STATE = {
         companyName: '', email: '', phone: '', website: '',
