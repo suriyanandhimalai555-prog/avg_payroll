@@ -87,7 +87,7 @@ jobs:
           file: ./client/Dockerfile
           platforms: linux/arm64
           build-args: |
-            VITE_API_URL=
+            VITE_API_URL=https://api.avgpayroll.com
           push: true
           cache-from: type=gha,scope=avgpayroll-frontend
           cache-to: type=gha,mode=max,scope=avgpayroll-frontend
