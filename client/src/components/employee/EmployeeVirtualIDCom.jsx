@@ -514,7 +514,7 @@ const EmployeeVirtualIDCom = () => {
     const fetchProfile = async () => {
         if (!user?.employee_id) return;
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } });
             const data = response.data;
 
             setProfileData({

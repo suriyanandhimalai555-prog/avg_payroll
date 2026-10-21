@@ -100,7 +100,7 @@ const EmployeeMyProfileCom = () => {
 
     const fetchProfile = async () => {
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } });
             const data = response.data;
 
             setProfileData({
@@ -210,7 +210,7 @@ const EmployeeMyProfileCom = () => {
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, {
                 section: section,
                 data: editForm[section]
-            });
+            }, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } });
             const updatedUser = { ...response.data.user, role: 'employee' };
             login(updatedUser, sessionStorage.getItem('token'));
             setIsEditing({ ...isEditing, [section]: false });
@@ -248,7 +248,7 @@ const EmployeeMyProfileCom = () => {
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, {
                 section: 'photo',
                 data: { profile_photo: finalCroppedBase64 }
-            });
+            }, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } });
 
             const updatedUser = { ...response.data.user, role: 'employee' };
             login(updatedUser, sessionStorage.getItem('token'));

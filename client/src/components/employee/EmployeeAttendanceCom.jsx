@@ -50,7 +50,7 @@ const EmployeeAttendanceCom = () => {
         try {
             const [attRes, profRes, shiftRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`).catch(() => ({ data: { history: [] } })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`).catch(() => ({ data: {} })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } }).catch(() => ({ data: {} })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`).catch(() => ({ data: [] }))
             ]);
 

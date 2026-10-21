@@ -143,7 +143,7 @@ const EmployeePayrollCom = () => {
         const fetchPayroll = async () => {
             try {
                 const [profileRes, attRes, leaveReqRes, leavePolRes] = await Promise.all([
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`).catch(() => ({ data: {} })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } }).catch(() => ({ data: {} })),
                     axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`).catch(() => ({ data: { history: [] } })),
                     axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`).catch(() => ({ data: [] })),
                     axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`).catch(() => ({ data: [] }))

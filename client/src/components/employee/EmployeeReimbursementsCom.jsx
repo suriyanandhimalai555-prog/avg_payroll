@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
     FaFileInvoiceDollar, FaPlusCircle, FaListUl, FaHistory,
-    FaPaperclip, FaPaperPlane, FaRupeeSign, FaCheckCircle, FaClock, FaTimesCircle, FaEye, FaTrash, FaEdit, FaTimes, FaFilePdf
+    FaPaperclip, FaPaperPlane, FaRupeeSign, FaCheckCircle, FaClock, FaTimesCircle, FaEye, FaTrash, FaEdit, FaTimes, FaFilePdf, FaMoneyBillWave
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
