@@ -10,13 +10,6 @@ import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
 import Select from '../../../components/common/Select';
 
-const getAuthConfig = () => {
-    const token = sessionStorage.getItem('token');
-    return token
-        ? { headers: { Authorization: 'Bearer ' + token } }
-        : { headers: {} };
-};
-
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full">
         {children}
