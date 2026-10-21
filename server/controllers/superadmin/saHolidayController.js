@@ -1,11 +1,4 @@
 import pool from '../../config/db.js';
-import initializeSAHolidayModel from '../../models/superadmin/SAHoliday.js';
-
-// ============================================================================
-// FORCE TABLE INITIALIZATION
-// Bypasses the RUN_DB_INITIALIZERS flag to guarantee the table exists.
-// ============================================================================
-initializeSAHolidayModel();
 
 export const createHoliday = async (req, res) => {
     try {

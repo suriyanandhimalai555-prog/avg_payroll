@@ -5,12 +5,6 @@ import { createActivationToken } from '../../utils/activationToken.js';
 
 dotenv.config();
 
-// ============================================================================
-// FORCE TABLE INITIALIZATION
-// Bypasses the RUN_DB_INITIALIZERS flag to guarantee the foreign key patch runs.
-// ============================================================================
-initializeSAHrUserModel();
-
 const transporter = nodemailer.createTransport({
     host: 'smtp.hostinger.com',
     port: 465,
