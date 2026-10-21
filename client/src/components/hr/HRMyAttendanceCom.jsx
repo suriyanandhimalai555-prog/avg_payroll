@@ -52,8 +52,9 @@ const HRMyAttendanceCom = () => {
         }
         try {
             const [attRes, hrListRes, shiftRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/hr-attendance/${hrIdentifier}`).catch(() =>
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${hrIdentifier}`).catch(() => ({ data: { history: [] } }))
+                axios.get(
+                    `${import.meta.env.VITE_API_URL}/api/hr-attendance/${hrIdentifier}`,
+                    { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } }
                 ),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`).catch(() => ({ data: [] }))
@@ -186,19 +187,14 @@ const HRMyAttendanceCom = () => {
             const deviceData = getDeviceInfo();
             const todayDate = now.toLocaleDateString('en-CA');
 
-            await axios.post(`${import.meta.env.VITE_API_URL}/api/hr-attendance/check-in`, {
-                hrId: hrIdentifier,
-                employeeId: hrIdentifier,
-                todayDate: todayDate,
-                locationData: locationData,
-                deviceInfo: deviceData
-            }).catch(() =>
-                axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
-                    employeeId: hrIdentifier,
-                    todayDate: todayDate,
-                    locationData: locationData,
+            await axios.post(
+                `${import.meta.env.VITE_API_URL}/api/hr-attendance/check-in`,
+                {
+                    todayDate,
+                    locationData,
                     deviceInfo: deviceData
-                })
+                },
+                { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } }
             );
             await fetchAttendanceData();
         } catch (error) {
@@ -222,21 +218,15 @@ const HRMyAttendanceCom = () => {
             const recordToClose = activeSession;
             const targetDate = new Date(recordToClose.date).toLocaleDateString('en-CA');
 
-            await axios.put(`${import.meta.env.VITE_API_URL}/api/hr-attendance/check-out`, {
-                hrId: hrIdentifier,
-                employeeId: hrIdentifier,
-                todayDate: targetDate,
-                locationData: locationData,
-                deviceInfo: deviceData,
-                eodUpdate: eodInput
-            }).catch(() =>
-                axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
-                    employeeId: hrIdentifier,
+            await axios.put(
+                `${import.meta.env.VITE_API_URL}/api/hr-attendance/check-out`,
+                {
                     todayDate: targetDate,
-                    locationData: locationData,
+                    locationData,
                     deviceInfo: deviceData,
                     eodUpdate: eodInput
-                })
+                },
+                { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } }
             );
 
             setIsEodModalOpen(false);
@@ -254,14 +244,13 @@ const HRMyAttendanceCom = () => {
         if (!editEodInput.trim()) return alert("Update cannot be empty.");
         setIsSubmittingEod(true);
         try {
-            await axios.put(`${import.meta.env.VITE_API_URL}/api/hr-attendance/eod-update`, {
-                recordId: editingRecordId,
-                eodUpdate: editEodInput
-            }).catch(() =>
-                axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/eod-update`, {
+            await axios.put(
+                `${import.meta.env.VITE_API_URL}/api/hr-attendance/eod-update`,
+                {
                     recordId: editingRecordId,
                     eodUpdate: editEodInput
-                })
+                },
+                { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } }
             );
             setIsEditEodModalOpen(false);
             setEditEodInput('');

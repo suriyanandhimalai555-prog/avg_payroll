@@ -1,6 +1,7 @@
 import pool from '../../config/db.js';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import { createActivationToken } from '../../utils/activationToken.js';
 
 dotenv.config();
 
@@ -104,8 +105,8 @@ export const createEmployee = async (req, res) => {
         const newEmployee = result.rows[0];
 
         try {
-            const encodedEmail = encodeURIComponent(data.email);
-            const activationLink = `${process.env.FRONTEND_URL}/activate-account?email=${encodedEmail}&role=employee`;
+            const activationToken = createActivationToken(data.email, 'employee');
+            const activationLink = `${process.env.FRONTEND_URL}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
             const mailOptions = {
                 from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,

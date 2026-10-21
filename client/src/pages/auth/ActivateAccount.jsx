@@ -6,8 +6,7 @@ import Button from '../../components/common/Button';
 
 const ActivateAccount = () => {
     const [searchParams] = useSearchParams();
-    const email = searchParams.get('email');
-    const role = searchParams.get('role') || 'employee';
+    const token = searchParams.get('token');
 
     const navigate = useNavigate();
 
@@ -27,10 +26,13 @@ const ActivateAccount = () => {
     });
 
     useEffect(() => {
-        if (!email) {
-            setStatus(prev => ({ ...prev, error: 'Invalid activation link. No email provided.' }));
+        if (!token) {
+            setStatus(prev => ({
+                ...prev,
+                error: 'Invalid activation link. No activation token provided.'
+            }));
         }
-    }, [email]);
+    }, [token]);
 
     const handleInputChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -52,9 +54,8 @@ const ActivateAccount = () => {
 
         try {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/activate`, {
-                email: email,
-                password: formData.password,
-                role: role
+                token,
+                password: formData.password
             });
 
             if (response.status === 200) {
@@ -69,11 +70,7 @@ const ActivateAccount = () => {
         }
     };
 
-    const getRoleTitle = () => {
-        if (role === 'hr') return 'HR';
-        if (role === 'manager') return 'Manager';
-        return 'Employee';
-    };
+    const getRoleTitle = () => 'Account';
 
     // Password strength indicator
     const getPasswordStrength = () => {

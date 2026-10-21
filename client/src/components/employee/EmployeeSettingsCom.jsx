@@ -90,12 +90,35 @@ const EmployeeSettingsCom = () => {
 
     const handleStandardUpdate = async (e) => {
         e.preventDefault();
-        if (passwords.new !== passwords.confirm) return setStatus({ loading: false, success: '', error: 'New passwords do not match.' });
+
+        if (passwords.new !== passwords.confirm) {
+            return setStatus({
+                loading: false,
+                success: '',
+                error: 'New passwords do not match.'
+            });
+        }
+
+        if (passwords.new.length < 12 || passwords.new.length > 128) {
+            return setStatus({
+                loading: false,
+                success: '',
+                error: 'Your new password must be between 12 and 128 characters.'
+            });
+        }
 
         setStatus({ loading: true, error: '', success: '' });
         try {
+            const token = sessionStorage.getItem('token');
+            if (!token) {
+                throw new Error('Your session has expired. Please sign in again.');
+            }
+
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/change-password`, {
-                email: user.email, role: user.role, currentPassword: passwords.current, newPassword: passwords.new
+                currentPassword: passwords.current,
+                newPassword: passwords.new
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
             setStatus({ loading: false, error: '', success: 'Password updated successfully!' });
             setPasswords({ current: '', new: '', confirm: '' });
@@ -131,6 +154,9 @@ const EmployeeSettingsCom = () => {
     const handleResetPassword = async (e) => {
         e.preventDefault();
         if (passwords.new !== passwords.confirm) return setStatus({ loading: false, success: '', error: 'Passwords do not match.' });
+        if (passwords.new.length < 12 || passwords.new.length > 128) {
+            return setStatus({ loading: false, success: '', error: 'Your new password must be between 12 and 128 characters.' });
+        }
 
         setStatus({ loading: true, error: '', success: '' });
         try {

@@ -113,7 +113,7 @@ const HRMyProfileCom = () => {
     const fetchProfile = async () => {
         if (!hrIdentifier) return;
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
             const data = response.data;
 
             setProfileData({
@@ -210,7 +210,7 @@ const HRMyProfileCom = () => {
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`, {
                 section: section,
                 data: editForm[section]
-            });
+            }, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
             const updatedUser = { ...response.data.user, role: 'hr' };
             login(updatedUser, sessionStorage.getItem('token'));
             setIsEditing({ ...isEditing, [section]: false });
@@ -248,7 +248,7 @@ const HRMyProfileCom = () => {
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`, {
                 section: 'photo',
                 data: { profile_photo: finalCroppedBase64 }
-            });
+            }, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
 
             const updatedUser = { ...response.data.user, role: 'hr' };
             login(updatedUser, sessionStorage.getItem('token'));

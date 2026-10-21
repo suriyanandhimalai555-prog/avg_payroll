@@ -1,8 +1,32 @@
 import pool from '../../config/db.js';
 
+// Employees/managers can access only their own employee profile.
+// HR/superadmin access is retained for existing workflows.
+const canAccessEmployeeProfile = async (req, employeeId) => {
+    if (['hr', 'superadmin'].includes(req.user.role)) return true;
+    if (!['employee', 'manager'].includes(req.user.role)) return false;
+
+    const result = await pool.query(
+        `SELECT employee_id
+         FROM sa_employees
+         WHERE LOWER(email) = LOWER($1)
+         LIMIT 1`,
+        [req.user.email]
+    );
+
+    return result.rows.length > 0 &&
+        String(result.rows[0].employee_id) === String(employeeId);
+};
+
 export const getProfile = async (req, res) => {
     try {
         const { employeeId } = req.params;
+
+        if (!(await canAccessEmployeeProfile(req, employeeId))) {
+            return res.status(403).json({
+                message: 'You are not authorized to access this employee profile.'
+            });
+        }
         const result = await pool.query('SELECT * FROM sa_employees WHERE employee_id = $1', [employeeId]);
 
         if (result.rows.length === 0) {
@@ -22,6 +46,16 @@ export const updateProfile = async (req, res) => {
     try {
         const { employeeId } = req.params;
         const { section, data } = req.body;
+
+        if (!(await canAccessEmployeeProfile(req, employeeId))) {
+            return res.status(403).json({
+                message: 'You are not authorized to update this employee profile.'
+            });
+        }
+
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            return res.status(400).json({ message: 'Invalid profile data.' });
+        }
 
         let query = '';
         let values = [];

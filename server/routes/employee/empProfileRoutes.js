@@ -1,10 +1,27 @@
 import express from 'express';
-// FIX: Update import to target the new controller file name
-import { getProfile, updateProfile } from '../../controllers/employee/empProfileController.js';
+import {
+    authenticateToken,
+    requireRole
+} from '../../middleware/authMiddleware.js';
+import {
+    getProfile,
+    updateProfile
+} from '../../controllers/employee/empProfileController.js';
 
 const router = express.Router();
 
-router.get('/:employeeId', getProfile);
-router.put('/:employeeId', updateProfile);
+router.get(
+    '/:employeeId',
+    authenticateToken,
+    requireRole('employee', 'manager', 'hr', 'superadmin'),
+    getProfile
+);
+
+router.put(
+    '/:employeeId',
+    authenticateToken,
+    requireRole('employee', 'manager', 'hr', 'superadmin'),
+    updateProfile
+);
 
 export default router;

@@ -174,13 +174,21 @@ const SuperAdminProfileCom = () => {
         setIsSubmittingProfile(true);
 
         try {
-            const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/auth/profile`, {
-                email: user.email,
-                role: 'superadmin',
-                fullName: profileData.name,
-                phone: profileData.phone,
-                profilePhoto: profileData.profilePhoto
-            });
+            const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+
+            const response = await axios.put(
+                `${import.meta.env.VITE_API_URL}/api/auth/profile`,
+                {
+                    fullName: profileData.name,
+                    phone: profileData.phone,
+                    profilePhoto: profileData.profilePhoto
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
 
             login(response.data.user, sessionStorage.getItem('token') || localStorage.getItem('token'));
 

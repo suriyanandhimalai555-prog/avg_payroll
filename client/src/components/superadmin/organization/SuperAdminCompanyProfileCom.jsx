@@ -10,6 +10,13 @@ import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
 import Select from '../../../components/common/Select';
 
+const getAuthConfig = () => {
+    const token = sessionStorage.getItem('token');
+    return token
+        ? { headers: { Authorization: 'Bearer ' + token } }
+        : { headers: {} };
+};
+
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full">
         {children}
@@ -48,7 +55,7 @@ const SuperAdminCompanyProfileCom = () => {
     const fetchProfiles = async () => {
         setIsFetching(true);
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig());
             setProfiles(response.data || []);
         } catch (error) {
             console.error('Failed to load profiles', error);
@@ -119,11 +126,11 @@ const SuperAdminCompanyProfileCom = () => {
         setIsSubmitting(true);
         try {
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-company-profile/${editId}`, formData);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-company-profile/${editId}`, formData, getAuthConfig());
                 setSuccessMsg('Company Profile updated successfully.');
                 handleCancelEdit();
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-company-profile/create`, formData);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-company-profile/create`, formData, getAuthConfig());
                 setSuccessMsg('Company Profile created successfully.');
                 setFormData(INITIAL_FORM_STATE);
                 setLogoPreview(null);
@@ -154,7 +161,7 @@ const SuperAdminCompanyProfileCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this company profile?")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-company-profile/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-company-profile/${id}`, getAuthConfig());
             fetchProfiles();
             setSuccessMsg('Profile deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);

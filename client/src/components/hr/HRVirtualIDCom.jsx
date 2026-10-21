@@ -516,7 +516,7 @@ const HRVirtualIDCom = () => {
     const fetchProfile = async () => {
         if (!hrIdentifier) return;
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
             const data = response.data;
 
             setProfileData({

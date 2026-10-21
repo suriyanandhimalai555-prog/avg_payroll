@@ -156,7 +156,9 @@ const CommonLogin = () => {
 
     const handleResetPassword = async (e) => {
         e.preventDefault();
-        if (forgotNewPwd.length < 8) return setError("Password must be at least 8 characters.");
+        if (forgotNewPwd.length < 12 || forgotNewPwd.length > 128) {
+            return setError("Password must be between 12 and 128 characters.");
+        }
 
         setError(''); setIsSubmitting(true);
         try {

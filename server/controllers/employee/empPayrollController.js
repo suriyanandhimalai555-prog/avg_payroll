@@ -1,5 +1,29 @@
 import pool from '../../config/db.js';
 
+const canAccessEmployeePayroll = async (req, employeeId) => {
+    // Preserve existing HR and superadmin payroll workflows.
+    if (['hr', 'superadmin'].includes(req.user.role)) {
+        return true;
+    }
+
+    // Employees and managers may view only their own payroll.
+    if (!['employee', 'manager'].includes(req.user.role)) {
+        return false;
+    }
+
+    const result = await pool.query(
+        `SELECT employee_id
+         FROM sa_employees
+         WHERE LOWER(email) = LOWER($1)
+         LIMIT 1`,
+        [req.user.email]
+    );
+
+    return result.rows.length > 0 &&
+        String(result.rows[0].employee_id) === String(employeeId);
+};
+
+
 // Helper to convert "X:YY Hrs" format to decimal
 const parseHoursToFloat = (hoursStr) => {
     if (!hoursStr || !hoursStr.includes(':')) return 0;
@@ -12,6 +36,20 @@ const parseHoursToFloat = (hoursStr) => {
 export const getPayrollData = async (req, res) => {
     try {
         const { employeeId } = req.params;
+
+        if (!req.user) {
+            return res.status(401).json({
+                message: 'Authentication required.'
+            });
+        }
+
+        const allowed = await canAccessEmployeePayroll(req, employeeId);
+
+        if (!allowed) {
+            return res.status(403).json({
+                message: 'You are not authorized to access this payroll.'
+            });
+        }
 
         // 1. Fetch Employee base salary and identity details
         const empQuery = `
