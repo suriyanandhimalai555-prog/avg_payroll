@@ -5,7 +5,6 @@ import { createActivationToken } from '../../utils/activationToken.js';
 
 dotenv.config();
 
-
 // Explicitly configured for Hostinger Webmail
 const transporter = nodemailer.createTransport({
     host: 'smtp.hostinger.com',
