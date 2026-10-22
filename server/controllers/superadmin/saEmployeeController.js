@@ -100,10 +100,13 @@ export const createEmployee = async (req, res) => {
             const activationToken = createActivationToken(data.email, 'employee');
             
             // ============================================================================
-            // FRONTEND URL FALLBACK FIX
-            // Ensures the URL never evaluates to 'undefined' in production
+            // ENVIRONMENT-AWARE URL ROUTING
+            // Dynamically selects the correct base URL regardless of missing env variables
             // ============================================================================
-            const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const isProd = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
+            const fallbackUrl = isProd ? 'https://avgpayroll.com' : 'http://localhost:5173';
+            const frontendBaseUrl = process.env.FRONTEND_URL || fallbackUrl;
+            
             const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
             const mailOptions = {
