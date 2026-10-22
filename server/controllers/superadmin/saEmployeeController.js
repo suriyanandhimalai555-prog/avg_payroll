@@ -5,17 +5,6 @@ import { createActivationToken } from '../../utils/activationToken.js';
 
 dotenv.config();
 
-// Explicitly configured for Hostinger Webmail
-const transporter = nodemailer.createTransport({
-    host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
-
 const parseNum = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(val) ? parseFloat(val) : 0);
 
 export const createEmployee = async (req, res) => {
@@ -50,7 +39,7 @@ export const createEmployee = async (req, res) => {
             data.dob || null,
             data.gender || 'Other',
             data.address || 'N/A',
-            data.employeeId, // The manual ID from frontend
+            data.employeeId, 
             data.joiningDate || data.joining_date || new Date().toISOString().split('T')[0],
             data.company,
             data.branch,
@@ -86,7 +75,28 @@ export const createEmployee = async (req, res) => {
         const result = await pool.query(insertQuery, values);
         const newEmployee = result.rows[0];
 
+        // ============================================================================
+        // SAFE SMTP DISPATCH: Prevents 500 error if K8s pod is missing credentials
+        // ============================================================================
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.warn('Production Warning: Missing SMTP credentials (EMAIL_USER / EMAIL_PASS). Skipping email dispatch.');
+            return res.status(201).json({
+                message: `Employee created successfully with ID: ${data.employeeId}, but the activation email was skipped because SMTP credentials are not configured in this environment.`,
+                employee: newEmployee
+            });
+        }
+
         try {
+            const transporter = nodemailer.createTransport({
+                host: 'smtp.hostinger.com',
+                port: 465,
+                secure: true,
+                auth: {
+                    user: process.env.EMAIL_USER,
+                    pass: process.env.EMAIL_PASS,
+                },
+            });
+
             const activationToken = createActivationToken(data.email, 'employee');
             const activationLink = `${process.env.FRONTEND_URL}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
@@ -157,6 +167,31 @@ export const updateEmployee = async (req, res) => {
         }
         const existing = existingRes.rows[0];
 
+        // ============================================================================
+        // SELF-HEALING DATABASE FIX FOR FOREIGN KEY CASCADES
+        // Forces emp_attendance to cascade updates if the user alters the Employee ID
+        // ============================================================================
+        if (data.employeeId && data.employeeId !== existing.employee_id) {
+            try {
+                await pool.query(`
+                    DO $$ 
+                    BEGIN 
+                        IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'emp_attendance') THEN
+                            ALTER TABLE emp_attendance DROP CONSTRAINT IF EXISTS emp_attendance_employee_id_fkey;
+                            ALTER TABLE emp_attendance 
+                                ADD CONSTRAINT emp_attendance_employee_id_fkey 
+                                FOREIGN KEY (employee_id) 
+                                REFERENCES sa_employees(employee_id) 
+                                ON UPDATE CASCADE 
+                                ON DELETE CASCADE;
+                        END IF;
+                    END $$;
+                `);
+            } catch (patchErr) {
+                console.warn('Could not patch foreign key cascade constraints:', patchErr.message);
+            }
+        }
+
         const updateQuery = `
             UPDATE sa_employees SET
                 first_name = $1, last_name = $2, email = $3, phone = $4, dob = $5, gender = $6, address = $7,
@@ -218,6 +253,9 @@ export const updateEmployee = async (req, res) => {
         if (error.code === '23505' && error.constraint === 'sa_employees_employee_id_key') {
             return res.status(400).json({ message: 'This Employee ID is already taken by another employee.' });
         }
+        if (error.code === '23503') {
+            return res.status(400).json({ message: 'Cannot update this Employee ID because they have linked attendance or payroll records in the system.' });
+        }
         res.status(500).json({ message: 'Error updating employee', error: error.message });
     }
 };
@@ -234,6 +272,9 @@ export const deleteEmployee = async (req, res) => {
         res.status(200).json({ message: 'Employee deleted successfully.' });
     } catch (error) {
         console.error('Delete Error:', error);
+        if (error.code === '23503') {
+            return res.status(400).json({ message: 'Cannot delete employee. There are existing attendance or payroll records linked to this account.' });
+        }
         res.status(500).json({ message: 'Error deleting employee', error: error.message });
     }
 };
