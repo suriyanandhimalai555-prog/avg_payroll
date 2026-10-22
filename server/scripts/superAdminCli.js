@@ -21,9 +21,27 @@ const executeCli = async () => {
     }
 
     try {
+        // 1. Force the table to exist before running any operations
+        const createTableQuery = `
+            CREATE TABLE IF NOT EXISTS sa_superadmins (
+                id SERIAL PRIMARY KEY,
+                full_name VARCHAR(100) NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                status VARCHAR(50) DEFAULT 'Active',
+                role VARCHAR(50) DEFAULT 'SuperAdmin',
+                profile_photo TEXT,
+                phone VARCHAR(20),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+        await pool.query(createTableQuery);
+        console.log("Database table 'sa_superadmins' verified/created.");
+
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        // 2. Execute requested CLI action
         if (action === 'create') {
             const check = await pool.query('SELECT email FROM sa_superadmins WHERE email = $1', [email]);
             if (check.rows.length > 0) {

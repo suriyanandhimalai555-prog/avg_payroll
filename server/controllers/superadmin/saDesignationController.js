@@ -32,12 +32,12 @@ export const createDesignation = async (req, res) => {
 
 export const getAllDesignations = async (req, res) => {
     try {
-        // Fetch designations and join all the way up the hierarchy
+        // Fetch designations and join safely using COALESCE to prevent null errors
         const query = `
             SELECT des.*, 
-                   d.department_name, 
-                   b.branch_name, 
-                   c.company_name 
+                   COALESCE(d.department_name, 'Unassigned Department') AS department_name, 
+                   COALESCE(b.branch_name, 'Unassigned Branch') AS branch_name, 
+                   COALESCE(c.company_name, 'Unassigned Company') AS company_name 
             FROM sa_designations des
             LEFT JOIN sa_departments d ON des.department_id = d.id
             LEFT JOIN sa_branches b ON d.branch_id = b.id
@@ -48,7 +48,7 @@ export const getAllDesignations = async (req, res) => {
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Fetch Designations Error:', error);
-        res.status(500).json({ message: 'Error fetching designations', error: error.message });
+        res.status(500).json({ message: 'Database error fetching designations', error: error.message });
     }
 };
 

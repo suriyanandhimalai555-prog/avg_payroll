@@ -112,6 +112,7 @@ export const activateAccount = async (req, res) => {
         });
     }
 };
+
 export const login = async (req, res) => {
     try {
         const { identifier, password, role } = req.body;
@@ -198,15 +199,15 @@ export const login = async (req, res) => {
         // ============================================================
         // SUPER SECURITY PROTOCOL: HTTP-ONLY COOKIE
         // Token is locked in the browser. JavaScript cannot read it.
+        // FIXED: Added SameSite=None for Production Cross-Origin Support
         // ============================================================
         res.cookie('token', token, {
             httpOnly: true, 
             secure: process.env.NODE_ENV === 'production', 
-            sameSite: 'strict', 
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', 
             maxAge: 24 * 60 * 60 * 1000 // 1 day
         });
 
-        // Notice: `token` is NO LONGER sent in the JSON body. It is completely hidden from frontend code.
         res.status(200).json({
             message: 'Login successful',
             user: userPayload
@@ -356,8 +357,6 @@ export const resetPassword = async (req, res) => {
             });
         }
 
-        // Existing OTP records are keyed by email, not role.
-        // Reject ambiguous identities rather than reset the wrong account.
         const accountTables = [
             'sa_superadmins',
             'sa_hr_users',
@@ -423,7 +422,6 @@ export const resetPassword = async (req, res) => {
 
 export const changePassword = async (req, res) => {
     try {
-        // Identity must come from the verified JWT, never from req.body.
         const email = req.user?.email;
         const role = req.user?.role;
         const { currentPassword, newPassword } = req.body || {};
@@ -546,12 +544,12 @@ export const updateProfile = async (req, res) => {
     }
 };
 
-// Properly destroys the HttpOnly cookie upon logout
+// Properly destroys the HttpOnly cookie upon logout bridging Cross-Origin constraints
 export const logout = (req, res) => {
     res.clearCookie('token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict'
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
     });
     res.status(200).json({ message: 'Logged out successfully' });
 };

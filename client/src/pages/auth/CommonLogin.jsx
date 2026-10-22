@@ -17,7 +17,6 @@ const CommonLogin = () => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
-    // Rate Limiting States - Initialize from LocalStorage
     const [loginAttempts, setLoginAttempts] = useState(() => parseInt(localStorage.getItem('common_login_attempts')) || 0);
     const [blockCountdown, setBlockCountdown] = useState(0);
 
@@ -31,7 +30,6 @@ const CommonLogin = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [focusedField, setFocusedField] = useState(null);
 
-    // Absolute Real-Time Timer Effect (Survives page refresh)
     useEffect(() => {
         const checkLockout = () => {
             const lockoutUntil = parseInt(localStorage.getItem('common_lockout_until'), 10);
@@ -40,7 +38,6 @@ const CommonLogin = () => {
                 const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000);
                 setBlockCountdown(remainingSeconds);
             } else if (lockoutUntil && lockoutUntil <= Date.now()) {
-                // Lockout has expired naturally
                 localStorage.removeItem('common_lockout_until');
                 localStorage.removeItem('common_login_attempts');
                 setBlockCountdown(0);
@@ -49,9 +46,8 @@ const CommonLogin = () => {
             }
         };
 
-        checkLockout(); // Run immediately on mount
-        const timer = setInterval(checkLockout, 1000); // Check every real-world second
-        
+        checkLockout(); 
+        const timer = setInterval(checkLockout, 1000); 
         return () => clearInterval(timer);
     }, [error]);
 
@@ -82,15 +78,13 @@ const CommonLogin = () => {
                 identifier: identifier.trim(), 
                 password, 
                 role: loginRole
-            });
+            }, { withCredentials: true }); // Ensure cookie is saved natively
             
             if (response.status === 200) {
-                // Clear lockout data on successful login
                 localStorage.removeItem('common_login_attempts');
                 localStorage.removeItem('common_lockout_until');
                 setLoginAttempts(0);
                 
-                // Pass ONLY user metadata to the Auth Context. Token is handled securely by backend cookies.
                 login(response.data.user);
                 
                 if (loginRole === 'hr') navigate('/hr');
@@ -100,19 +94,14 @@ const CommonLogin = () => {
         } catch (err) {
             let newAttempts = loginAttempts;
 
-            if (err.response?.status === 429) {
-                // Backend strict limit hit
-                newAttempts = 3;
-            } else {
-                // Track failed attempt
-                newAttempts += 1;
-            }
+            if (err.response?.status === 429) newAttempts = 3;
+            else newAttempts += 1;
 
             setLoginAttempts(newAttempts);
             localStorage.setItem('common_login_attempts', newAttempts);
             
             if (newAttempts >= 3) {
-                const lockoutTime = Date.now() + 30000; // Exact time 30s from now
+                const lockoutTime = Date.now() + 30000;
                 localStorage.setItem('common_lockout_until', lockoutTime.toString());
                 setBlockCountdown(30);
                 setError('Too many failed attempts. Security lock initiated.');
@@ -131,7 +120,8 @@ const CommonLogin = () => {
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/request-otp`, { 
                 email: forgotEmail.trim(), 
                 role: loginRole 
-            });
+            }, { withCredentials: true });
+            
             setSuccessMsg('OTP sent to your email successfully.');
             setTimeout(() => { setSuccessMsg(''); setFlowView('verify'); }, 1500);
         } catch (err) {
@@ -148,7 +138,8 @@ const CommonLogin = () => {
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/verify-otp`, { 
                 email: forgotEmail.trim(), 
                 otp: forgotOtp.trim() 
-            });
+            }, { withCredentials: true });
+            
             setFlowView('reset');
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid or expired OTP.');
@@ -169,7 +160,8 @@ const CommonLogin = () => {
                 email: forgotEmail.trim(), 
                 role: loginRole, 
                 newPassword: forgotNewPwd
-            });
+            }, { withCredentials: true });
+            
             setSuccessMsg('Password has been reset successfully!');
             setTimeout(() => {
                 setSuccessMsg('');
@@ -197,13 +189,10 @@ const CommonLogin = () => {
 
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 p-3 sm:p-6 relative overflow-hidden">
-
-            {/* ==================== DECORATIVE BACKGROUND ==================== */}
             <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-br from-[#0437cc]/10 via-[#0437cc]/5 to-transparent -translate-y-20 transform skew-y-3 -z-10"></div>
             <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-[#f77704]/5 rounded-full blur-3xl -z-10 translate-x-1/3 translate-y-1/3"></div>
             <div className="absolute top-1/4 left-0 w-[300px] h-[300px] bg-[#0437cc]/5 rounded-full blur-3xl -z-10 -translate-x-1/2"></div>
 
-            {/* ==================== BACK BUTTON ==================== */}
             <button
                 onClick={() => navigate('/')}
                 className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-500 hover:text-[#010a1f] transition-all z-20 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-xl border border-slate-200 hover:border-slate-300 shadow-sm"
@@ -214,8 +203,6 @@ const CommonLogin = () => {
             </button>
 
             <div className="w-full max-w-[440px] min-w-[280px] animate-in fade-in slide-in-from-bottom-8 duration-700">
-
-                {/* ==================== BRAND HEADER ==================== */}
                 <div className="flex flex-col items-center mb-6 sm:mb-8">
                     <div className="relative">
                         <div className="absolute inset-0 bg-[#0437cc]/15 rounded-2xl blur-xl"></div>
@@ -231,11 +218,9 @@ const CommonLogin = () => {
                     </p>
                 </div>
 
-                {/* ==================== MAIN CARD ==================== */}
                 <div className="bg-white rounded-3xl sm:rounded-[2.5rem] shadow-[0_8px_30px_-10px_rgba(0,0,0,0.08)] border border-slate-100 p-6 sm:p-10 relative overflow-hidden">
                     <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0437cc] to-[#f77704]"></div>
 
-                    {/* ============ LOGIN VIEW ============ */}
                     {flowView === 'login' && (
                         <>
                             <div className="mb-5 sm:mb-6 text-center">
@@ -243,7 +228,6 @@ const CommonLogin = () => {
                                 <p className="text-xs sm:text-[13px] text-slate-500 font-medium mt-1.5">Select your role to continue</p>
                             </div>
 
-                            {/* Role Selector */}
                             <div className="flex bg-slate-50 p-1 rounded-2xl mb-5 sm:mb-6 border border-slate-100">
                                 {roles.map((r) => {
                                     const Icon = r.icon;
@@ -267,7 +251,6 @@ const CommonLogin = () => {
                             </div>
 
                             <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
-                                {/* Identifier */}
                                 <div className="space-y-1.5">
                                     <label className="text-[11px] sm:text-xs font-bold text-[#010a1f] uppercase tracking-wider">
                                         {loginRole === 'employee' ? 'Employee ID / Email' : 'Official Email'}
@@ -291,7 +274,6 @@ const CommonLogin = () => {
                                     </div>
                                 </div>
 
-                                {/* Password */}
                                 <div className="space-y-1.5">
                                     <div className="flex items-center justify-between">
                                         <label className="text-[11px] sm:text-xs font-bold text-[#010a1f] uppercase tracking-wider">Password</label>
@@ -332,7 +314,6 @@ const CommonLogin = () => {
                                     </div>
                                 </div>
 
-                                {/* Messages */}
                                 {error && (
                                     <div className="bg-red-50 text-red-600 p-3 rounded-2xl text-xs font-semibold text-center border border-red-100 animate-in fade-in flex flex-col items-center justify-center gap-1">
                                         <div className="flex items-center justify-center gap-2">

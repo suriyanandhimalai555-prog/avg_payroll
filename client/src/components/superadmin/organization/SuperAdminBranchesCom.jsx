@@ -22,14 +22,14 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Helper function to dynamically grab the auth token to prevent 401 Unauthorized errors in production
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
 const getAuthConfig = () => {
-    const token = localStorage.getItem('token') || localStorage.getItem('authToken') || sessionStorage.getItem('token');
     return {
+        withCredentials: true,
         headers: {
-            Authorization: `Bearer ${token}`
-        },
-        withCredentials: true
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
     };
 };
 
@@ -74,12 +74,21 @@ const SuperAdminBranchesCom = () => {
             setCompanies(companyRes.data || []);
             setBranches(branchRes.data || []);
 
-            if (companyRes.data.length > 0 && !isEditing) {
+            if (companyRes.data && companyRes.data.length > 0 && !isEditing) {
                 setFormData(prev => ({ ...prev, companyId: companyRes.data[0].id }));
             }
+            setApiError(''); // clear any previous errors on success
 
         } catch (error) {
             console.error('Failed to load core data', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            } else if (error.response?.status === 500) {
+                // Surface the exact PostgreSQL error message if it exists
+                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
+            } else {
+                setApiError('Failed to establish connection with the server.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -145,7 +154,7 @@ const SuperAdminBranchesCom = () => {
             setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
             console.error('Error saving branch:', error);
-            const backendErrorMsg = error.response?.data?.message || 'Failed to save branch. Please try again.';
+            const backendErrorMsg = error.response?.data?.message || 'Failed to save branch. Please check authorization.';
             setApiError(backendErrorMsg);
             setTimeout(() => setApiError(''), 5000);
         } finally {
@@ -176,7 +185,7 @@ const SuperAdminBranchesCom = () => {
             setSuccessMsg('Branch deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete branch.');
+            alert('Failed to delete branch. Ensure you are authorized.');
         }
     };
 
@@ -196,8 +205,9 @@ const SuperAdminBranchesCom = () => {
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative">
 
+            {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewBranch && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
 

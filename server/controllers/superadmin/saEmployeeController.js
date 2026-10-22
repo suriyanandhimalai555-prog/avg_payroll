@@ -206,7 +206,7 @@ export const updateEmployee = async (req, res) => {
             data.accountNumber ?? data.account_number ?? existing.account_number ?? '',
             data.ifsc ?? existing.ifsc ?? '',
             JSON.stringify(data.permissions ?? existing.permissions ?? {}),
-            data.employeeId ?? existing.employee_id, // Manual ID update support
+            data.employeeId ?? existing.employee_id,
             id
         ];
 

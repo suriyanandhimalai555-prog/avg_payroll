@@ -22,6 +22,17 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminDesignationsCom = () => {
     const INITIAL_FORM_STATE = {
         departmentId: '',
@@ -57,20 +68,28 @@ const SuperAdminDesignationsCom = () => {
         setIsLoading(true);
         try {
             const [compRes, deptRes, desigRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig())
             ]);
 
             setCompanies(compRes.data || []);
             setDepartments(deptRes.data || []);
             setDesignations(desigRes.data || []);
 
-            if (deptRes.data.length > 0 && !isEditing) {
+            if (deptRes.data && deptRes.data.length > 0 && !isEditing) {
                 setFormData(prev => ({ ...prev, departmentId: deptRes.data[0].id }));
             }
+            setApiError(''); // clear any previous errors
         } catch (error) {
             console.error('Failed to load core data', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            } else if (error.response?.status === 500) {
+                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
+            } else {
+                setApiError('Failed to establish connection with the server.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -120,11 +139,11 @@ const SuperAdminDesignationsCom = () => {
         setIsSubmitting(true);
         try {
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-designations/${editId}`, formData);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-designations/${editId}`, formData, getAuthConfig());
                 setSuccessMsg('Designation updated successfully.');
                 handleCancelEdit();
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-designations/create`, formData);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-designations/create`, formData, getAuthConfig());
                 setSuccessMsg(`Designation "${formData.designationName}" created successfully!`);
                 setFormData({ ...INITIAL_FORM_STATE, departmentId: departments[0]?.id || '' });
             }
@@ -155,7 +174,7 @@ const SuperAdminDesignationsCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this designation? It may impact associated employees.")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-designations/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-designations/${id}`, getAuthConfig());
             fetchCoreData();
             setSuccessMsg('Designation deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);

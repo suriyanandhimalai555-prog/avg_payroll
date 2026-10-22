@@ -37,9 +37,9 @@ export const getAllShifts = async (req, res) => {
     try {
         const query = `
             SELECT s.*, 
-                   d.department_name, 
-                   b.branch_name, 
-                   c.company_name 
+                   COALESCE(d.department_name, 'All Departments') AS department_name, 
+                   COALESCE(b.branch_name, 'All Branches') AS branch_name, 
+                   COALESCE(c.company_name, 'Unassigned Company') AS company_name 
             FROM sa_work_shifts s
             LEFT JOIN sa_departments d ON s.department_id = d.id
             LEFT JOIN sa_branches b ON s.branch_id = b.id

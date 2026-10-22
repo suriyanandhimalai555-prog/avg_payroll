@@ -29,10 +29,11 @@ export const createLocation = async (req, res) => {
 
 export const getAllLocations = async (req, res) => {
     try {
+        // Fetch locations and safely join using COALESCE to prevent null constraint crashes
         const query = `
             SELECT l.*, 
-                   b.branch_name, 
-                   c.company_name 
+                   COALESCE(b.branch_name, 'Unassigned Branch') AS branch_name, 
+                   COALESCE(c.company_name, 'Unassigned Company') AS company_name 
             FROM sa_locations l
             LEFT JOIN sa_branches b ON l.branch_id = b.id
             LEFT JOIN sa_company_profiles c ON b.company_id = c.id
@@ -42,7 +43,7 @@ export const getAllLocations = async (req, res) => {
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Fetch Locations Error:', error);
-        res.status(500).json({ message: 'Error fetching locations', error: error.message });
+        res.status(500).json({ message: 'Database error fetching locations', error: error.message });
     }
 };
 

@@ -1,84 +1,29 @@
 import jwt from 'jsonwebtoken';
 
-const ALLOWED_ROLES = new Set([
-    'superadmin',
-    'hr',
-    'manager',
-    'employee'
-]);
-
 export const authenticateToken = (req, res, next) => {
-    const authorization = req.headers.authorization;
-
-    if (typeof authorization !== 'string' ||
-        !authorization.startsWith('Bearer ')) {
-        return res.status(401).json({
-            message: 'Authentication required.'
-        });
-    }
-
-    const token = authorization.slice(7).trim();
+    // Safely check for cookies first, fallback to headers
+    const token = (req.cookies && (req.cookies.token || req.cookies.authToken)) || 
+                  (req.headers.authorization && req.headers.authorization.split(' ')[1]);
 
     if (!token) {
-        return res.status(401).json({
-            message: 'Authentication required.'
-        });
-    }
-
-    if (!process.env.JWT_SECRET) {
-        console.error('JWT_SECRET is missing.');
-        return res.status(500).json({
-            message: 'Internal server configuration error.'
-        });
+        return res.status(401).json({ message: 'Authentication required. No valid token or cookie found.' });
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET, {
-            algorithms: ['HS256']
-        });
-
-        if (
-            !decoded ||
-            typeof decoded !== 'object' ||
-            !Number.isInteger(decoded.id) ||
-            typeof decoded.email !== 'string' ||
-            !ALLOWED_ROLES.has(decoded.role)
-        ) {
-            return res.status(401).json({
-                message: 'Invalid authentication token.'
-            });
-        }
-
-        req.user = {
-            id: decoded.id,
-            email: decoded.email,
-            role: decoded.role
-        };
-
-        return next();
-    } catch {
-        return res.status(401).json({
-            message: 'Invalid or expired authentication token.'
-        });
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded; // Attach user info to request
+        next();
+    } catch (error) {
+        console.error('JWT Verification Error:', error.message);
+        return res.status(401).json({ message: 'Invalid or expired authentication token.' });
     }
 };
 
-export const requireRole = (...roles) => {
-    const allowedRoles = new Set(roles);
-
+export const requireRole = (role) => {
     return (req, res, next) => {
-        if (!req.user) {
-            return res.status(401).json({
-                message: 'Authentication required.'
-            });
+        if (!req.user || req.user.role !== role) {
+            return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
         }
-
-        if (!allowedRoles.has(req.user.role)) {
-            return res.status(403).json({
-                message: 'You are not authorized to perform this action.'
-            });
-        }
-
-        return next();
+        next();
     };
 };

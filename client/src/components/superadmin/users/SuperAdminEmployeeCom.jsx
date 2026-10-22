@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FaUserPlus, FaUser, FaBriefcase, FaMoneyCheckAlt,
@@ -22,32 +22,21 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Helper for asset icons
-const getAssetIcon = (type) => {
-    switch (type) {
-        case 'Laptop': return <FaLaptop className="text-blue-500" />;
-        case 'Mobile Phone': return <FaMobileAlt className="text-purple-500" />;
-        case 'ID Card': return <FaIdBadge className="text-teal-500" />;
-        case 'Access Key': return <FaKey className="text-orange-500" />;
-        default: return <FaBox className="text-slate-500" />;
-    }
-};
-
-// Helper for asset icon tile backgrounds
-const getAssetIconBg = (type) => {
-    switch (type) {
-        case 'Laptop': return 'bg-blue-50 border-blue-100';
-        case 'Mobile Phone': return 'bg-purple-50 border-purple-100';
-        case 'ID Card': return 'bg-teal-50 border-teal-100';
-        case 'Access Key': return 'bg-orange-50 border-orange-100';
-        default: return 'bg-slate-50 border-slate-100';
-    }
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
 };
 
 const SuperAdminEmployeeCom = () => {
     const INITIAL_FORM_STATE = {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '', address: '',
-        employeeId: '', joiningDate: '', // Removed auto-generation logic
+        employeeId: '', joiningDate: '', 
         company: '', branch: '', department: '', designation: '', manager: '', empType: '', location: '', shift: '', status: 'Pending Activation',
         ctc: '', monthlySalary: '', basic: '', hra: '', conveyance: '', medical: '', specialAllowance: '', otherAllowances: '',
         epf: '', esi: '', healthInsurance: '', pt: '', tds: '', leaves: '',
@@ -86,12 +75,12 @@ const SuperAdminEmployeeCom = () => {
     const fetchOrgData = async () => {
         try {
             const [compRes, branchRes, deptRes, desigRes, locRes, shiftRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig())
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
@@ -99,19 +88,28 @@ const SuperAdminEmployeeCom = () => {
             setDesignations(desigRes.data || []);
             setLocations(locRes.data || []);
             setShifts(shiftRes.data || []);
+            setApiError('');
         } catch (error) {
             console.error('Error fetching org data:', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            } else {
+                setApiError('Failed to establish connection with the server.');
+            }
         }
     };
 
     const fetchEmployees = async () => {
         setIsFetching(true);
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig());
             let data = response.data || [];
             setEmployees(data);
         } catch (error) {
             console.error('Error fetching employees:', error);
+            if (error.response?.status === 500) {
+                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
+            }
         } finally {
             setIsFetching(false);
         }
@@ -202,11 +200,11 @@ const SuperAdminEmployeeCom = () => {
             const payload = { ...formData };
 
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-employees/${editEmployeeId}`, payload);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-employees/${editEmployeeId}`, payload, getAuthConfig());
                 setSuccessMsg('Employee record updated successfully.');
                 cancelEdit();
             } else {
-                const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/create`, payload);
+                const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/create`, payload, getAuthConfig());
                 if (response.status === 201 || response.status === 200) {
                     setSuccessMsg(`Employee created successfully with ID: ${response.data.employee?.employee_id}.`);
                     setFormData(INITIAL_FORM_STATE);
@@ -245,12 +243,12 @@ const SuperAdminEmployeeCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this employee? This action cannot be undone.")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-employees/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-employees/${id}`, getAuthConfig());
             fetchEmployees();
             setSuccessMsg('Employee deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete employee.');
+            alert('Failed to delete employee. Check authorization.');
         }
     };
 

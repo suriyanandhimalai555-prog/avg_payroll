@@ -4,7 +4,7 @@ import {
     FaBuilding, FaInfoCircle, FaCheck, FaTimes,
     FaFileInvoice, FaImage, FaMapMarkerAlt, FaGlobe,
     FaUpload, FaListUl, FaEye, FaEdit, FaTrash, FaSearch,
-    FaEnvelope, FaPhoneAlt, FaLink, FaArrowRight
+    FaEnvelope, FaPhoneAlt
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -22,15 +22,19 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Helper function to dynamically grab the auth token to prevent 401 Unauthorized errors in production
+// Streamlined Auth Config: Relies on the browser to send the HttpOnly cookie automatically
 const getAuthConfig = () => {
-    const token = localStorage.getItem('token') || localStorage.getItem('authToken') || sessionStorage.getItem('token');
-    return {
-        headers: {
-            Authorization: `Bearer ${token}`
-        },
-        withCredentials: true
+    const config = {
+        withCredentials: true // CRITICAL: This allows cookies to be sent cross-origin to your backend
     };
+    
+    // Fallback just in case token is ever stored in localStorage
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token) {
+        config.headers = { Authorization: `Bearer ${token}` };
+    }
+    
+    return config;
 };
 
 const SuperAdminCompanyProfileCom = () => {
@@ -61,8 +65,12 @@ const SuperAdminCompanyProfileCom = () => {
         try {
             const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig());
             setProfiles(response.data || []);
+            setApiError('');
         } catch (error) {
-            console.error('Failed to load profiles', error);
+            console.error('Failed to load profiles:', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            }
         } finally {
             setIsFetching(false);
         }
@@ -142,7 +150,8 @@ const SuperAdminCompanyProfileCom = () => {
             fetchProfiles();
             setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
-            const backendErrorMsg = error.response?.data?.message || 'Failed to save profile. Please try again.';
+            console.error('Submit Error:', error);
+            const backendErrorMsg = error.response?.data?.message || 'Failed to save profile. Please check your connection and try again.';
             setApiError(backendErrorMsg);
             setTimeout(() => setApiError(''), 5000);
         } finally {
@@ -170,7 +179,9 @@ const SuperAdminCompanyProfileCom = () => {
             setSuccessMsg('Profile deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete profile.');
+            console.error('Delete Error:', error);
+            setApiError('Failed to delete profile. Please ensure you are authorized.');
+            setTimeout(() => setApiError(''), 5000);
         }
     };
 
@@ -189,7 +200,7 @@ const SuperAdminCompanyProfileCom = () => {
 
             {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewProfile && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
 

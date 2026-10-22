@@ -32,9 +32,9 @@ export const createBranch = async (req, res) => {
 
 export const getAllBranches = async (req, res) => {
     try {
-        // Use a simple join to also return the parent company name if needed
+        // Safe JOIN using COALESCE in case of orphaned branch records
         const query = `
-            SELECT b.*, c.company_name 
+            SELECT b.*, COALESCE(c.company_name, 'Unassigned Company') AS company_name 
             FROM sa_branches b
             LEFT JOIN sa_company_profiles c ON b.company_id = c.id
             ORDER BY b.id DESC;
@@ -43,7 +43,7 @@ export const getAllBranches = async (req, res) => {
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Fetch Branches Error:', error);
-        res.status(500).json({ message: 'Error fetching branches', error: error.message });
+        res.status(500).json({ message: 'Database constraint error fetching branches.', error: error.message });
     }
 };
 

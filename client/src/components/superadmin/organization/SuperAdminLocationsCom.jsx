@@ -22,6 +22,17 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminLocationsCom = () => {
     const INITIAL_FORM_STATE = {
         branchId: '',
@@ -59,11 +70,11 @@ const SuperAdminLocationsCom = () => {
         setIsLoading(true);
         try {
             const [compRes, branchRes, deptRes, desigRes, locRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`, getAuthConfig())
             ]);
 
             setCompanies(compRes.data || []);
@@ -72,11 +83,19 @@ const SuperAdminLocationsCom = () => {
             setDesignations(desigRes.data || []);
             setLocations(locRes.data || []);
 
-            if (branchRes.data.length > 0 && !isEditing) {
+            if (branchRes.data && branchRes.data.length > 0 && !isEditing) {
                 setFormData(prev => ({ ...prev, branchId: branchRes.data[0].id }));
             }
+            setApiError(''); // clear any previous errors
         } catch (error) {
             console.error('Failed to load core data', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            } else if (error.response?.status === 500) {
+                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
+            } else {
+                setApiError('Failed to establish connection with the server.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -126,18 +145,18 @@ const SuperAdminLocationsCom = () => {
         setIsSubmitting(true);
         try {
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-locations/${editId}`, formData);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-locations/${editId}`, formData, getAuthConfig());
                 setSuccessMsg('Location updated successfully.');
                 handleCancelEdit();
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-locations/create`, formData);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-locations/create`, formData, getAuthConfig());
                 setSuccessMsg(`Location "${formData.locationName}" created successfully!`);
                 setFormData({ ...INITIAL_FORM_STATE, branchId: branches[0]?.id || '' });
             }
             fetchCoreData();
             setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
-            const backendErrorMsg = error.response?.data?.message || 'Failed to save location. Please try again.';
+            const backendErrorMsg = error.response?.data?.message || 'Failed to save location. Please check authorization.';
             setApiError(backendErrorMsg);
             setTimeout(() => setApiError(''), 5000);
         } finally {
@@ -162,12 +181,12 @@ const SuperAdminLocationsCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this location?")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-locations/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-locations/${id}`, getAuthConfig());
             fetchCoreData();
             setSuccessMsg('Location deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete location.');
+            alert('Failed to delete location. Ensure you are authorized.');
         }
     };
 
@@ -196,7 +215,7 @@ const SuperAdminLocationsCom = () => {
         <div className="space-y-5 sm:space-y-6 pb-10 relative">
 
             {isViewModalOpen && viewLoc && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
 

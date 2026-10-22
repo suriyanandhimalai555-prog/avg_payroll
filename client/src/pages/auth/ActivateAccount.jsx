@@ -56,7 +56,7 @@ const ActivateAccount = () => {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/activate`, {
                 token,
                 password: formData.password
-            });
+            }, { withCredentials: true }); // Cross-origin fix
 
             if (response.status === 200) {
                 setStatus({ loading: false, error: '', success: true });
@@ -94,7 +94,6 @@ const ActivateAccount = () => {
     if (status.success) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 relative overflow-hidden">
-                {/* Decorative background */}
                 <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-br from-[#0437cc]/10 via-[#0437cc]/5 to-transparent -translate-y-20 transform skew-y-3 -z-10"></div>
                 <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-green-500/5 rounded-full blur-3xl -z-10 translate-x-1/3 translate-y-1/3"></div>
 
@@ -137,13 +136,11 @@ const ActivateAccount = () => {
     // ==================== MAIN FORM ====================
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 p-3 sm:p-6 relative overflow-hidden">
-            {/* Decorative background */}
             <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-br from-[#0437cc]/10 via-[#0437cc]/5 to-transparent -translate-y-20 transform skew-y-3 -z-10"></div>
             <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-[#f77704]/5 rounded-full blur-3xl -z-10 translate-x-1/3 translate-y-1/3"></div>
 
             <div className="w-full max-w-[440px] min-w-[280px] animate-in fade-in slide-in-from-bottom-8 duration-700">
 
-                {/* Brand Header */}
                 <div className="flex flex-col items-center mb-6 sm:mb-8">
                     <div className="w-14 h-14 sm:w-16 sm:h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-[#0437cc]/10 mb-3 sm:mb-4 border border-slate-100 overflow-hidden">
                         <img src="/logo.jpg" alt="AVG Logo" className="w-full h-full object-cover" />
@@ -156,11 +153,9 @@ const ActivateAccount = () => {
                     </p>
                 </div>
 
-                {/* Card */}
                 <div className="relative bg-white rounded-3xl sm:rounded-[2.5rem] shadow-[0_8px_30px_-10px_rgba(0,0,0,0.08)] border border-slate-100 p-6 sm:p-10 overflow-hidden">
                     <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0437cc] to-[#f77704]"></div>
 
-                    {/* Icon Badge */}
                     <div className="flex justify-center mb-5">
                         <div className="relative">
                             <div className="absolute inset-0 bg-blue-100 rounded-2xl blur-lg opacity-60"></div>
@@ -177,7 +172,7 @@ const ActivateAccount = () => {
                         <p className="text-xs sm:text-[13px] text-slate-500 mt-2 leading-relaxed">
                             Set your password to activate portal access for
                             <br />
-                            <strong className="text-[#0437cc] break-all">{email || 'your account'}</strong>
+                            <strong className="text-[#0437cc] break-all">{formData.email || 'your account'}</strong>
                         </p>
                     </div>
 
@@ -189,7 +184,6 @@ const ActivateAccount = () => {
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
-                        {/* New Password */}
                         <div className="space-y-1.5">
                             <label className="text-[11px] sm:text-xs font-bold text-[#010a1f] uppercase tracking-wider">
                                 New Password <span className="text-red-500">*</span>
@@ -205,7 +199,7 @@ const ActivateAccount = () => {
                                     onChange={handleInputChange}
                                     onFocus={() => setFocusedField('password')}
                                     onBlur={() => setFocusedField(null)}
-                                    disabled={!email || status.loading}
+                                    disabled={status.loading}
                                     required
                                     placeholder="Minimum 8 characters"
                                     className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-[#0437cc]/10 focus:border-[#0437cc] focus:bg-white transition-all outline-none text-[#010a1f] disabled:opacity-60 placeholder:text-slate-400 placeholder:font-normal"
@@ -220,7 +214,6 @@ const ActivateAccount = () => {
                                 </button>
                             </div>
 
-                            {/* Password Strength Indicator */}
                             {formData.password && (
                                 <div className="space-y-1.5 pt-1.5 animate-in fade-in">
                                     <div className="flex gap-1">
@@ -239,7 +232,6 @@ const ActivateAccount = () => {
                             )}
                         </div>
 
-                        {/* Confirm Password */}
                         <div className="space-y-1.5">
                             <label className="text-[11px] sm:text-xs font-bold text-[#010a1f] uppercase tracking-wider">
                                 Confirm Password <span className="text-red-500">*</span>
@@ -255,7 +247,7 @@ const ActivateAccount = () => {
                                     onChange={handleInputChange}
                                     onFocus={() => setFocusedField('confirmPassword')}
                                     onBlur={() => setFocusedField(null)}
-                                    disabled={!email || status.loading}
+                                    disabled={status.loading}
                                     required
                                     placeholder="Re-enter your password"
                                     className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-[#0437cc]/10 focus:border-[#0437cc] focus:bg-white transition-all outline-none text-[#010a1f] disabled:opacity-60 placeholder:text-slate-400 placeholder:font-normal"
@@ -270,7 +262,6 @@ const ActivateAccount = () => {
                                 </button>
                             </div>
 
-                            {/* Match indicator */}
                             {formData.confirmPassword && formData.password && (
                                 <p className={`text-[10px] font-bold flex items-center gap-1.5 pt-1 ${formData.password === formData.confirmPassword ? 'text-green-600' : 'text-red-500'}`}>
                                     <span className={`w-1.5 h-1.5 rounded-full ${formData.password === formData.confirmPassword ? 'bg-green-500' : 'bg-red-500'}`}></span>
@@ -285,7 +276,7 @@ const ActivateAccount = () => {
                                 variant="primary"
                                 size="lg"
                                 fullWidth
-                                disabled={!email || status.loading}
+                                disabled={status.loading}
                                 className="shadow-lg shadow-[#0437cc]/25"
                             >
                                 {status.loading ? (
@@ -303,7 +294,6 @@ const ActivateAccount = () => {
                     </form>
                 </div>
 
-                {/* Footer */}
                 <div className="flex flex-col items-center gap-2 mt-6 sm:mt-8">
                     <p className="text-center text-[10px] sm:text-[11px] font-medium text-slate-400 uppercase tracking-widest">
                         Secure Activation • © {new Date().getFullYear()} AVG Prime Tech

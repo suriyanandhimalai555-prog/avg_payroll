@@ -22,6 +22,17 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminWorkShiftsCom = () => {
     const INITIAL_FORM_STATE = {
         companyId: '',
@@ -60,15 +71,19 @@ const SuperAdminWorkShiftsCom = () => {
     const fetchOrgData = async () => {
         try {
             const [compRes, branchRes, deptRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig())
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
             setDepartments(deptRes.data || []);
+            setApiError('');
         } catch (error) {
             console.error('Error fetching org data:', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            }
         }
     };
 
@@ -76,10 +91,15 @@ const SuperAdminWorkShiftsCom = () => {
         setIsLoading(true);
         setApiError('');
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig());
             setShifts(response.data || []);
         } catch (error) {
             console.error('Failed to load shifts', error);
+            if (error.response?.status === 500) {
+                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
+            } else if (error.response?.status !== 401) {
+                setApiError('Failed to establish connection with the server.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -185,11 +205,11 @@ const SuperAdminWorkShiftsCom = () => {
             };
 
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-shifts/${editId}`, payload);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-shifts/${editId}`, payload, getAuthConfig());
                 setSuccessMsg('Shift updated successfully.');
                 handleCancelEdit();
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-shifts/create`, payload);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-shifts/create`, payload, getAuthConfig());
                 setSuccessMsg(`Shift "${formData.shiftName}" created successfully!`);
                 setFormData(INITIAL_FORM_STATE);
             }
@@ -197,7 +217,7 @@ const SuperAdminWorkShiftsCom = () => {
             setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
             console.error('Error saving shift:', error);
-            setApiError(error.response?.data?.message || 'Failed to save shift. Please try again.');
+            setApiError(error.response?.data?.message || 'Failed to save shift. Please check authorization.');
             setTimeout(() => setApiError(''), 5000);
         } finally {
             setIsSubmitting(false);
@@ -227,12 +247,12 @@ const SuperAdminWorkShiftsCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this shift schedule?")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-shifts/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-shifts/${id}`, getAuthConfig());
             fetchShifts();
             setSuccessMsg('Shift deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete shift.');
+            alert('Failed to delete shift. Ensure you are authorized.');
         }
     };
 
@@ -382,7 +402,7 @@ const SuperAdminWorkShiftsCom = () => {
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
+                    <div className="flex gap-2.5 w-full md:w-auto shrink-0">
                         {isEditing ? (
                             <Button
                                 variant="ghost"

@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import cluster from 'cluster';
 import os from 'os';
 import pool from './config/db.js';
+import cookieParser from 'cookie-parser'; // <-- 1. ADDED IMPORT
 
 dotenv.config();
 if (!process.env.JWT_SECRET) {
@@ -126,6 +127,9 @@ if (cluster.isPrimary) {
         credentials: true,
         optionsSuccessStatus: 200
     }));
+
+    // 2. ADDED COOKIE PARSER MIDDLEWARE BEFORE ROUTES
+    app.use(cookieParser());
 
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));

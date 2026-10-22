@@ -18,7 +18,6 @@ const SuperAdminLogin = () => {
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    // Absolute Real-Time Timer Effect (Survives page refresh)
     useEffect(() => {
         const checkLockout = () => {
             const lockoutUntil = parseInt(localStorage.getItem('sa_lockout_until'), 10);
@@ -27,7 +26,6 @@ const SuperAdminLogin = () => {
                 const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000);
                 setBlockCountdown(remainingSeconds);
             } else if (lockoutUntil && lockoutUntil <= Date.now()) {
-                // Lockout has expired naturally
                 localStorage.removeItem('sa_lockout_until');
                 localStorage.removeItem('sa_login_attempts');
                 setBlockCountdown(0);
@@ -36,8 +34,8 @@ const SuperAdminLogin = () => {
             }
         };
 
-        checkLockout(); // Run immediately on mount
-        const timer = setInterval(checkLockout, 1000); // Check every real-world second
+        checkLockout(); 
+        const timer = setInterval(checkLockout, 1000); 
         
         return () => clearInterval(timer);
     }, [error]);
@@ -59,33 +57,26 @@ const SuperAdminLogin = () => {
                 identifier: credentials.email.trim(),
                 password: credentials.password,
                 role: 'superadmin'
-            });
+            }, { withCredentials: true }); // Ensure cookie is saved natively
 
-            // Clear lockout data on successful login
             localStorage.removeItem('sa_login_attempts');
             localStorage.removeItem('sa_lockout_until');
             setLoginAttempts(0);
             
-            // Pass ONLY user metadata to the Auth Context. Token is handled securely by backend cookies.
             login(response.data.user);
             navigate('/superadmin');
 
         } catch (err) {
             let newAttempts = loginAttempts;
 
-            if (err.response?.status === 429) {
-                // Backend strict limit hit
-                newAttempts = 3;
-            } else {
-                // Track failed attempt
-                newAttempts += 1;
-            }
+            if (err.response?.status === 429) newAttempts = 3;
+            else newAttempts += 1;
 
             setLoginAttempts(newAttempts);
             localStorage.setItem('sa_login_attempts', newAttempts);
             
             if (newAttempts >= 3) {
-                const lockoutTime = Date.now() + 30000; // Exact time 30s from now
+                const lockoutTime = Date.now() + 30000;
                 localStorage.setItem('sa_lockout_until', lockoutTime.toString());
                 setBlockCountdown(30);
                 setError('Too many failed attempts. Security lock initiated.');
@@ -100,12 +91,10 @@ const SuperAdminLogin = () => {
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 p-3 sm:p-6 relative overflow-hidden">
 
-            {/* ==================== DECORATIVE BACKGROUND ==================== */}
             <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-br from-[#0437cc]/10 via-[#0437cc]/5 to-transparent -translate-y-20 transform skew-y-3 -z-10"></div>
             <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-[#f77704]/5 rounded-full blur-3xl -z-10 translate-x-1/3 translate-y-1/3"></div>
             <div className="absolute top-1/3 left-0 w-[300px] h-[300px] bg-[#0437cc]/5 rounded-full blur-3xl -z-10 -translate-x-1/2"></div>
 
-            {/* ==================== BACK BUTTON ==================== */}
             <button
                 onClick={() => navigate('/login')}
                 className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-500 hover:text-[#010a1f] transition-all z-20 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-xl border border-slate-200 hover:border-slate-300 shadow-sm"
@@ -116,7 +105,6 @@ const SuperAdminLogin = () => {
 
             <div className="w-full max-w-[440px] min-w-[280px] animate-in fade-in slide-in-from-bottom-8 duration-700">
 
-                {/* ==================== SECURITY BADGE HEADER ==================== */}
                 <div className="text-center mb-6 sm:mb-8">
                     <div className="relative mx-auto w-16 h-16 sm:w-20 sm:h-20 mb-4">
                         <div className="absolute inset-0 bg-[#0437cc]/20 rounded-3xl blur-2xl"></div>
@@ -138,7 +126,6 @@ const SuperAdminLogin = () => {
                     </p>
                 </div>
 
-                {/* ==================== LOGIN CARD ==================== */}
                 <div className="bg-white rounded-3xl sm:rounded-[2.5rem] shadow-[0_8px_30px_-10px_rgba(0,0,0,0.08)] border border-slate-100 p-6 sm:p-9 relative overflow-hidden">
                     <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
 
@@ -211,7 +198,6 @@ const SuperAdminLogin = () => {
                         </div>
                     </form>
 
-                    {/* Divider */}
                     <div className="flex items-center gap-3 mt-6 pt-5 border-t border-slate-100">
                         <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -220,7 +206,6 @@ const SuperAdminLogin = () => {
                     </div>
                 </div>
 
-                {/* ==================== FOOTER ==================== */}
                 <div className="text-center mt-6 sm:mt-8">
                     <p className="text-[10px] sm:text-[11px] font-medium text-slate-400 leading-relaxed uppercase tracking-widest max-w-sm mx-auto">
                         Protected by AVG Prime Tech Enterprise Security

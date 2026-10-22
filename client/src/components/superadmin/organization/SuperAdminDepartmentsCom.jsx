@@ -21,6 +21,17 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminDepartmentsCom = () => {
     const INITIAL_FORM_STATE = {
         branchId: '',
@@ -54,18 +65,27 @@ const SuperAdminDepartmentsCom = () => {
         setIsLoading(true);
         try {
             const [branchRes, deptRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig())
             ]);
 
             setBranches(branchRes.data || []);
             setDepartments(deptRes.data || []);
 
-            if (branchRes.data.length > 0 && !isEditing) {
+            if (branchRes.data && branchRes.data.length > 0 && !isEditing) {
                 setFormData(prev => ({ ...prev, branchId: branchRes.data[0].id }));
             }
+            setApiError('');
+
         } catch (error) {
             console.error('Failed to load core data', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            } else if (error.response?.status === 500) {
+                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
+            } else {
+                setApiError('Failed to establish connection with the server.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -115,11 +135,11 @@ const SuperAdminDepartmentsCom = () => {
         setIsSubmitting(true);
         try {
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-departments/${editId}`, formData);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-departments/${editId}`, formData, getAuthConfig());
                 setSuccessMsg('Department updated successfully.');
                 handleCancelEdit();
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-departments/create`, formData);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-departments/create`, formData, getAuthConfig());
                 setSuccessMsg(`Department "${formData.departmentName}" created successfully!`);
                 setFormData({ ...INITIAL_FORM_STATE, branchId: branches[0]?.id || '' });
             }
@@ -150,12 +170,12 @@ const SuperAdminDepartmentsCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this department? It may impact associated employees.")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-departments/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-departments/${id}`, getAuthConfig());
             fetchCoreData();
             setSuccessMsg('Department deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete department.');
+            alert('Failed to delete department. Ensure you are authorized.');
         }
     };
 
@@ -175,7 +195,7 @@ const SuperAdminDepartmentsCom = () => {
         <div className="space-y-5 sm:space-y-6 pb-10 relative">
 
             {isViewModalOpen && viewDept && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
 

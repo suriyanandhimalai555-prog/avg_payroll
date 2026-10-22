@@ -32,11 +32,11 @@ export const createDepartment = async (req, res) => {
 
 export const getAllDepartments = async (req, res) => {
     try {
-        // Fetch departments and join with branches and companies for complete context
+        // Fetch departments and join with branches and companies safely using COALESCE
         const query = `
             SELECT d.*, 
-                   b.branch_name, 
-                   c.company_name 
+                   COALESCE(b.branch_name, 'Unassigned Branch') AS branch_name, 
+                   COALESCE(c.company_name, 'Unassigned Company') AS company_name 
             FROM sa_departments d
             LEFT JOIN sa_branches b ON d.branch_id = b.id
             LEFT JOIN sa_company_profiles c ON b.company_id = c.id
@@ -46,7 +46,7 @@ export const getAllDepartments = async (req, res) => {
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Fetch Departments Error:', error);
-        res.status(500).json({ message: 'Error fetching departments', error: error.message });
+        res.status(500).json({ message: 'Database error fetching departments.', error: error.message });
     }
 };
 
