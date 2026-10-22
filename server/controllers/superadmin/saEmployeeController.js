@@ -98,7 +98,13 @@ export const createEmployee = async (req, res) => {
             });
 
             const activationToken = createActivationToken(data.email, 'employee');
-            const activationLink = `${process.env.FRONTEND_URL}/activate-account?token=${encodeURIComponent(activationToken)}`;
+            
+            // ============================================================================
+            // FRONTEND URL FALLBACK FIX
+            // Ensures the URL never evaluates to 'undefined' in production
+            // ============================================================================
+            const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
             const mailOptions = {
                 from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,
