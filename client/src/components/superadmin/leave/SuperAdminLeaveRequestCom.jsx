@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import {
     FaSearch, FaFilter, FaCalendarDay,
     FaCheckCircle, FaTimesCircle, FaClock, FaEye,
@@ -8,11 +9,21 @@ import {
 } from 'react-icons/fa';
 import Button from '../../common/Button';
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => ({
+    withCredentials: true,
+    headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+    }
+});
+
 const SuperAdminLeaveRequestCom = () => {
     // UI & Data States
     const [loading, setLoading] = useState(true);
     const [requests, setRequests] = useState([]);
     const [stats, setStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
+    const [toastMsg, setToastMsg] = useState({ text: '', type: '' });
 
     // Filter States
     const [searchTerm, setSearchTerm] = useState('');
@@ -24,103 +35,46 @@ const SuperAdminLeaveRequestCom = () => {
     const [viewRecord, setViewRecord] = useState(null);
     const [isActionLoading, setIsActionLoading] = useState(false);
 
-    // ==================== MOCK DATA GENERATOR ====================
-    useEffect(() => {
+    // ==================== FETCH LIVE DATA ====================
+    const fetchAllRequests = async () => {
         setLoading(true);
-        // Simulate network delay
-        setTimeout(() => {
-            const mockData = [
-                {
-                    id: 401,
-                    emp_id: 'AVG-2026-045',
-                    first_name: 'Rahul',
-                    last_name: 'Sharma',
-                    profile_photo: null,
-                    role: 'Employee',
-                    department: 'Engineering',
-                    leave_type: 'Sick Leave',
-                    from_date: '2026-10-20',
-                    to_date: '2026-10-21',
-                    total_days: 2,
-                    reason: 'Suffering from a severe viral infection and high fever. Advised bed rest by the doctor for 2 days.',
-                    status: 'Pending',
-                    submitted_on: '2026-10-18T08:30:00'
-                },
-                {
-                    id: 402,
-                    emp_id: 'AVG-2026-012',
-                    first_name: 'Priya',
-                    last_name: 'Patel',
-                    profile_photo: null,
-                    role: 'HR',
-                    department: 'Human Resources',
-                    leave_type: 'Casual Leave',
-                    from_date: '2026-11-05',
-                    to_date: '2026-11-06',
-                    total_days: 2,
-                    reason: 'Attending a close family function out of station.',
-                    status: 'Approved',
-                    submitted_on: '2026-10-15T09:15:00'
-                },
-                {
-                    id: 403,
-                    emp_id: 'AVG-2026-088',
-                    first_name: 'Karan',
-                    last_name: 'Mehta',
-                    profile_photo: null,
-                    role: 'Manager',
-                    department: 'Sales',
-                    leave_type: 'Earned Leave',
-                    from_date: '2026-12-20',
-                    to_date: '2026-12-30',
-                    total_days: 10,
-                    reason: 'Planned annual family vacation. All major Q4 deliverables will be handed over to the team prior to my leave.',
-                    status: 'Pending',
-                    submitted_on: '2026-10-17T08:30:00'
-                },
-                {
-                    id: 404,
-                    emp_id: 'AVG-2026-022',
-                    first_name: 'Sneha',
-                    last_name: 'Reddy',
-                    profile_photo: null,
-                    role: 'Employee',
-                    department: 'Design',
-                    leave_type: 'Unpaid Leave',
-                    from_date: '2026-10-25',
-                    to_date: '2026-10-25',
-                    total_days: 1,
-                    reason: 'Personal emergency. Need to visit the bank for urgent loan processing.',
-                    status: 'Rejected',
-                    submitted_on: '2026-10-11T11:20:00'
-                },
-                {
-                    id: 405,
-                    emp_id: 'AVG-2026-091',
-                    first_name: 'Amit',
-                    last_name: 'Verma',
-                    profile_photo: null,
-                    role: 'Manager',
-                    department: 'Engineering',
-                    leave_type: 'Sick Leave',
-                    from_date: '2026-10-19',
-                    to_date: '2026-10-19',
-                    total_days: 1,
-                    reason: 'Not feeling well today, taking the day off to rest and recover.',
-                    status: 'Pending',
-                    submitted_on: '2026-10-19T07:10:00'
-                }
-            ];
+        try {
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/leave/all`, getAuthConfig());
+            
+            // Map the data into the structure expected by the UI
+            const liveData = response.data.map(req => ({
+                id: req.id,
+                emp_id: req.employee_id,
+                first_name: req.first_name || 'Unknown',
+                last_name: req.last_name || 'Employee',
+                profile_photo: req.profile_photo || null,
+                role: 'Employee', // Future enhancement: map exact roles from employee profile join if needed
+                department: req.department || 'Not Assigned',
+                leave_type: req.leave_type,
+                from_date: req.from_date,
+                to_date: req.to_date,
+                total_days: req.total_days,
+                reason: req.reason,
+                status: req.status,
+                submitted_on: req.applied_on
+            }));
 
-            setRequests(mockData);
+            setRequests(liveData);
             setStats({
-                total: mockData.length,
-                pending: mockData.filter(r => r.status === 'Pending').length,
-                approved: mockData.filter(r => r.status === 'Approved').length,
-                rejected: mockData.filter(r => r.status === 'Rejected').length
+                total: liveData.length,
+                pending: liveData.filter(r => r.status === 'Pending').length,
+                approved: liveData.filter(r => r.status === 'Approved').length,
+                rejected: liveData.filter(r => r.status === 'Rejected').length
             });
+        } catch (error) {
+            console.error("Failed to fetch leave requests:", error);
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
+    };
+
+    useEffect(() => {
+        fetchAllRequests();
     }, []);
 
     // ==================== FILTER LOGIC ====================
@@ -132,20 +86,65 @@ const SuperAdminLeaveRequestCom = () => {
         return matchesSearch && matchesStatus && matchesRole && matchesDept;
     });
 
-    // ==================== HANDLERS (MOCK) ====================
-    const handleAction = (id, action) => {
+    // ==================== EXCEL EXPORT LOGIC ====================
+    const handleExportExcel = () => {
+        if (filteredRequests.length === 0) return alert("No records to export.");
+
+        let csvContent = "Employee ID,First Name,Last Name,Department,Leave Type,From Date,To Date,Total Days,Status,Reason,Submitted On\n";
+
+        filteredRequests.forEach(req => {
+            const empId = req.emp_id || 'N/A';
+            const fName = (req.first_name || '').replace(/,/g, '');
+            const lName = (req.last_name || '').replace(/,/g, '');
+            const dept = (req.department || 'N/A').replace(/,/g, '');
+            const lType = req.leave_type;
+            const fDate = new Date(req.from_date).toLocaleDateString('en-CA');
+            const tDate = new Date(req.to_date).toLocaleDateString('en-CA');
+            const tDays = req.total_days;
+            const stat = req.status;
+            const reason = (req.reason || '').replace(/(\r\n|\n|\r|,)/gm, " "); // Strip newlines and commas
+            const submitted = new Date(req.submitted_on).toISOString();
+
+            csvContent += `${empId},${fName},${lName},${dept},${lType},${fDate},${tDate},${tDays},${stat},"${reason}",${submitted}\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Leave_Requests_Log_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // ==================== HANDLERS ====================
+    const handleAction = async (id, action) => {
         setIsActionLoading(true);
-        setTimeout(() => {
+        try {
+            await axios.put(`${import.meta.env.VITE_API_URL}/api/leave/status/${id}`, { status: action }, getAuthConfig());
+            
+            // Optimistic UI Update
             setRequests(prev => prev.map(req => req.id === id ? { ...req, status: action } : req));
             setStats(prev => ({
                 ...prev,
-                pending: action === 'Pending' ? prev.pending + 1 : prev.pending - 1,
+                pending: prev.pending - 1,
                 approved: action === 'Approved' ? prev.approved + 1 : prev.approved,
                 rejected: action === 'Rejected' ? prev.rejected + 1 : prev.rejected,
             }));
             setViewRecord(null);
+
+            // Trigger Top Right Success Toast
+            setToastMsg({ text: `Leave request ${action.toLowerCase()} successfully.`, type: 'success' });
+            setTimeout(() => setToastMsg({ text: '', type: '' }), 4000);
+
+        } catch (error) {
+            console.error("Action Failed:", error);
+            setToastMsg({ text: 'Failed to process request. Check connection.', type: 'error' });
+            setTimeout(() => setToastMsg({ text: '', type: '' }), 4000);
+        } finally {
             setIsActionLoading(false);
-        }, 800);
+        }
     };
 
     const formatDate = (dateString) => {
@@ -225,6 +224,24 @@ const SuperAdminLeaveRequestCom = () => {
                     .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
                 `}
             </style>
+
+            {/* ==================== TOAST NOTIFICATION (TOP RIGHT) ==================== */}
+            {toastMsg.text && (
+                <div className="fixed top-6 right-6 z-[200] animate-in slide-in-from-top-5 fade-in duration-300">
+                    <div className="bg-white border border-slate-100 shadow-xl shadow-slate-200/50 rounded-2xl p-4 flex items-center gap-3 min-w-[280px]">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${toastMsg.type === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
+                            {toastMsg.type === 'success' ? <FaCheckCircle className="text-green-500 text-lg" /> : <FaTimesCircle className="text-red-500 text-lg" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{toastMsg.type === 'success' ? 'Success' : 'Error'}</p>
+                            <p className={`text-sm font-bold truncate ${toastMsg.type === 'success' ? 'text-[#010a1f]' : 'text-red-700'}`}>{toastMsg.text}</p>
+                        </div>
+                        <button onClick={() => setToastMsg({text:'', type:''})} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-colors shrink-0">
+                            <FaTimes className="text-sm" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* ==================== REVIEW / ACTION MODAL ==================== */}
             {viewRecord && (
@@ -368,6 +385,7 @@ const SuperAdminLeaveRequestCom = () => {
                         <Button
                             variant="outline"
                             icon={FaDownload}
+                            onClick={handleExportExcel}
                             className="w-full md:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm text-sm py-2 rounded-xl"
                         >
                             Export Log

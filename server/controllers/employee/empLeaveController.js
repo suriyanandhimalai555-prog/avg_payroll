@@ -1,4 +1,8 @@
 import pool from '../../config/db.js';
+import initializeEmpLeaveModel from '../../models/employee/EmpLeave.js';
+
+// Top-level await guarantees table existence before route traffic hits
+await initializeEmpLeaveModel();
 
 export const applyLeave = async (req, res) => {
     try {
@@ -14,13 +18,35 @@ export const applyLeave = async (req, res) => {
         const diffTime = Math.abs(end - start);
         const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
+        // Auto-Approval Check Logic based on global/branch policies
+        let initialStatus = 'Pending';
+        try {
+            // Find employee's branch/company to determine workflow
+            const empRes = await pool.query('SELECT company, branch FROM sa_employees WHERE employee_id = $1', [employeeId]);
+            if (empRes.rows.length > 0) {
+                const emp = empRes.rows[0];
+                const policyRes = await pool.query(`
+                    SELECT approval_workflow FROM sa_leave_policies 
+                    WHERE company_id = (SELECT id FROM sa_company_profiles WHERE company_name = $1 LIMIT 1)
+                    AND (branch_id = (SELECT id FROM sa_branches WHERE branch_name = $2 LIMIT 1) OR branch_id IS NULL)
+                    ORDER BY branch_id NULLS LAST LIMIT 1
+                `, [emp.company, emp.branch]);
+
+                if (policyRes.rows.length > 0 && policyRes.rows[0].approval_workflow === 'Auto-Approve') {
+                    initialStatus = 'Approved';
+                }
+            }
+        } catch (workflowErr) {
+            console.warn("Workflow evaluation failed, falling back to Pending status:", workflowErr.message);
+        }
+
         const insertQuery = `
-            INSERT INTO emp_leave_requests (employee_id, leave_type, from_date, to_date, total_days, reason)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
+            INSERT INTO emp_leave_requests (employee_id, leave_type, from_date, to_date, total_days, reason, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
         `;
         
-        const result = await pool.query(insertQuery, [employeeId, type, fromDate, toDate, totalDays, reason]);
-        res.status(201).json({ message: 'Leave request submitted successfully.', request: result.rows[0] });
+        const result = await pool.query(insertQuery, [employeeId, type, fromDate, toDate, totalDays, reason, initialStatus]);
+        res.status(201).json({ message: `Leave request submitted successfully as ${initialStatus}.`, request: result.rows[0] });
     } catch (error) {
         console.error('Apply Leave Error:', error);
         res.status(500).json({ message: 'Error applying for leave', error: error.message });
@@ -43,10 +69,30 @@ export const getMyBalances = async (req, res) => {
     try {
         const { employeeId } = req.params;
         
-        const policiesQuery = `SELECT * FROM sa_leave_policies WHERE status = 'Active'`;
-        const policiesResult = await pool.query(policiesQuery);
-        const policies = policiesResult.rows;
+        // 1. Get Employee's Company and Branch mapping
+        const empQuery = `SELECT company, branch FROM sa_employees WHERE employee_id = $1`;
+        const empRes = await pool.query(empQuery, [employeeId]);
+        
+        if (empRes.rows.length === 0) {
+            return res.status(404).json({ message: "Employee mapping not found." });
+        }
+        const emp = empRes.rows[0];
 
+        // 2. Fetch the corresponding policy for this branch (falling back to global company policy if branch is null)
+        const policiesQuery = `
+            SELECT * FROM sa_leave_policies 
+            WHERE company_id = (SELECT id FROM sa_company_profiles WHERE company_name = $1 LIMIT 1)
+            AND (branch_id = (SELECT id FROM sa_branches WHERE branch_name = $2 LIMIT 1) OR branch_id IS NULL)
+            ORDER BY branch_id NULLS LAST LIMIT 1
+        `;
+        const policiesResult = await pool.query(policiesQuery, [emp.company, emp.branch]);
+        
+        let policy = { casual_leave: 0, sick_leave: 0, earned_leave: 0 };
+        if (policiesResult.rows.length > 0) {
+            policy = policiesResult.rows[0];
+        }
+
+        // 3. Fetch aggregated approved usage for this employee
         const usageQuery = `
             SELECT leave_type, SUM(total_days) as used_days 
             FROM emp_leave_requests 
@@ -60,15 +106,12 @@ export const getMyBalances = async (req, res) => {
             usageMap[row.leave_type] = parseFloat(row.used_days);
         });
 
-        const balances = policies.map(policy => {
-            const used = usageMap[policy.leave_name] || 0;
-            return {
-                leave_type: policy.leave_name,
-                total_days: policy.allocated_days,
-                used_days: used,
-                paid_status: policy.paid_status
-            };
-        });
+        // 4. Map the new schema to the frontend's expected format
+        const balances = [
+            { leave_type: 'Casual Leave', total_days: policy.casual_leave, used_days: usageMap['Casual Leave'] || 0, paid_status: 'Paid' },
+            { leave_type: 'Sick Leave', total_days: policy.sick_leave, used_days: usageMap['Sick Leave'] || 0, paid_status: 'Paid' },
+            { leave_type: 'Earned Leave', total_days: policy.earned_leave, used_days: usageMap['Earned Leave'] || 0, paid_status: 'Paid' }
+        ];
 
         res.status(200).json(balances);
     } catch (error) {
@@ -77,12 +120,10 @@ export const getMyBalances = async (req, res) => {
     }
 };
 
-// --- NEW CONTROLLER METHODS FOR APPROVAL FLOW & EDITS ---
-
 export const getAllRequests = async (req, res) => {
     try {
         const query = `
-            SELECT r.*, e.first_name, e.last_name 
+            SELECT r.*, e.first_name, e.last_name, e.department, e.designation 
             FROM emp_leave_requests r
             JOIN sa_employees e ON r.employee_id = e.employee_id
             ORDER BY r.applied_on DESC;

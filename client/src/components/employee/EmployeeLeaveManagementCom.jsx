@@ -15,12 +15,21 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Auth Config
+const getAuthConfig = () => ({
+    withCredentials: true,
+    headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+    }
+});
+
 const EmployeeLeaveManagementCom = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('apply');
 
     // Form & Edit State
-    const [leaveData, setLeaveData] = useState({ type: '', fromDate: '', toDate: '', reason: '' });
+    const [leaveData, setLeaveData] = useState({ type: 'Casual Leave', fromDate: '', toDate: '', reason: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState(null);
@@ -33,7 +42,6 @@ const EmployeeLeaveManagementCom = () => {
     const [submitMsg, setSubmitMsg] = useState({ text: '', type: '' });
 
     // Data States
-    const [leavePolicies, setLeavePolicies] = useState([]);
     const [balances, setBalances] = useState([]);
     const [requests, setRequests] = useState([]);
     const [holidays, setHolidays] = useState([]);
@@ -49,20 +57,12 @@ const EmployeeLeaveManagementCom = () => {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [polRes, balRes, reqRes, holRes] = await Promise.allSettled([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${user.employee_id}`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`)
+            const [balRes, reqRes, holRes] = await Promise.allSettled([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${user.employee_id}`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig())
             ]);
 
-            if (polRes.status === 'fulfilled') {
-                const activePolicies = polRes.value.data.filter(p => p.status === 'Active');
-                setLeavePolicies(activePolicies);
-                if (activePolicies.length > 0 && !leaveData.type && !isEditing) {
-                    setLeaveData(prev => ({ ...prev, type: activePolicies[0].leave_name }));
-                }
-            }
             if (balRes.status === 'fulfilled') setBalances(balRes.value.data);
             if (reqRes.status === 'fulfilled') setRequests(reqRes.value.data);
             if (holRes.status === 'fulfilled') setHolidays(holRes.value.data);
@@ -75,6 +75,7 @@ const EmployeeLeaveManagementCom = () => {
 
     useEffect(() => {
         if (user?.employee_id) fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const handleInputChange = (e) => {
@@ -104,7 +105,7 @@ const EmployeeLeaveManagementCom = () => {
     const handleCancelEdit = () => {
         setIsEditing(false);
         setEditId(null);
-        setLeaveData({ type: leavePolicies[0]?.leave_name || '', fromDate: '', toDate: '', reason: '' });
+        setLeaveData({ type: 'Casual Leave', fromDate: '', toDate: '', reason: '' });
         setErrors({});
     };
 
@@ -117,14 +118,14 @@ const EmployeeLeaveManagementCom = () => {
             if (isEditing) {
                 const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/leave/${editId}`, {
                     ...leaveData
-                });
+                }, getAuthConfig());
                 setSubmitMsg({ text: response.data.message, type: 'success' });
                 handleCancelEdit();
             } else {
                 const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/leave/apply`, {
                     employeeId: user.employee_id,
                     ...leaveData
-                });
+                }, getAuthConfig());
                 setSubmitMsg({ text: response.data.message, type: 'success' });
                 setLeaveData(prev => ({ ...prev, fromDate: '', toDate: '', reason: '' }));
             }
@@ -161,7 +162,7 @@ const EmployeeLeaveManagementCom = () => {
     const handleDeleteRequest = async (id) => {
         if (!window.confirm("Are you sure you want to withdraw this leave request?")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/leave/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/leave/${id}`, getAuthConfig());
             fetchData();
         } catch (error) {
             alert('Failed to withdraw request.');
@@ -399,7 +400,11 @@ const EmployeeLeaveManagementCom = () => {
                                         name="type"
                                         value={leaveData.type}
                                         onChange={handleInputChange}
-                                        options={leavePolicies.map(p => ({ value: p.leave_name, label: `${p.leave_name} (${p.paid_status})` }))}
+                                        options={[
+                                            { value: 'Casual Leave', label: 'Casual Leave (Paid)' },
+                                            { value: 'Sick Leave', label: 'Sick Leave (Paid)' },
+                                            { value: 'Earned Leave', label: 'Earned Leave (Paid)' }
+                                        ]}
                                     />
                                 </FieldWrapper>
 
@@ -570,9 +575,9 @@ const EmployeeLeaveManagementCom = () => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
                                 {balances.map((leave, i) => {
                                     const used = parseFloat(leave.used_days);
-                                    const isUnlimited = leave.total_days === 'Unlimited';
-                                    const total = isUnlimited ? '∞' : parseFloat(leave.total_days);
-                                    const remaining = isUnlimited ? '∞' : (total - used);
+                                    const total = parseFloat(leave.total_days);
+                                    const remaining = total - used;
+                                    const percentage = total > 0 ? (used / total) * 100 : 0;
                                     const gradient = getLeaveGradient(leave.leave_type);
 
                                     return (
@@ -699,9 +704,8 @@ const EmployeeLeaveManagementCom = () => {
                                 <p className="text-xs text-slate-400 text-center py-6">No balance data available.</p>
                             ) : balances.map((leave, i) => {
                                 const used = parseFloat(leave.used_days);
-                                const isUnlimited = leave.total_days === 'Unlimited';
-                                const total = isUnlimited ? 100 : parseFloat(leave.total_days);
-                                const percentage = isUnlimited ? 10 : (total > 0 ? (used / total) * 100 : 0);
+                                const total = parseFloat(leave.total_days);
+                                const percentage = total > 0 ? (used / total) * 100 : 0;
                                 const colorClass = getLeaveColor(leave.leave_type);
 
                                 return (
