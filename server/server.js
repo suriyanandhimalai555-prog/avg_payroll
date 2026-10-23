@@ -108,10 +108,6 @@ if (cluster.isPrimary) {
         });
     };
 
-    // ============================================================================
-    // FORCED INITIALIZATION FIX
-    // Unconditionally runs the schema patches before allowing traffic workers to start
-    // ============================================================================
     console.log('Executing database schema initializers...');
     initializeDatabase().then(startWorkers);
 
@@ -119,12 +115,22 @@ if (cluster.isPrimary) {
     const app = express();
 
     app.use(cors({
-        origin: [
-            'http://localhost:5173',
-            'http://127.0.0.1:5173',
-            'https://avgpayroll.com',
-            'https://www.avgpayroll.com'
-        ],
+        origin: (origin, callback) => {
+            const allowedOrigins = [
+                'http://localhost:5173',
+                'http://127.0.0.1:5173',
+                'https://avgpayroll.com',
+                'https://www.avgpayroll.com',
+                'https://api.avgpayroll.com'
+            ];
+            
+            // Dynamically allow any subdomain (e.g., admin.avgpayroll.com, app.avgpayroll.com)
+            if (!origin || allowedOrigins.includes(origin) || /\.avgpayroll\.com$/.test(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
         credentials: true,
