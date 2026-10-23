@@ -51,45 +51,49 @@ export const clockIn = async (req, res) => {
         }
 
         // 2. Shift and Grace Time / Late Marking Logic
-        const shiftQuery = `
-            SELECT s.* FROM sa_work_shifts s
-            JOIN sa_employees e ON s.shift_name = e.shift
-            WHERE e.employee_id = $1;
-        `;
-        const shiftRes = await pool.query(shiftQuery, [employeeId]);
-
         let lateMinutes = 0;
         let status = 'Present';
+        
+        try {
+            const shiftQuery = `
+                SELECT s.* FROM sa_work_shifts s
+                JOIN sa_employees e ON s.shift_name = e.shift
+                WHERE e.employee_id = $1;
+            `;
+            const shiftRes = await pool.query(shiftQuery, [employeeId]);
 
-        if (shiftRes.rows.length > 0) {
-            const shift = shiftRes.rows[0];
+            if (shiftRes.rows.length > 0) {
+                const shift = shiftRes.rows[0];
 
-            if (shift.shift_type === 'Flexible') {
-                const fivePM = new Date(now);
-                fivePM.setHours(17, 0, 0, 0); // 5:00 PM Boundary
-                if (now.getTime() >= fivePM.getTime()) {
-                    return res.status(400).json({ message: 'It is past 5:00 PM. Flexible shift check-ins are not allowed at this time. You have been marked as Absent.' });
-                }
-            } else {
-                // Fixed Shift Rule: Allow login, but mark as Late if past grace period
-                if (shift.start_time) {
-                    let [sHrs, sMins] = shift.start_time.split(':').map(Number);
-                    
-                    if (shift.start_time.includes('PM') && sHrs !== 12) sHrs += 12;
-                    if (shift.start_time.includes('AM') && sHrs === 12) sHrs = 0;
+                if (shift.shift_type === 'Flexible') {
+                    const fivePM = new Date(now);
+                    fivePM.setHours(17, 0, 0, 0); // 5:00 PM Boundary
+                    if (now.getTime() >= fivePM.getTime()) {
+                        return res.status(400).json({ message: 'It is past 5:00 PM. Flexible shift check-ins are not allowed at this time. You have been marked as Absent.' });
+                    }
+                } else {
+                    // Fixed Shift Rule: Allow login, but mark as Late if past grace period
+                    if (shift.start_time) {
+                        let [sHrs, sMins] = shift.start_time.split(':').map(Number);
+                        
+                        if (shift.start_time.includes('PM') && sHrs !== 12) sHrs += 12;
+                        if (shift.start_time.includes('AM') && sHrs === 12) sHrs = 0;
 
-                    const expectedTime = new Date(now);
-                    expectedTime.setHours(sHrs, sMins, 0, 0);
+                        const expectedTime = new Date(now);
+                        expectedTime.setHours(sHrs, sMins, 0, 0);
 
-                    const graceMs = (shift.grace_time || shift.grace_period || 0) * 60000;
-                    const allowedTimeMs = expectedTime.getTime() + graceMs;
+                        const graceMs = (shift.grace_time || shift.grace_period || 0) * 60000;
+                        const allowedTimeMs = expectedTime.getTime() + graceMs;
 
-                    if (now.getTime() > allowedTimeMs) {
-                        lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);
-                        status = 'Late (Pending Approval)';
+                        if (now.getTime() > allowedTimeMs) {
+                            lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);
+                            status = 'Late (Pending Approval)';
+                        }
                     }
                 }
             }
+        } catch (shiftError) {
+            console.warn("Could not calculate shift rules, falling back to default Present.", shiftError.message);
         }
 
         // 3. Insert new clock-in

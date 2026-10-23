@@ -11,6 +11,17 @@ import {
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const EmployeeAttendanceCom = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('today');
@@ -51,10 +62,12 @@ const EmployeeAttendanceCom = () => {
             return;
         }
         try {
+            // FIX: Added getAuthConfig() and extracted data accurately based on common Express payloads
             const [attRes, profRes, shiftRes, holRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`).catch(() => ({ data: { history: [] } })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } }).catch(() => ({ data: {} })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: {} })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
@@ -88,9 +101,11 @@ const EmployeeAttendanceCom = () => {
             });
             setCompletedMsToday(previousMs);
 
+            // FIX: Gracefully evaluate shift array regardless of whether backend returned an array or nested object
             const employeeShiftName = profRes.data?.shift;
-            const allShifts = shiftRes.data || [];
-            const assignedShift = allShifts.find(s => s.shift_name === employeeShiftName) || allShifts[0] || null;
+            const allShifts = shiftRes.data?.shifts || shiftRes.data || [];
+            const assignedShift = Array.isArray(allShifts) ? (allShifts.find(s => s.shift_name === employeeShiftName) || allShifts[0] || null) : null;
+            
             setShiftDetails(assignedShift);
 
         } catch (error) {
@@ -196,7 +211,7 @@ const EmployeeAttendanceCom = () => {
                 todayDate: todayDate,
                 locationData: locationData,
                 deviceInfo: deviceData
-            });
+            }, getAuthConfig());
             await fetchAttendanceData();
         } catch (error) {
             alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
@@ -225,7 +240,7 @@ const EmployeeAttendanceCom = () => {
                 locationData: locationData,
                 deviceInfo: deviceData,
                 eodUpdate: eodInput
-            });
+            }, getAuthConfig());
 
             setIsEodModalOpen(false);
             setEodInput('');
@@ -245,7 +260,7 @@ const EmployeeAttendanceCom = () => {
             await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/eod-update`, {
                 recordId: editingRecordId,
                 eodUpdate: editEodInput
-            });
+            }, getAuthConfig());
             setIsEditEodModalOpen(false);
             setEditEodInput('');
             setEditingRecordId(null);
