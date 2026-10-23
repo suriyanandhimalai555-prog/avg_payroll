@@ -36,6 +36,17 @@ const getAssetIconBg = (type) => {
     }
 };
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const EmployeeAssetsCom = () => {
     const { user } = useAuth();
     const fileInputRef = useRef(null);
@@ -66,7 +77,7 @@ const EmployeeAssetsCom = () => {
     const fetchAssets = async () => {
         setIsLoading(true);
         try {
-            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${user.employee_id}`);
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${user.employee_id}`, getAuthConfig());
             const formattedAssets = res.data.map(asset => {
                 let photos = asset.asset_photos || [];
                 if (typeof photos === 'string') photos = JSON.parse(photos);
@@ -200,10 +211,10 @@ const EmployeeAssetsCom = () => {
             };
 
             if (editId) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/assets/${editId}`, payload);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/assets/${editId}`, payload, getAuthConfig());
                 setSuccessMsg('Asset updated successfully!');
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/assets/create`, payload);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/assets/create`, payload, getAuthConfig());
                 setSuccessMsg('Asset declared successfully!');
             }
 
@@ -221,7 +232,7 @@ const EmployeeAssetsCom = () => {
     const handleDelete = async (id) => {
         if (window.confirm("Are you sure you want to remove this asset declaration?")) {
             try {
-                await axios.delete(`${import.meta.env.VITE_API_URL}/api/assets/${id}`);
+                await axios.delete(`${import.meta.env.VITE_API_URL}/api/assets/${id}`, getAuthConfig());
                 setSuccessMsg('Asset removed successfully.');
                 fetchAssets();
                 setTimeout(() => setSuccessMsg(''), 4000);

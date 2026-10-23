@@ -21,6 +21,17 @@ if (typeof document !== 'undefined' && !document.getElementById('dm-sans-import'
     document.head.appendChild(styleEl);
 }
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -142,12 +153,13 @@ const EmployeePayrollCom = () => {
     useEffect(() => {
         const fetchPayroll = async () => {
             try {
-                const [profileRes, attRes, leaveReqRes, leavePolRes] = await Promise.all([
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } }).catch(() => ({ data: {} })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`).catch(() => ({ data: { history: [] } })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`).catch(() => ({ data: [] })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`).catch(() => ({ data: [] })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`).catch(() => ({ data: [] }))
+                // FIXED: Destructured holRes properly and applied getAuthConfig()
+                const [profileRes, attRes, leaveReqRes, leavePolRes, holRes] = await Promise.all([
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: {} })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: [] })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`, getAuthConfig()).catch(() => ({ data: [] })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
                 ]);
 
                 const profile = profileRes.data;
