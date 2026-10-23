@@ -4,9 +4,9 @@ import {
     FaUserShield, FaPlaneDeparture, FaBuilding,
     FaCalendarCheck, FaCheckCircle, FaTimesCircle, FaPaperPlane, FaInfoCircle, FaSearch, FaListUl, FaUsers
 } from 'react-icons/fa';
-import Button from '../../../components/common/Button';
-import Select from '../../../components/common/Select';
-import Input from '../../../components/common/Input';
+import Button from '../../common/Button';
+import Select from '../../common/Select';
+import Input from '../../common/Input';
 import { useAuth } from '../../../context/AuthContext';
 
 const FieldWrapper = ({ error, children }) => (
@@ -20,6 +20,15 @@ const FieldWrapper = ({ error, children }) => (
         )}
     </div>
 );
+
+// Bulletproof Auth Config
+const getAuthConfig = () => ({
+    withCredentials: true,
+    headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+    }
+});
 
 const SuperAdminAssignLeaveCom = () => {
     const { user } = useAuth();
@@ -44,21 +53,20 @@ const SuperAdminAssignLeaveCom = () => {
     const [apiError, setApiError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Organization & Policy Data
+    // Organization Data
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [employees, setEmployees] = useState([]);
-    const [dynamicPolicies, setDynamicPolicies] = useState([]);
     
     // History Table Data
     const [assignedHistory, setAssignedHistory] = useState([]);
 
-    // Hardcoded Master List of Leave Types ensuring everything is available
+    // Hardcoded Master List of Leave Types
     const standardLeaveTypes = [
         'Casual Leave',
         'Sick Leave',
-        'Earned Leave / Privilege Leave',
+        'Earned Leave',
         'Unpaid Leave / LOP',
         'Compensatory Off (Comp-Off)',
         'Maternity Leave',
@@ -68,52 +76,74 @@ const SuperAdminAssignLeaveCom = () => {
         'Study Leave'
     ];
 
-    // ==================== DATA FETCHING & MOCK ENGINE ====================
-    useEffect(() => {
-        const fetchInitialData = async () => {
-            setLoading(true);
-            try {
-                // In production, wire these to your actual endpoints
-                const [compRes, branchRes, deptRes, polRes] = await Promise.allSettled([
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`)
-                ]);
+    const fetchInitialData = async () => {
+        setLoading(true);
+        try {
+            const [compRes, branchRes, deptRes, empRes, histRes] = await Promise.allSettled([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/all`, getAuthConfig())
+            ]);
 
-                setCompanies(compRes.status === 'fulfilled' ? compRes.value.data : []);
-                setBranches(branchRes.status === 'fulfilled' ? branchRes.value.data : []);
-                setDepartments(deptRes.status === 'fulfilled' ? deptRes.value.data : []);
-                
-                if (polRes.status === 'fulfilled') {
-                    const activePols = polRes.value.data.filter(p => p.status === 'Active');
-                    setDynamicPolicies(activePols.map(p => p.leave_name));
-                }
-
-                // Mock Employees & History for UI Demonstration
-                setEmployees([
-                    { id: 'AVG-2026-001', name: 'Rahul Sharma', company_id: 1, department_id: 1 },
-                    { id: 'AVG-2026-012', name: 'Priya Patel', company_id: 1, department_id: 2 },
-                    { id: 'AVG-2026-088', name: 'Karan Mehta', company_id: 2, department_id: 3 },
-                ]);
-
-                setAssignedHistory([
-                    { id: 1, emp_name: 'Priya Patel', emp_id: 'AVG-2026-012', leave_type: 'Casual Leave', dates: '2026-10-15 to 2026-10-16', assigned_by: 'Super Admin', status: 'Approved' },
-                    { id: 2, emp_name: 'Rahul Sharma', emp_id: 'AVG-2026-001', leave_type: 'Sick Leave', dates: '2026-11-01 to 2026-11-03', assigned_by: 'Super Admin', status: 'Approved' }
-                ]);
-
-            } catch (error) {
-                console.error("Error fetching data:", error);
-            } finally {
-                setLoading(false);
+            const companyData = compRes.status === 'fulfilled' ? compRes.value.data : [];
+            const branchData = branchRes.status === 'fulfilled' ? branchRes.value.data : [];
+            const deptData = deptRes.status === 'fulfilled' ? deptRes.value.data : [];
+            
+            // Map Employees to internal ID and Foreign IDs for filtering
+            let empData = [];
+            if (empRes.status === 'fulfilled') {
+                empData = empRes.value.data.map(e => {
+                    const c = companyData.find(comp => comp.company_name === e.company);
+                    const b = branchData.find(br => br.branch_name === e.branch);
+                    const d = deptData.find(dp => dp.department_name === e.department);
+                    
+                    return {
+                        id: e.id, 
+                        employee_id: e.employee_id,
+                        name: `${e.first_name} ${e.last_name}`,
+                        company_id: c ? c.id : null,
+                        branch_id: b ? b.id : null,
+                        department_id: d ? d.id : null
+                    };
+                });
             }
-        };
 
+            setCompanies(companyData);
+            setBranches(branchData);
+            setDepartments(deptData);
+            setEmployees(empData);
+
+            // Filter history to ONLY show leaves assigned by Super Admin
+            if (histRes.status === 'fulfilled') {
+                const adminAssigned = histRes.value.data.filter(req => 
+                    req.reason && req.reason.includes('Super Admin')
+                ).map(req => ({
+                    id: req.id,
+                    emp_name: `${req.first_name || ''} ${req.last_name || ''}`.trim(),
+                    emp_id: req.employee_id,
+                    leave_type: req.leave_type,
+                    dates: `${new Date(req.from_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to ${new Date(req.to_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+                    assigned_by: 'Super Admin',
+                    status: req.status
+                }));
+                setAssignedHistory(adminAssigned);
+            }
+
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchInitialData();
     }, []);
 
     // Merge Dynamic DB Policies with Standard List (Remove Duplicates)
-    const allLeaveTypeOptions = Array.from(new Set([...dynamicPolicies, ...standardLeaveTypes])).map(type => ({
+    const allLeaveTypeOptions = standardLeaveTypes.map(type => ({
         value: type,
         label: type
     }));
@@ -126,6 +156,7 @@ const SuperAdminAssignLeaveCom = () => {
     );
     const filteredEmployees = employees.filter(e => 
         (formData.companyId ? e.company_id === parseInt(formData.companyId) : true) &&
+        (formData.branchId ? e.branch_id === parseInt(formData.branchId) : true) &&
         (formData.departmentId ? e.department_id === parseInt(formData.departmentId) : true)
     );
 
@@ -176,47 +207,33 @@ const SuperAdminAssignLeaveCom = () => {
         setApiError('');
 
         try {
-            // Simulated API Post - Replace with actual endpoint
-            // await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-leave/assign`, formData);
-            
-            await new Promise(resolve => setTimeout(resolve, 1200)); // Simulate delay
+            const payload = {
+                companyId: formData.companyId,
+                branchId: formData.branchId,
+                departmentId: formData.departmentId,
+                employeeId: formData.employeeId, // Sends 'ALL' or a specific ID
+                leaveType: formData.leaveType,
+                fromDate: formData.fromDate,
+                toDate: formData.toDate,
+                reason: formData.reason
+            };
+
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/leave/admin-assign`, payload, getAuthConfig());
             
             let empName = '';
-            let empIdDisplay = '';
-
-            // Handle Bulk vs Single Assignment Display Logic
             if (formData.employeeId === 'ALL') {
-                if (formData.departmentId) {
-                    const deptName = departments.find(d => d.id === parseInt(formData.departmentId))?.department_name || 'Selected Dept';
-                    empName = `All Employees in ${deptName}`;
-                } else if (formData.branchId) {
-                    const branchName = branches.find(b => b.id === parseInt(formData.branchId))?.branch_name || 'Selected Branch';
-                    empName = `All Employees in ${branchName}`;
-                } else {
-                    const compName = companies.find(c => c.id === parseInt(formData.companyId))?.company_name || 'Selected Company';
-                    empName = `All Employees in ${compName}`;
-                }
-                empIdDisplay = 'BULK-ASSIGN';
+                empName = `${response.data.count} Employee(s) via Bulk Assign`;
             } else {
-                const selectedEmp = employees.find(emp => emp.id === formData.employeeId);
+                const selectedEmp = employees.find(emp => emp.id === parseInt(formData.employeeId));
                 empName = selectedEmp?.name || formData.employeeId;
-                empIdDisplay = formData.employeeId;
             }
             
-            // Mock adding to history table
-            setAssignedHistory(prev => [{
-                id: Date.now(),
-                emp_name: empName,
-                emp_id: empIdDisplay,
-                leave_type: formData.leaveType,
-                dates: `${formData.fromDate} to ${formData.toDate}`,
-                assigned_by: user?.full_name || 'Super Admin',
-                status: 'Approved'
-            }, ...prev]);
-
-            setSuccessMsg(`Successfully assigned ${formData.leaveType} to ${empName}. It is now active.`);
+            setSuccessMsg(`Successfully assigned ${formData.leaveType} to ${empName}.`);
             
-            // Reset form details but keep org selections
+            // Refresh history table live from database
+            fetchInitialData();
+
+            // Reset specific form fields
             setFormData(prev => ({ ...prev, fromDate: '', toDate: '', leaveType: '', reason: 'Leave assigned manually by Super Admin.' }));
             window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -228,7 +245,7 @@ const SuperAdminAssignLeaveCom = () => {
     };
 
     // ==================== SHIMMER ====================
-    if (loading) {
+    if (loading && companies.length === 0) {
         return (
             <div className="space-y-6 pb-10 w-full overflow-hidden animate-pulse">
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 h-28"></div>
@@ -358,7 +375,7 @@ const SuperAdminAssignLeaveCom = () => {
                                     options={[
                                         { value: '', label: 'Select Target' }, 
                                         { value: 'ALL', label: '--- ALL EMPLOYEES (Bulk Assign) ---' }, 
-                                        ...filteredEmployees.map(e => ({ value: e.id, label: `${e.name} (${e.id})` }))
+                                        ...filteredEmployees.map(e => ({ value: e.id, label: `${e.name} (${e.employee_id})` }))
                                     ]}
                                 />
                             </FieldWrapper>
@@ -492,11 +509,11 @@ const SuperAdminAssignLeaveCom = () => {
                                     <tr key={i} className="hover:bg-slate-50/60 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md ${record.emp_id === 'BULK-ASSIGN' ? 'bg-gradient-to-br from-[#f77704] to-orange-500' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6]'}`}>
-                                                    {record.emp_id === 'BULK-ASSIGN' ? <FaUsers size={16} /> : record.emp_name.charAt(0)}
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md bg-gradient-to-br from-[#0437cc] to-[#1f56d6]`}>
+                                                    {record.emp_name.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className={`text-[13px] font-bold ${record.emp_id === 'BULK-ASSIGN' ? 'text-[#f77704]' : 'text-[#010a1f]'}`}>{record.emp_name}</p>
+                                                    <p className="text-[13px] font-bold text-[#010a1f]">{record.emp_name}</p>
                                                     <p className="text-[10px] font-mono font-bold text-slate-500">{record.emp_id}</p>
                                                 </div>
                                             </div>

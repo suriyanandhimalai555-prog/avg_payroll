@@ -1,7 +1,7 @@
 import express from 'express';
 import { authenticateToken, requireRole } from '../../middleware/authMiddleware.js';
 import { 
-    applyLeave, getMyRequests, getMyBalances, 
+    applyLeave, adminAssignLeave, getMyRequests, getMyBalances, 
     getAllRequests, updateLeaveStatus, updateLeaveRequest, deleteLeaveRequest 
 } from '../../controllers/employee/empLeaveController.js';
 
@@ -16,7 +16,8 @@ router.put('/status/:id', authenticateToken, updateLeaveStatus);
 router.put('/:id', authenticateToken, updateLeaveRequest);
 router.delete('/:id', authenticateToken, deleteLeaveRequest);
 
-// SuperAdmin Only Route
+// SuperAdmin Only Routes
+router.post('/admin-assign', authenticateToken, requireRole('superadmin'), adminAssignLeave);
 router.get('/all', authenticateToken, requireRole('superadmin'), getAllRequests);
 
 export default router;

@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaSearch, FaFilter, FaCalendarDay,
     FaCheckCircle, FaTimesCircle, FaClock, FaEye,
     FaTimes, FaExclamationCircle, FaPlaneDeparture,
     FaClipboardCheck, FaInfoCircle, FaCalendarCheck,
-    FaUserTie, FaBuilding, FaDownload
+    FaUserTie, FaBuilding, FaDownload, FaCalendarAlt
 } from 'react-icons/fa';
 import Button from '../../common/Button';
 
@@ -30,10 +30,22 @@ const SuperAdminLeaveRequestCom = () => {
     const [statusFilter, setStatusFilter] = useState('Pending');
     const [roleFilter, setRoleFilter] = useState('All');
     const [deptFilter, setDeptFilter] = useState('All');
+    const [monthFilter, setMonthFilter] = useState('All'); // NEW: Month Filter State
 
     // Modal State
     const [viewRecord, setViewRecord] = useState(null);
     const [isActionLoading, setIsActionLoading] = useState(false);
+
+    // ==================== DYNAMIC MONTH GENERATOR ====================
+    const monthOptions = useMemo(() => {
+        const options = [];
+        const curr = new Date();
+        for (let i = 0; i < 12; i++) {
+            const d = new Date(curr.getFullYear(), curr.getMonth() - i, 1);
+            options.push(`${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}`);
+        }
+        return options;
+    }, []);
 
     // ==================== FETCH LIVE DATA ====================
     const fetchAllRequests = async () => {
@@ -83,7 +95,15 @@ const SuperAdminLeaveRequestCom = () => {
         const matchesStatus = statusFilter === 'All' || record.status === statusFilter;
         const matchesRole = roleFilter === 'All' || record.role === roleFilter;
         const matchesDept = deptFilter === 'All' || record.department === deptFilter;
-        return matchesSearch && matchesStatus && matchesRole && matchesDept;
+        
+        let matchesMonth = true;
+        if (monthFilter !== 'All') {
+            const recordDate = new Date(record.from_date);
+            const recordMonthYear = `${recordDate.toLocaleString('en-US', { month: 'long' })} ${recordDate.getFullYear()}`;
+            matchesMonth = recordMonthYear === monthFilter;
+        }
+
+        return matchesSearch && matchesStatus && matchesRole && matchesDept && matchesMonth;
     });
 
     // ==================== EXCEL EXPORT LOGIC ====================
@@ -431,6 +451,20 @@ const SuperAdminLeaveRequestCom = () => {
                     </div>
                     
                     <div className="flex flex-col sm:flex-row items-center gap-2 w-full xl:w-auto">
+                        {/* Month Filter */}
+                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 overflow-hidden shadow-sm flex-1 md:w-auto hover:border-slate-300 transition-colors w-full sm:w-auto">
+                            <FaCalendarAlt className="text-slate-400 text-[10px] shrink-0" />
+                            <select
+                                value={monthFilter}
+                                onChange={(e) => setMonthFilter(e.target.value)}
+                                className="text-[11px] sm:text-xs font-bold text-[#010a1f] pl-2 pr-3 py-2 outline-none cursor-pointer appearance-none bg-transparent w-full"
+                            >
+                                <option value="All">All Months</option>
+                                {monthOptions.map((opt, idx) => (
+                                    <option key={idx} value={opt}>{opt}</option>
+                                ))}
+                            </select>
+                        </div>
                         {/* Role Filter */}
                         <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 overflow-hidden shadow-sm flex-1 md:w-auto hover:border-slate-300 transition-colors w-full sm:w-auto">
                             <FaUserTie className="text-slate-400 text-[10px] shrink-0" />

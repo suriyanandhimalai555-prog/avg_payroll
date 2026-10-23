@@ -1,7 +1,6 @@
 import pool from '../../config/db.js';
 import initializeEmpLeaveModel from '../../models/employee/EmpLeave.js';
 
-// Top-level await guarantees table existence before route traffic hits
 await initializeEmpLeaveModel();
 
 export const applyLeave = async (req, res) => {
@@ -12,16 +11,13 @@ export const applyLeave = async (req, res) => {
             return res.status(400).json({ message: "All fields are required to apply for leave." });
         }
 
-        // Calculate total days inclusive of start and end date
         const start = new Date(fromDate);
         const end = new Date(toDate);
         const diffTime = Math.abs(end - start);
         const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-        // Auto-Approval Check Logic based on global/branch policies
         let initialStatus = 'Pending';
         try {
-            // Find employee's branch/company to determine workflow
             const empRes = await pool.query('SELECT company, branch FROM sa_employees WHERE employee_id = $1', [employeeId]);
             if (empRes.rows.length > 0) {
                 const emp = empRes.rows[0];
@@ -53,6 +49,81 @@ export const applyLeave = async (req, res) => {
     }
 };
 
+// ============================================================================
+// SUPER ADMIN: FORCE ASSIGN LEAVE (SINGLE & BULK)
+// ============================================================================
+export const adminAssignLeave = async (req, res) => {
+    try {
+        const { companyId, branchId, departmentId, employeeId, leaveType, fromDate, toDate, reason } = req.body;
+
+        if (!companyId || !leaveType || !fromDate || !toDate || !employeeId) {
+            return res.status(400).json({ message: "Company, Target, Leave Type, and Dates are mandatory." });
+        }
+
+        const start = new Date(fromDate);
+        const end = new Date(toDate);
+        if (end < start) {
+            return res.status(400).json({ message: "End date cannot be before start date." });
+        }
+
+        const diffTime = Math.abs(end - start);
+        const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+        let targetEmployees = [];
+
+        // Determine if it is a Bulk Assign or Single Assign
+        if (employeeId === 'ALL') {
+            let filterQuery = `
+                SELECT employee_id FROM sa_employees 
+                WHERE company = (SELECT company_name FROM sa_company_profiles WHERE id = $1 LIMIT 1)
+            `;
+            const queryParams = [companyId];
+            
+            if (branchId) {
+                filterQuery += ` AND branch = (SELECT branch_name FROM sa_branches WHERE id = $2 LIMIT 1)`;
+                queryParams.push(branchId);
+            }
+            if (departmentId) {
+                filterQuery += ` AND department = (SELECT department_name FROM sa_departments WHERE id = $3 LIMIT 1)`;
+                queryParams.push(departmentId);
+            }
+
+            const empsResult = await pool.query(filterQuery, queryParams);
+            targetEmployees = empsResult.rows.map(row => row.employee_id);
+
+            if (targetEmployees.length === 0) {
+                return res.status(404).json({ message: "No employees found matching this scope." });
+            }
+        } else {
+            // It's the actual ID from the sa_employees table (e.g., '1' or '2')
+            const empRes = await pool.query('SELECT employee_id FROM sa_employees WHERE id = $1', [employeeId]);
+            if (empRes.rows.length === 0) return res.status(404).json({ message: "Employee not found." });
+            targetEmployees = [empRes.rows[0].employee_id];
+        }
+
+        const adminReason = reason || 'Leave assigned manually by Super Admin.';
+
+        // Bulk Insert using unnest
+        const insertQuery = `
+            INSERT INTO emp_leave_requests (employee_id, leave_type, from_date, to_date, total_days, reason, status)
+            SELECT unnest($1::text[]), $2, $3, $4, $5, $6, 'Approved'
+            RETURNING *;
+        `;
+        
+        const result = await pool.query(insertQuery, [targetEmployees, leaveType, fromDate, toDate, totalDays, adminReason]);
+
+        res.status(201).json({ 
+            message: `Leave successfully forced/assigned to ${targetEmployees.length} employee(s).`, 
+            count: targetEmployees.length,
+            records: result.rows
+        });
+
+    } catch (error) {
+        console.error('Admin Assign Leave Error:', error);
+        res.status(500).json({ message: 'Error processing manual assignment.', error: error.message });
+    }
+};
+
 export const getMyRequests = async (req, res) => {
     try {
         const { employeeId } = req.params;
@@ -69,7 +140,6 @@ export const getMyBalances = async (req, res) => {
     try {
         const { employeeId } = req.params;
         
-        // 1. Get Employee's Company and Branch mapping
         const empQuery = `SELECT company, branch FROM sa_employees WHERE employee_id = $1`;
         const empRes = await pool.query(empQuery, [employeeId]);
         
@@ -78,7 +148,6 @@ export const getMyBalances = async (req, res) => {
         }
         const emp = empRes.rows[0];
 
-        // 2. Fetch the corresponding policy for this branch (falling back to global company policy if branch is null)
         const policiesQuery = `
             SELECT * FROM sa_leave_policies 
             WHERE company_id = (SELECT id FROM sa_company_profiles WHERE company_name = $1 LIMIT 1)
@@ -92,7 +161,6 @@ export const getMyBalances = async (req, res) => {
             policy = policiesResult.rows[0];
         }
 
-        // 3. Fetch aggregated approved usage for this employee
         const usageQuery = `
             SELECT leave_type, SUM(total_days) as used_days 
             FROM emp_leave_requests 
@@ -106,7 +174,6 @@ export const getMyBalances = async (req, res) => {
             usageMap[row.leave_type] = parseFloat(row.used_days);
         });
 
-        // 4. Map the new schema to the frontend's expected format
         const balances = [
             { leave_type: 'Casual Leave', total_days: policy.casual_leave, used_days: usageMap['Casual Leave'] || 0, paid_status: 'Paid' },
             { leave_type: 'Sick Leave', total_days: policy.sick_leave, used_days: usageMap['Sick Leave'] || 0, paid_status: 'Paid' },
