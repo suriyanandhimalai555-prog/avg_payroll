@@ -82,13 +82,14 @@ const SuperAdminEmployeeManagementCom = () => {
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
+            // Fix: Map directly to DB values (u.hr_id) instead of hardcoding math strings
             const hrData = (hrRes.data || []).map(u => ({
                 ...u,
                 _roleType: 'HR Admin',
                 _roleColor: 'text-purple-700 bg-purple-50 border-purple-200',
-                _displayId: `HR-${String(u.id).padStart(3, '0')}`,
-                _joining: u.created_at,
-                _manager: 'Super Admin'
+                _displayId: u.hr_id || `HR-${String(u.id).padStart(3, '0')}`,
+                _joining: u.joining_date || u.created_at,
+                _manager: u.md || 'Super Admin'
             }));
 
             const mgrData = (mgrRes.data || []).map(u => ({
@@ -135,7 +136,7 @@ const SuperAdminEmployeeManagementCom = () => {
         setLoadingAttendance(true);
         setExpandedDates([]); 
         try {
-            const targetId = emp.employee_id || emp.email || emp._displayId;
+            const targetId = emp.employee_id || emp.hr_id || emp.email || emp._displayId;
             const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${targetId}`, getAuthConfig());
             setAttendanceRecords(res.data.history || []);
         } catch (err) {
@@ -266,7 +267,7 @@ const SuperAdminEmployeeManagementCom = () => {
         setIsAssetModalOpen(true);
         setLoadingAssets(true);
         try {
-            const targetId = emp.employee_id || emp._displayId;
+            const targetId = emp.employee_id || emp.hr_id || emp._displayId;
             const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${targetId}`, getAuthConfig());
 
             const parsedAssets = res.data.map(asset => {
@@ -687,7 +688,7 @@ const SuperAdminEmployeeManagementCom = () => {
                                     <span className="inline-block mt-1.5 text-[10px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-md tracking-wide">
                                         {viewEmployee._displayId}
                                     </span>
-                                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 truncate">{viewEmployee.designation || 'N/A'} — {viewEmployee.department || 'N/A'}</p>
+                                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 truncate">{viewEmployee.designation || 'Not Assigned'} — {viewEmployee.department || 'Not Assigned'}</p>
                                 </div>
                                 <div className="relative shrink-0 bg-gradient-to-br from-[#0437cc] to-[#1f56d6] rounded-2xl px-5 py-3 shadow-lg shadow-[#0437cc]/25 text-center text-white w-full sm:w-auto overflow-hidden">
                                     <div className="absolute -top-6 -right-6 w-20 h-20 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
@@ -1002,13 +1003,15 @@ const SuperAdminEmployeeManagementCom = () => {
                                                     {emp._roleType}
                                                 </span>
                                             </div>
-                                            <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{emp.designation || 'General Manager'}</p>
+                                            {/* Fix: Display accurate designation or explicitly show it's missing */}
+                                            <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{emp.designation || 'Not Assigned'}</p>
                                         </td>
                                         <td className="px-5 py-4 min-w-0">
-                                            <p className="text-xs sm:text-sm font-semibold text-slate-700 truncate">{emp.department || 'All Departments'}</p>
+                                            {/* Fix: Display accurate department or explicitly show it's missing */}
+                                            <p className="text-xs sm:text-sm font-semibold text-slate-700 truncate">{emp.department || 'Not Assigned'}</p>
                                             <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
                                                 <FaSitemap className="text-[9px] shrink-0" />
-                                                <span className="truncate">{emp.branch}</span>
+                                                <span className="truncate">{emp.branch || 'Not Assigned'}</span>
                                             </p>
                                         </td>
                                         <td className="px-5 py-4">
