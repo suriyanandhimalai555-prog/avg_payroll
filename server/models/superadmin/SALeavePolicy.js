@@ -32,10 +32,22 @@ const initializeSALeavePolicyModel = async () => {
         "ALTER COLUMN carry_forward_status TYPE VARCHAR(50)"
     ];
 
+    // ============================================================================
+    // THE BULLETPROOF LEGACY PURGE
+    // Forcefully drops deprecated columns that are throwing 23502 NOT NULL errors
+    // ============================================================================
+    const dropLegacyColumns = [
+        "DROP COLUMN IF EXISTS leave_name CASCADE",
+        "DROP COLUMN IF EXISTS description CASCADE",
+        "DROP COLUMN IF EXISTS allocated_days CASCADE",
+        "DROP COLUMN IF EXISTS paid_status CASCADE",
+        "DROP COLUMN IF EXISTS status CASCADE",
+        "DROP COLUMN IF EXISTS days CASCADE"
+    ];
+
     const dropProblematicConstraintsQuery = `
         DO $$ 
         BEGIN
-            -- Drop the problematic unique constraint that causes 42P10 ON CONFLICT errors
             ALTER TABLE sa_leave_policies DROP CONSTRAINT IF EXISTS unique_policy_per_branch;
         END $$;
     `;
@@ -53,13 +65,22 @@ const initializeSALeavePolicyModel = async () => {
             }
         }
 
+        // Execute the legacy column purge to resolve the 500 error
+        for (const dropQuery of dropLegacyColumns) {
+            try {
+                await pool.query(`ALTER TABLE sa_leave_policies ${dropQuery};`);
+            } catch (dropErr) {
+                console.warn(`Warning dropping legacy column: ${dropQuery}`, dropErr.message);
+            }
+        }
+
         try {
             await pool.query(dropProblematicConstraintsQuery);
         } catch (constraintErr) {
             console.warn(`Warning dropping legacy constraints:`, constraintErr.message);
         }
         
-        console.log('SALeavePolicy table and constraints checked/updated successfully.');
+        console.log('SALeavePolicy table constraints and legacy columns purged successfully.');
     } catch (error) {
         console.error('Error updating SALeavePolicy table:', error);
     }

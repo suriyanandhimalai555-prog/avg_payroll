@@ -1,7 +1,4 @@
 import pool from '../../config/db.js';
-import initializeSALeavePolicyModel from '../../models/superadmin/SALeavePolicy.js';
-
-await initializeSALeavePolicyModel();
 
 export const createLeavePolicy = async (req, res) => {
     try {
@@ -14,7 +11,6 @@ export const createLeavePolicy = async (req, res) => {
 
         const bId = branchId || null;
 
-        // Explicit Duplicate Check (Bypasses 42P10 ON CONFLICT errors)
         let checkQuery = 'SELECT id FROM sa_leave_policies WHERE company_id = $1';
         let checkParams = [companyId];
         if (bId) {
