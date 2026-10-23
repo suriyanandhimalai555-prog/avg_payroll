@@ -21,6 +21,17 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminManagersCom = () => {
     const INITIAL_FORM_STATE = {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '',
@@ -73,11 +84,11 @@ const SuperAdminManagersCom = () => {
         setIsLoading(true);
         try {
             const [compRes, branchRes, deptRes, desigRes, mgrRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
@@ -86,6 +97,9 @@ const SuperAdminManagersCom = () => {
             setManagers(mgrRes.data || []);
         } catch (error) {
             console.error('Failed to load data', error);
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                setApiError('Session expired. Please log in again.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -189,11 +203,11 @@ const SuperAdminManagersCom = () => {
             const payload = { ...formData, permissions };
 
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-managers/${editId}`, payload);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-managers/${editId}`, payload, getAuthConfig());
                 setSuccessMsg('Manager Profile & Access scope updated successfully.');
                 handleCancelEdit();
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-managers/create`, payload);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-managers/create`, payload, getAuthConfig());
                 setSuccessMsg(`Manager "${formData.firstName} ${formData.lastName}" created successfully! An activation email has been sent.`);
                 setFormData(INITIAL_FORM_STATE);
                 setPermissions(INITIAL_PERMISSIONS);
@@ -246,7 +260,7 @@ const SuperAdminManagersCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to deactivate and remove this Manager? Their team will lose their primary approver.")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-managers/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-managers/${id}`, getAuthConfig());
             fetchData();
             setSuccessMsg('Manager removed successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
@@ -767,7 +781,7 @@ const SuperAdminManagersCom = () => {
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Salary disbursement account</p>
                         </div>
                     </div>
-                    <div className="relative p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <FieldWrapper error={errors.bankName}><Input label={<>Bank Name <span className="text-red-500">*</span></>} name="bankName" value={formData.bankName} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.accountHolder}><Input label={<>Account Holder Name <span className="text-red-500">*</span></>} name="accountHolder" value={formData.accountHolder} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.accountNumber}><Input label={<>Account Number <span className="text-red-500">*</span></>} name="accountNumber" value={formData.accountNumber} onChange={handleInputChange} /></FieldWrapper>

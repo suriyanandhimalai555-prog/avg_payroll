@@ -21,10 +21,21 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminHRCom = () => {
     const INITIAL_FORM_STATE = {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '',
-        hrId: '', joiningDate: '', // Removed auto generation default
+        hrId: '', joiningDate: '', 
         company: '', branch: '', department: '', designation: '', shift: '', md: '', status: 'Active',
         ctc: '', monthlySalary: '', basic: '', hra: '', conveyance: '', medical: '', specialAllowance: '', otherAllowances: '', 
         epf: '', esi: '', healthInsurance: '', pt: '', tds: '', leaves: '',
@@ -61,12 +72,12 @@ const SuperAdminHRCom = () => {
         setIsLoading(true);
         try {
             const [compRes, branchRes, deptRes, desigRes, shiftRes, hrRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
@@ -76,6 +87,9 @@ const SuperAdminHRCom = () => {
             setHrUsers(hrRes.data || []);
         } catch (error) {
             console.error('Failed to load data', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -159,18 +173,18 @@ const SuperAdminHRCom = () => {
             const payload = { ...formData };
 
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-hr-users/${editId}`, payload);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-hr-users/${editId}`, payload, getAuthConfig());
                 setSuccessMsg('HR Profile updated successfully.');
                 handleCancelEdit();
             } else {
-                const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-hr-users/create`, payload);
+                const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-hr-users/create`, payload, getAuthConfig());
                 setSuccessMsg(`HR User "${formData.firstName}" created successfully with ID: ${response.data.user?.hr_id}!`);
                 setFormData(INITIAL_FORM_STATE);
             }
             fetchData();
             setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
-            setApiError(error.response?.data?.message || 'Failed to save HR user. Please try again.');
+            setApiError(error.response?.data?.message || 'Failed to save HR user. Please check authorization.');
             setTimeout(() => setApiError(''), 5000);
         } finally {
             setIsSubmitting(false);
@@ -208,12 +222,12 @@ const SuperAdminHRCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to deactivate and remove this HR User?")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-hr-users/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-hr-users/${id}`, getAuthConfig());
             fetchData();
             setSuccessMsg('HR User removed successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete HR user.');
+            alert('Failed to delete HR user. Ensure you are authorized.');
         }
     };
 

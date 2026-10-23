@@ -5,16 +5,6 @@ import { createActivationToken } from '../../utils/activationToken.js';
 
 dotenv.config();
 
-const transporter = nodemailer.createTransport({
-    host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
-
 const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
 
 export const createHrUser = async (req, res) => {
@@ -41,7 +31,7 @@ export const createHrUser = async (req, res) => {
         `;
 
         const values = [
-            data.hrId, // Manual ID from frontend
+            data.hrId, 
             data.firstName, data.lastName, data.email, data.phone, data.dob, data.gender, data.joiningDate, data.company, data.branch, data.department, data.designation, data.shift, data.md, data.status,
             parseNum(data.ctc), parseNum(data.monthlySalary), parseNum(data.basic), parseNum(data.hra), parseNum(data.conveyance), parseNum(data.medical), parseNum(data.specialAllowance), parseNum(data.otherAllowances),
             parseNum(data.epf), parseNum(data.esi), parseNum(data.healthInsurance), parseNum(data.pt), parseNum(data.tds), parseNum(data.leaves),
@@ -51,9 +41,36 @@ export const createHrUser = async (req, res) => {
         const result = await pool.query(insertQuery, values);
         const newHrUser = result.rows[0];
 
+        // ============================================================================
+        // SAFE SMTP DISPATCH: Prevents 500 error if K8s pod is missing credentials
+        // ============================================================================
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.warn('Production Warning: Missing SMTP credentials. Skipping email dispatch.');
+            return res.status(201).json({
+                message: `HR User created successfully with ID: ${data.hrId}, but the activation email was skipped because SMTP credentials are not configured in this environment.`,
+                user: newHrUser
+            });
+        }
+
         try {
+            const transporter = nodemailer.createTransport({
+                host: 'smtp.hostinger.com',
+                port: 465,
+                secure: true,
+                auth: {
+                    user: process.env.EMAIL_USER,
+                    pass: process.env.EMAIL_PASS,
+                },
+            });
+
             const activationToken = createActivationToken(data.email, 'hr');
-            const activationLink = `${process.env.FRONTEND_URL}/activate-account?token=${encodeURIComponent(activationToken)}`;
+            
+            // Environment-aware frontend routing
+            const isProd = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
+            const fallbackUrl = isProd ? 'https://avgpayroll.com' : 'http://localhost:5173';
+            const frontendBaseUrl = process.env.FRONTEND_URL || fallbackUrl;
+
+            const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
             const mailOptions = {
                 from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,
@@ -86,7 +103,7 @@ export const createHrUser = async (req, res) => {
         } catch (emailError) {
             console.error('SMTP Email Error:', emailError);
             res.status(201).json({
-                message: 'HR user created successfully, but the activation email failed to send. Check SMTP settings.',
+                message: `HR user created successfully with ID: ${data.hrId}, but the activation email failed to send. Check SMTP settings.`,
                 user: newHrUser
             });
         }
@@ -163,7 +180,7 @@ export const updateHrUser = async (req, res) => {
             data.accountHolder ?? data.account_holder ?? existing.account_holder, 
             data.accountNumber ?? data.account_number ?? existing.account_number, 
             data.ifsc ?? existing.ifsc, 
-            data.hrId ?? data.hr_id ?? existing.hr_id, // <-- FIX: Safe Fallback for ID Mapping
+            data.hrId ?? data.hr_id ?? existing.hr_id,
             id
         ];
 
