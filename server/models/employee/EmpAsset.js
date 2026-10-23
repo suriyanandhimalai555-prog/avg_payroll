@@ -7,24 +7,19 @@ const initializeEmpAssetModel = async () => {
             employee_id VARCHAR(50) NOT NULL,
             asset_type VARCHAR(100) NOT NULL,
             brand_model VARCHAR(255) NOT NULL,
-            serial_number VARCHAR(150) NOT NULL,
-            condition VARCHAR(50) NOT NULL,
+            serial_number VARCHAR(100),
             assigned_date DATE NOT NULL,
+            condition VARCHAR(50) DEFAULT 'Working',
             remarks TEXT,
-            asset_photo TEXT,
-            asset_photos JSONB DEFAULT '[]'::jsonb,
+            asset_photos JSONB,
+            status VARCHAR(50) DEFAULT 'Assigned',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `;
 
-    const alterQuery = `
-        ALTER TABLE emp_assets ADD COLUMN IF NOT EXISTS asset_photos JSONB DEFAULT '[]'::jsonb;
-    `;
-
     try {
         await pool.query(createTableQuery);
-        await pool.query(alterQuery);
-        console.log('EmpAsset table checked/updated successfully.');
+        console.log('EmpAsset table checked/created successfully.');
     } catch (error) {
         console.error('Error updating EmpAsset table:', error);
     }

@@ -1,11 +1,11 @@
 import express from 'express';
-import { createAsset, getAssetsByEmployee, updateAsset, deleteAsset } from '../../controllers/employee/empAssetController.js';
+import { authenticateToken } from '../../middleware/authMiddleware.js';
+import { declareAsset, getAssetsByEmployee, deleteAsset } from '../../controllers/employee/empAssetController.js';
 
 const router = express.Router();
 
-router.post('/create', createAsset);
-router.get('/:employeeId', getAssetsByEmployee);
-router.put('/:id', updateAsset); // NEW ROUTE
-router.delete('/:id', deleteAsset);
+router.post('/declare', authenticateToken, declareAsset);
+router.get('/:employeeId', authenticateToken, getAssetsByEmployee);
+router.delete('/:id', authenticateToken, deleteAsset);
 
 export default router;

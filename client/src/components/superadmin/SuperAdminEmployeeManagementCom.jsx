@@ -31,6 +31,17 @@ const getAssetIconBg = (type) => {
     }
 };
 
+// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminEmployeeManagementCom = () => {
     const [employees, setEmployees] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +54,7 @@ const SuperAdminEmployeeManagementCom = () => {
     const [attendanceRecords, setAttendanceRecords] = useState([]);
     const [loadingAttendance, setLoadingAttendance] = useState(false);
     const [approvingId, setApprovingId] = useState(null);
-    const [expandedDates, setExpandedDates] = useState([]); // Accordion State
+    const [expandedDates, setExpandedDates] = useState([]);
 
     // Dossier Modal States
     const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
@@ -66,9 +77,9 @@ const SuperAdminEmployeeManagementCom = () => {
 
         try {
             const [hrRes, mgrRes, empRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             const hrData = (hrRes.data || []).map(u => ({
@@ -100,38 +111,14 @@ const SuperAdminEmployeeManagementCom = () => {
 
             let combined = [...hrData, ...mgrData, ...empData].sort((a, b) => new Date(b._joining) - new Date(a._joining));
 
-            if (combined.length === 0) {
-                // Fallback Mock Data if DB is empty
-                combined = [
-                    {
-                        id: 1, first_name: 'Pooja', last_name: 'Sharma', email: 'pooja.hr@avg.com', phone: '+91 9876543210',
-                        _displayId: 'HR-001', _roleType: 'HR Admin', _roleColor: 'text-purple-700 bg-purple-50 border-purple-200',
-                        designation: 'Senior HR Manager', department: 'Human Resources', branch: 'Bangalore HQ', company: 'AVG Prime Tech',
-                        location: 'Koramangala HQ', shift: 'General Shift',
-                        ctc: 720000, monthly_salary: 60000, basic_salary: 30000, hra: 15000, conveyance: 5000, medical: 2000, special_allowance: 5000, other_allowances: 3000,
-                        epf: 1800, esi: 0, health_insurance: 1500, pt: 200, tds: 3000, leaves: 0,
-                        uan_no: '100412345678', _joining: '2026-05-15T00:00:00.000Z', _manager: 'Super Admin', status: 'Active',
-                        bank_name: 'HDFC Bank', account_holder: 'Pooja Sharma', account_number: '501002345678', ifsc: 'HDFC0001234',
-                        emergency_name: 'Ravi Sharma', emergency_relationship: 'Husband', emergency_phone: '+91 9876543299', profile_photo: null
-                    },
-                    {
-                        id: 3, first_name: 'Ranjith', last_name: 'Kumar', email: 'ranjith.dev@avg.com', phone: '+91 9876543212',
-                        _displayId: 'AVG-2026-001', _roleType: 'Employee', _roleColor: 'text-[#0437cc] bg-blue-50 border-blue-200',
-                        designation: 'Software Engineer', department: 'Development', branch: 'Bangalore HQ', company: 'AVG Prime Tech',
-                        location: 'Koramangala HQ', shift: 'General Shift',
-                        ctc: 540000, monthly_salary: 45000, basic_salary: 20000, hra: 10000, conveyance: 3000, medical: 2000, special_allowance: 5000, other_allowances: 5000,
-                        epf: 1800, esi: 0, health_insurance: 1000, pt: 200, tds: 1000, leaves: 0,
-                        uan_no: '100412345680', _joining: '2026-07-01T00:00:00.000Z', _manager: 'Prabhu Mayakanan', status: 'Active',
-                        bank_name: 'SBI Bank', account_holder: 'Ranjith Kumar', account_number: '302010405060', ifsc: 'SBIN0001234',
-                        emergency_name: 'Kumar Natarajan', emergency_relationship: 'Father', emergency_phone: '+91 9876543277', profile_photo: null
-                    }
-                ];
-            }
-
             setEmployees(combined);
         } catch (error) {
             console.error('Failed to load master employee directory', error);
-            setApiError('Failed to load organizational records. Please try again later.');
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            } else {
+                setApiError('Failed to load organizational records. Please try again later.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -146,28 +133,19 @@ const SuperAdminEmployeeManagementCom = () => {
         setSelectedEmp(emp);
         setIsAttendanceModalOpen(true);
         setLoadingAttendance(true);
-        setExpandedDates([]); // Reset accordion
+        setExpandedDates([]); 
         try {
             const targetId = emp.employee_id || emp.email || emp._displayId;
-            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${targetId}`);
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${targetId}`, getAuthConfig());
             setAttendanceRecords(res.data.history || []);
         } catch (err) {
             console.error("Failed to fetch attendance", err);
-            // Mock data for UI demonstration if backend fails
-            const today = new Date();
-            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-
-            setAttendanceRecords([
-                { id: 99, date: today.toISOString(), clock_in: new Date(today).setHours(13, 15, 0), clock_out: null, total_hours: null, status: 'Late (Pending Approval)', late_minutes: 45, clock_in_location: 'Office HQ', clock_in_device: 'Windows 11' },
-                { id: 98, date: yesterday.toISOString(), clock_in: new Date(yesterday).setHours(9, 30, 0), clock_out: new Date(yesterday).setHours(13, 0, 0), total_hours: '03:30 Hrs', status: 'Present', late_minutes: 0, clock_in_location: 'Remote', clock_in_device: 'Mac OS' },
-                { id: 97, date: yesterday.toISOString(), clock_in: new Date(yesterday).setHours(14, 0, 0), clock_out: new Date(yesterday).setHours(18, 15, 0), total_hours: '04:15 Hrs', status: 'Present', late_minutes: 0, clock_in_location: 'Remote', clock_in_device: 'Mac OS' }
-            ]);
+            setAttendanceRecords([]);
         } finally {
             setLoadingAttendance(false);
         }
     };
 
-    // Grouping attendance history by date for accordion view
     const groupedHistory = useMemo(() => {
         const groups = {};
         attendanceRecords.forEach(record => {
@@ -194,10 +172,8 @@ const SuperAdminEmployeeManagementCom = () => {
             group.last_clock_out = lastSession.clock_out;
             group.is_working = !lastSession.clock_out;
             
-            // Calculate total late minutes for the day
             group.late_minutes = group.sessions.reduce((acc, s) => acc + (s.late_minutes || 0), 0);
 
-            // Sum up total hours for the day
             let totalMins = 0;
             group.sessions.forEach(s => {
                 if (s.total_hours && s.total_hours !== 'In Progress' && s.total_hours !== 'Missed Checkout') {
@@ -214,7 +190,6 @@ const SuperAdminEmployeeManagementCom = () => {
                 group.total_hours_sum = null;
             }
 
-            // Status Logic: If any session is pending/late, bubble it up to the day status
             const pendingSession = group.sessions.find(s => s.status?.includes('Pending'));
             if (pendingSession) {
                 group.status = pendingSession.status;
@@ -233,7 +208,7 @@ const SuperAdminEmployeeManagementCom = () => {
     const handleApproveAttendance = async (recordId) => {
         setApprovingId(recordId);
         try {
-            await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/approve/${recordId}`);
+            await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/approve/${recordId}`, {}, getAuthConfig());
             setAttendanceRecords(prev => prev.map(rec =>
                 rec.id === recordId ? { ...rec, status: 'Present' } : rec
             ));
@@ -250,14 +225,12 @@ const SuperAdminEmployeeManagementCom = () => {
         
         let csvContent = "Date,Session No,Clock In,Clock Out,Location In,Location Out,Device In,Device Out,Late Minutes,Total Hours,Status,EOD Update\n";
 
-        // Export all sessions detailed
         groupedHistory.forEach(group => {
             group.sessions.forEach((record, index) => {
                 const date = new Date(record.date).toLocaleDateString('en-CA');
                 const clockIn = record.clock_in ? new Date(record.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A';
                 const clockOut = record.clock_out ? new Date(record.clock_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'In Progress';
                 
-                // Clean strings to prevent CSV format breaks
                 const locIn = (record.clock_in_location || record.location_in || 'N/A').replace(/,/g, ' ');
                 const locOut = (record.clock_out_location || record.location_out || 'N/A').replace(/,/g, ' ');
                 const devIn = (record.clock_in_device || record.device_in || 'N/A').replace(/,/g, ' ');
@@ -266,13 +239,12 @@ const SuperAdminEmployeeManagementCom = () => {
                 const lateMins = record.late_minutes || 0;
                 const totalHrs = record.total_hours || 'N/A';
                 const status = record.status || 'N/A';
-                const eod = (record.eod_update || 'N/A').replace(/,/g, ';').replace(/\n/g, ' '); // Clean commas and newlines
+                const eod = (record.eod_update || 'N/A').replace(/,/g, ';').replace(/\n/g, ' '); 
 
                 csvContent += `${date},${index + 1},${clockIn},${clockOut},${locIn},${locOut},${devIn},${devOut},${lateMins},${totalHrs},${status},${eod}\n`;
             });
         });
 
-        // Create Blob and Download
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -295,7 +267,7 @@ const SuperAdminEmployeeManagementCom = () => {
         setLoadingAssets(true);
         try {
             const targetId = emp.employee_id || emp._displayId;
-            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${targetId}`);
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${targetId}`, getAuthConfig());
 
             const parsedAssets = res.data.map(asset => {
                 let photos = asset.asset_photos || [];
@@ -313,7 +285,6 @@ const SuperAdminEmployeeManagementCom = () => {
         }
     };
 
-    // ==================== FORMATTERS ====================
     const filteredEmployees = employees.filter(emp => {
         const searchString = `${emp.first_name} ${emp.last_name} ${emp._displayId} ${emp.department || 'All Departments'} ${emp.designation} ${emp._roleType} ${emp.branch} ${emp.company}`.toLowerCase();
         return searchString.includes(searchTerm.toLowerCase());
@@ -336,7 +307,6 @@ const SuperAdminEmployeeManagementCom = () => {
         return new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     };
 
-    // Quick stats
     const totalHR = employees.filter(e => e._roleType === 'HR Admin').length;
     const totalManagers = employees.filter(e => e._roleType === 'Manager').length;
     const totalEmployees = employees.filter(e => e._roleType === 'Employee').length;
@@ -822,7 +792,7 @@ const SuperAdminEmployeeManagementCom = () => {
                                             <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Conveyance</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewEmployee.conveyance)}</span></div>
                                             <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Medical</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewEmployee.medical)}</span></div>
                                             <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Special Allowance</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewEmployee.special_allowance)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Other Allowances</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewEmployee.other_allowances)}</span></div>
+                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Other</span><span className="font-bold text-slate-700 shrink-0 tabular-nums">{formatCurrency(viewEmployee.other_allowances)}</span></div>
                                         </div>
                                         <div className="relative pt-3 mt-3 border-t border-green-200 flex justify-between items-center">
                                             <span className="text-[11px] sm:text-sm font-bold text-green-800 uppercase tracking-wide">Gross</span>

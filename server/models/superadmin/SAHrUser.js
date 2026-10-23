@@ -44,40 +44,50 @@ const initializeSAHrUserModel = async () => {
     `;
 
     // ============================================================================
-    // PRODUCTION SELF-HEALING PATCH
-    // Injects missing columns into existing tables without destroying data
+    // PRODUCTION SELF-HEALING PATCH (BULLETPROOF ITERATION)
+    // Injects missing columns individually to prevent query aborts
     // ============================================================================
-    const alterQueries = `
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS shift VARCHAR(50);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS md VARCHAR(150);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS company VARCHAR(255);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS branch VARCHAR(255);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS department VARCHAR(100);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS designation VARCHAR(100);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS ctc NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS basic_salary NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS hra NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS conveyance NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS medical NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS special_allowance NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS other_allowances NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS epf NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS esi NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS health_insurance NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS pt NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS tds NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS leaves NUMERIC DEFAULT 0;
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS uan_no VARCHAR(100);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS bank_name VARCHAR(150);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS account_holder VARCHAR(150);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS account_number VARCHAR(100);
-        ALTER TABLE sa_hr_users ADD COLUMN IF NOT EXISTS ifsc VARCHAR(50);
-    `;
+    const alterColumns = [
+        "ADD COLUMN IF NOT EXISTS shift VARCHAR(50)",
+        "ADD COLUMN IF NOT EXISTS md VARCHAR(150)",
+        "ADD COLUMN IF NOT EXISTS company VARCHAR(255)",
+        "ADD COLUMN IF NOT EXISTS branch VARCHAR(255)",
+        "ADD COLUMN IF NOT EXISTS department VARCHAR(100)",
+        "ADD COLUMN IF NOT EXISTS designation VARCHAR(100)",
+        "ADD COLUMN IF NOT EXISTS ctc NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS basic_salary NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS hra NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS conveyance NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS medical NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS special_allowance NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS other_allowances NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS epf NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS esi NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS health_insurance NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS pt NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS tds NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS leaves NUMERIC DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS uan_no VARCHAR(100)",
+        "ADD COLUMN IF NOT EXISTS bank_name VARCHAR(150)",
+        "ADD COLUMN IF NOT EXISTS account_holder VARCHAR(150)",
+        "ADD COLUMN IF NOT EXISTS account_number VARCHAR(100)",
+        "ADD COLUMN IF NOT EXISTS ifsc VARCHAR(50)"
+    ];
 
     try {
+        // Step 1: Attempt to create the table if it does not exist at all
         await pool.query(createTableQuery);
-        await pool.query(alterQueries);
+
+        // Step 2: Iteratively apply column patches for existing tables in production
+        for (const alterQuery of alterColumns) {
+            try {
+                await pool.query(`ALTER TABLE sa_hr_users ${alterQuery};`);
+            } catch (columnError) {
+                console.warn(`Warning: Could not alter sa_hr_users - ${alterQuery}`, columnError.message);
+            }
+        }
+        
         console.log('SAHrUser table and production constraints checked/updated successfully.');
     } catch (error) {
         console.error('Error updating SAHrUser table constraints:', error);
