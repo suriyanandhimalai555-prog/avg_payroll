@@ -11,7 +11,6 @@ export const createHrUser = async (req, res) => {
     try {
         const data = req.body;
         
-        // Ensure hrId is manually passed from frontend
         if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.shift || !data.uanNo || !data.dob || !data.gender || !data.joiningDate || !data.hrId) {
             return res.status(400).json({ message: "Missing mandatory details including HR ID. Please complete all fields marked with *." });
         }
@@ -41,9 +40,6 @@ export const createHrUser = async (req, res) => {
         const result = await pool.query(insertQuery, values);
         const newHrUser = result.rows[0];
 
-        // ============================================================================
-        // SAFE SMTP DISPATCH: Prevents 500 error if K8s pod is missing credentials
-        // ============================================================================
         if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
             console.warn('Production Warning: Missing SMTP credentials. Skipping email dispatch.');
             return res.status(201).json({
@@ -65,7 +61,6 @@ export const createHrUser = async (req, res) => {
 
             const activationToken = createActivationToken(data.email, 'hr');
             
-            // Environment-aware frontend routing
             const isProd = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
             const fallbackUrl = isProd ? 'https://avgpayroll.com' : 'http://localhost:5173';
             const frontendBaseUrl = process.env.FRONTEND_URL || fallbackUrl;

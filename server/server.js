@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import cluster from 'cluster';
 import os from 'os';
 import pool from './config/db.js';
-import cookieParser from 'cookie-parser'; // <-- 1. ADDED IMPORT
+import cookieParser from 'cookie-parser';
 
 dotenv.config();
 if (!process.env.JWT_SECRET) {
@@ -61,32 +61,35 @@ import initializeEmpAssetModel from './models/employee/EmpAsset.js';
 const initializeDatabase = async () => {
     try {
         await initializeSASuperAdminModel();
-        await initializeSAEmployeeModel();
+        
+        // Organizational Data Hierarchy
         await initializeSACompanyProfileModel();
         await initializeSABranchModel();
         await initializeSADepartmentModel();
         await initializeSADesignationModel();
         await initializeSALocationModel();
         await initializeSAShiftModel();
-        await initializeSAHolidayModel();
-        await initializeSALeavePolicyModel();
+        
+        // User & Employee Data
         await initializeSAHrUserModel();
         await initializeSAManagerModel();
+        await initializeSAEmployeeModel();
 
+        // Policies & Operations
+        await initializeSAHolidayModel();
+        await initializeSALeavePolicyModel();
         await initializeHrAttendanceModel();
-
         await initializeAttendanceModel();
         await initializeLeaveModels();
         await initializeReimbursementModels();
         await initializeEmpAssetModel();
 
-        console.log('All database models initialized sequentially.');
+        console.log('All database models initialized and patched sequentially.');
     } catch (error) {
         console.error('Database initialization failed:', error);
     }
 };
 
-//const numCPUs = os.cpus().length;
 const numCPUs = Math.max(
     1,
     Number.parseInt(process.env.WORKERS || '1', 10)
@@ -105,13 +108,13 @@ if (cluster.isPrimary) {
         });
     };
 
-    if (process.env.RUN_DB_INITIALIZERS === 'true') {
-        console.warn('RUN_DB_INITIALIZERS=true: startup schema initializers are enabled.');
-        initializeDatabase().then(startWorkers);
-    } else {
-        console.log('Startup schema initializers skipped; RUN_DB_INITIALIZERS is not true.');
-        startWorkers();
-    }
+    // ============================================================================
+    // FORCED INITIALIZATION FIX
+    // Unconditionally runs the schema patches before allowing traffic workers to start
+    // ============================================================================
+    console.log('Executing database schema initializers...');
+    initializeDatabase().then(startWorkers);
+
 } else {
     const app = express();
 
@@ -128,13 +131,10 @@ if (cluster.isPrimary) {
         optionsSuccessStatus: 200
     }));
 
-    // 2. ADDED COOKIE PARSER MIDDLEWARE BEFORE ROUTES
     app.use(cookieParser());
-
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-    // Public API status endpoints.
     app.get('/', (_req, res) => {
         res.status(200).type('text/plain').send('AVG Payroll Backend running');
     });
@@ -142,12 +142,11 @@ if (cluster.isPrimary) {
     app.get('/health', (_req, res) => {
         res.status(200).json({ status: 'ok' });
     });
-    // Kubernetes health checks: liveness does not depend on the database.
+
     app.get('/health/live', (_req, res) => {
         res.status(200).json({ status: 'ok' });
     });
 
-    // Readiness requires a successful, read-only PostgreSQL query.
     app.get('/health/ready', async (_req, res) => {
         try {
             await pool.query({ text: 'SELECT 1', query_timeout: 2000 });
@@ -157,9 +156,7 @@ if (cluster.isPrimary) {
         }
     });
 
-
     app.use('/api/auth', authRoutes);
-    app.use('/api/sa-employees', saEmployeeRoutes);
     app.use('/api/sa-company-profile', saCompanyProfileRoutes);
     app.use('/api/sa-branches', saBranchRoutes);
     app.use('/api/sa-departments', saDepartmentRoutes);
@@ -168,9 +165,10 @@ if (cluster.isPrimary) {
     app.use('/api/sa-shifts', saShiftRoutes);
     app.use('/api/sa-holidays', saHolidayRoutes);
     app.use('/api/sa-leave-policies', saLeavePolicyRoutes);
-    app.use('/api/sa-attendance', saAttendanceRoutes);
     app.use('/api/sa-hr-users', saHrUserRoutes);
     app.use('/api/sa-managers', saManagerRoutes);
+    app.use('/api/sa-employees', saEmployeeRoutes);
+    app.use('/api/sa-attendance', saAttendanceRoutes);
     app.use('/api/sa-reimbursements', saReimbursementRoutes);
     app.use('/api/sa-salary-structure', saSalaryRoutes);
 

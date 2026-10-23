@@ -43,10 +43,6 @@ const initializeSAHrUserModel = async () => {
         );
     `;
 
-    // ============================================================================
-    // PRODUCTION SELF-HEALING PATCH (BULLETPROOF ITERATION)
-    // Injects missing columns individually to prevent query aborts
-    // ============================================================================
     const alterColumns = [
         "ADD COLUMN IF NOT EXISTS shift VARCHAR(50)",
         "ADD COLUMN IF NOT EXISTS md VARCHAR(150)",
@@ -76,15 +72,13 @@ const initializeSAHrUserModel = async () => {
     ];
 
     try {
-        // Step 1: Attempt to create the table if it does not exist at all
         await pool.query(createTableQuery);
 
-        // Step 2: Iteratively apply column patches for existing tables in production
         for (const alterQuery of alterColumns) {
             try {
                 await pool.query(`ALTER TABLE sa_hr_users ${alterQuery};`);
-            } catch (columnError) {
-                console.warn(`Warning: Could not alter sa_hr_users - ${alterQuery}`, columnError.message);
+            } catch (colErr) {
+                console.warn(`Warning mapping SAHrUser column: ${alterQuery}`, colErr.message);
             }
         }
         
