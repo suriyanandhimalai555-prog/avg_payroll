@@ -4,6 +4,17 @@ import axios from 'axios';
 import { FaLock, FaCheckCircle, FaExclamationCircle, FaEye, FaEyeSlash, FaKey, FaArrowRight } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 
+// Bulletproof Auth Config
+const getAuthConfig = () => {
+    return {
+        withCredentials: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const ActivateAccount = () => {
     const [searchParams] = useSearchParams();
     const token = searchParams.get('token');
@@ -56,7 +67,7 @@ const ActivateAccount = () => {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/activate`, {
                 token,
                 password: formData.password
-            }, { withCredentials: true }); // Cross-origin fix
+            }, getAuthConfig()); 
 
             if (response.status === 200) {
                 setStatus({ loading: false, error: '', success: true });
@@ -72,7 +83,6 @@ const ActivateAccount = () => {
 
     const getRoleTitle = () => 'Account';
 
-    // Password strength indicator
     const getPasswordStrength = () => {
         const pwd = formData.password;
         if (!pwd) return { level: 0, text: '', color: '' };
@@ -90,7 +100,6 @@ const ActivateAccount = () => {
 
     const strength = getPasswordStrength();
 
-    // ==================== SUCCESS STATE ====================
     if (status.success) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 relative overflow-hidden">
@@ -133,7 +142,6 @@ const ActivateAccount = () => {
         );
     }
 
-    // ==================== MAIN FORM ====================
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 p-3 sm:p-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-br from-[#0437cc]/10 via-[#0437cc]/5 to-transparent -translate-y-20 transform skew-y-3 -z-10"></div>

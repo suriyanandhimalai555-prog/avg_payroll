@@ -11,12 +11,16 @@ const SuperAdminLogin = () => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     
-    // Rate Limiting States - Initialize from LocalStorage
     const [loginAttempts, setLoginAttempts] = useState(() => parseInt(localStorage.getItem('sa_login_attempts')) || 0);
     const [blockCountdown, setBlockCountdown] = useState(0);
 
-    const { login } = useAuth();
+    const { login, user } = useAuth();
     const navigate = useNavigate();
+
+    // Wipe dead token cache on load
+    useEffect(() => {
+        if (!user) localStorage.removeItem('token');
+    }, [user]);
 
     useEffect(() => {
         const checkLockout = () => {
@@ -57,11 +61,18 @@ const SuperAdminLogin = () => {
                 identifier: credentials.email.trim(),
                 password: credentials.password,
                 role: 'superadmin'
-            }, { withCredentials: true }); // Ensure cookie is saved natively
+            }, { withCredentials: true }); 
 
             localStorage.removeItem('sa_login_attempts');
             localStorage.removeItem('sa_lockout_until');
             setLoginAttempts(0);
+            
+            // ============================================================
+            // PRO FIX: Stash Token natively for seamless Fetch logic
+            // ============================================================
+            if (response.data.token) {
+                localStorage.setItem('token', response.data.token);
+            }
             
             login(response.data.user);
             navigate('/superadmin');

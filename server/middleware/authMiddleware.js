@@ -1,9 +1,17 @@
 import jwt from 'jsonwebtoken';
 
 export const authenticateToken = (req, res, next) => {
-    // Safely check for cookies first, fallback to headers
-    const token = (req.cookies && (req.cookies.token || req.cookies.authToken)) || 
-                  (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+    // FIX 2: Check Header FIRST (Handles LocalStorage Bearer tokens), Fallback to Cookie SECOND
+    let token = null;
+
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+    }
+
+    if (!token && req.cookies) {
+        token = req.cookies.token || req.cookies.authToken;
+    }
 
     if (!token) {
         return res.status(401).json({ message: 'Authentication required. No valid token or cookie found.' });
@@ -15,7 +23,7 @@ export const authenticateToken = (req, res, next) => {
         next();
     } catch (error) {
         console.error('JWT Verification Error:', error.message);
-        return res.status(401).json({ message: 'Invalid or expired authentication token.' });
+        return res.status(401).json({ message: 'Session expired. Please log in again.' });
     }
 };
 

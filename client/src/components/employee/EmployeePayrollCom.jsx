@@ -4,7 +4,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
     FaMoneyCheckAlt, FaFileInvoiceDollar, FaHistory,
-    FaPercentage, FaDownload, FaLock, FaRupeeSign, FaInfoCircle, FaPlusCircle, FaMinusCircle, FaCalculator, FaCalendarDay
+    FaPercentage, FaDownload, FaCalculator, FaCalendarDay
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -152,18 +152,25 @@ const EmployeePayrollCom = () => {
 
     useEffect(() => {
         const fetchPayroll = async () => {
+            // FIX: Ensure employee ID exists and is fully formatted before fetching
+            const empId = user?.employee_id;
+            if (!empId) {
+                setLoading(false);
+                return;
+            }
+
             try {
-                // FIXED: Destructured holRes properly and applied getAuthConfig()
+                // FIXED: Destructured properly and applied getAuthConfig() with full URL pathing
                 const [profileRes, attRes, leaveReqRes, leavePolRes, holRes] = await Promise.all([
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: {} })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: [] })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empId}`, getAuthConfig()).catch(() => ({ data: {} })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empId}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${empId}`, getAuthConfig()).catch(() => ({ data: [] })),
                     axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`, getAuthConfig()).catch(() => ({ data: [] })),
                     axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
                 ]);
 
-                const profile = profileRes.data;
-                const attendanceLogs = attRes.data.history || [];
+                const profile = profileRes.data || {};
+                const attendanceLogs = attRes.data?.history || [];
                 const leaveRequests = leaveReqRes.data || [];
                 const leavePolicies = leavePolRes.data || [];
                 const holidays = holRes.data || [];
@@ -308,7 +315,7 @@ const EmployeePayrollCom = () => {
             }
         };
 
-        if (user?.employee_id) fetchPayroll();
+        fetchPayroll();
     }, [user]);
 
     // -----------------------------------------------------------------------

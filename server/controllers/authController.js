@@ -73,7 +73,6 @@ export const activateAccount = async (req, res) => {
             });
         }
 
-        // Role comes only from the verified, signed activation token.
         const targetTable = getTableByRole(identity.role);
 
         if (!targetTable || identity.role === 'superadmin') {
@@ -85,8 +84,6 @@ export const activateAccount = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Atomic conditional update: only an account without a password
-        // can be activated. Reusing the same link cannot reset its password.
         const result = await pool.query(
             `UPDATE ${targetTable}
              SET password = $1, status = 'Active'
@@ -132,7 +129,6 @@ export const login = async (req, res) => {
         let values = [identifier.trim()];
         let result;
 
-        // Execute queries wrapped in try-catch to gracefully handle missing columns (like manager_id)
         try {
             if (role === 'superadmin') {
                 result = await pool.query(`SELECT * FROM sa_superadmins WHERE email ILIKE $1`, values);
@@ -142,7 +138,7 @@ export const login = async (req, res) => {
                 try {
                     result = await pool.query(`SELECT * FROM sa_managers WHERE email ILIKE $1 OR manager_id ILIKE $1`, values);
                 } catch (e) {
-                    if (e.code === '42703') { // 42703 = undefined_column
+                    if (e.code === '42703') { // undefined_column fallback
                         result = await pool.query(`SELECT * FROM sa_managers WHERE email ILIKE $1`, values);
                     } else {
                         throw e;
@@ -193,24 +189,25 @@ export const login = async (req, res) => {
         const token = jwt.sign(
             { id: user.id, role: role, email: user.email },
             process.env.JWT_SECRET,
-            { expiresIn: '1d' }
+            { expiresIn: '7d' } 
         );
 
-        // ============================================================
-        // SUPER SECURITY PROTOCOL: HTTP-ONLY COOKIE
-        // Token is locked in the browser. JavaScript cannot read it.
-        // FIXED: Added SameSite=None for Production Cross-Origin Support
-        // ============================================================
+        // Retain HttpOnly Cookie for Web fallback
         res.cookie('token', token, {
             httpOnly: true, 
             secure: process.env.NODE_ENV === 'production', 
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', 
-            maxAge: 24 * 60 * 60 * 1000 // 1 day
+            maxAge: 7 * 24 * 60 * 60 * 1000 
         });
 
+        // ============================================================
+        // PRO FIX: Inject the token directly into the JSON body 
+        // for Mobile App Devs and Frontend LocalStorage saving
+        // ============================================================
         res.status(200).json({
             message: 'Login successful',
-            user: userPayload
+            user: userPayload,
+            token: token
         });
 
     } catch (error) {
@@ -237,7 +234,6 @@ export const requestOtp = async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiry = Date.now() + 10 * 60 * 1000; // 10 mins
 
-        // Upsert OTP into the database (Cluster safe)
         await pool.query(`
             INSERT INTO password_reset_otps (email, otp, expiry, verified) 
             VALUES ($1, $2, $3, false)
@@ -357,66 +353,39 @@ export const resetPassword = async (req, res) => {
             });
         }
 
-        const accountTables = [
-            'sa_superadmins',
-            'sa_hr_users',
-            'sa_managers',
-            'sa_employees'
-        ];
+        const accountTables = ['sa_superadmins', 'sa_hr_users', 'sa_managers', 'sa_employees'];
         const matchingTables = [];
 
         for (const table of accountTables) {
             const accountResult = await pool.query(
-                `SELECT 1 FROM ${table}
-                 WHERE LOWER(email) = $1
-                 LIMIT 1`,
+                `SELECT 1 FROM ${table} WHERE LOWER(email) = $1 LIMIT 1`,
                 [safeEmail]
             );
-
-            if (accountResult.rows.length > 0) {
-                matchingTables.push(table);
-            }
+            if (accountResult.rows.length > 0) matchingTables.push(table);
         }
 
-        if (
-            matchingTables.length !== 1 ||
-            matchingTables[0] !== targetTable
-        ) {
-            return res.status(400).json({
-                message: 'The account role could not be verified. Request a new password-reset OTP.'
-            });
+        if (matchingTables.length !== 1 || matchingTables[0] !== targetTable) {
+            return res.status(400).json({ message: 'The account role could not be verified. Request a new password-reset OTP.' });
         }
 
         const salt = await bcrypt.genSalt(10);
         const hashedPwd = await bcrypt.hash(newPassword, salt);
 
         const updateResult = await pool.query(
-            `UPDATE ${targetTable}
-             SET password = $1
-             WHERE LOWER(email) = $2
-             RETURNING email`,
+            `UPDATE ${targetTable} SET password = $1 WHERE LOWER(email) = $2 RETURNING email`,
             [hashedPwd, safeEmail]
         );
 
         if (updateResult.rowCount !== 1) {
-            return res.status(400).json({
-                message: 'Password could not be reset for this account.'
-            });
+            return res.status(400).json({ message: 'Password could not be reset for this account.' });
         }
 
-        await pool.query(
-            `DELETE FROM password_reset_otps WHERE email = $1`,
-            [safeEmail]
-        );
+        await pool.query(`DELETE FROM password_reset_otps WHERE email = $1`, [safeEmail]);
 
-        return res.status(200).json({
-            message: 'Password has been reset successfully.'
-        });
+        return res.status(200).json({ message: 'Password has been reset successfully.' });
     } catch (error) {
         console.error('Reset Password Error:', error.message);
-        return res.status(500).json({
-            message: 'Error resetting password.'
-        });
+        return res.status(500).json({ message: 'Error resetting password.' });
     }
 };
 
@@ -429,9 +398,7 @@ export const changePassword = async (req, res) => {
         const targetTable = getTableByRole(role);
 
         if (!email || !targetTable) {
-            return res.status(401).json({
-                message: 'Authentication required.'
-            });
+            return res.status(401).json({ message: 'Authentication required.' });
         }
 
         if (
@@ -440,9 +407,7 @@ export const changePassword = async (req, res) => {
             newPassword.length < 12 ||
             newPassword.length > 128
         ) {
-            return res.status(400).json({
-                message: 'Enter your current password and a new password between 12 and 128 characters.'
-            });
+            return res.status(400).json({ message: 'Enter your current password and a new password between 12 and 128 characters.' });
         }
 
         const userRes = await pool.query(
@@ -450,21 +415,12 @@ export const changePassword = async (req, res) => {
             [email.trim()]
         );
 
-        if (userRes.rows.length === 0) {
-            return res.status(404).json({
-                message: 'User not found.'
-            });
-        }
+        if (userRes.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
 
         const user = userRes.rows[0];
-
         const isMatch = await bcrypt.compare(currentPassword, user.password);
 
-        if (!isMatch) {
-            return res.status(401).json({
-                message: 'The current password you entered is incorrect.'
-            });
-        }
+        if (!isMatch) return res.status(401).json({ message: 'The current password you entered is incorrect.' });
 
         const salt = await bcrypt.genSalt(10);
         const hashedPwd = await bcrypt.hash(newPassword, salt);
@@ -474,57 +430,35 @@ export const changePassword = async (req, res) => {
             [hashedPwd, email.trim()]
         );
 
-        return res.status(200).json({
-            message: 'Password updated successfully.'
-        });
+        return res.status(200).json({ message: 'Password updated successfully.' });
     } catch (error) {
         console.error('Change Password Error:', error);
-        return res.status(500).json({
-            message: 'Server error while changing password.'
-        });
+        return res.status(500).json({ message: 'Server error while changing password.' });
     }
 };
 
 export const updateProfile = async (req, res) => {
     try {
         if (req.user?.role !== 'superadmin' || !req.user.email) {
-            return res.status(403).json({
-                message: 'You are not authorized to update this profile.'
-            });
+            return res.status(403).json({ message: 'You are not authorized to update this profile.' });
         }
 
         const { fullName, phone, profilePhoto } = req.body ?? {};
 
         if (
-            typeof fullName !== 'string' ||
-            !fullName.trim() ||
-            typeof phone !== 'string' ||
-            !phone.trim() ||
-            (profilePhoto !== undefined &&
-                profilePhoto !== null &&
-                typeof profilePhoto !== 'string')
+            typeof fullName !== 'string' || !fullName.trim() ||
+            typeof phone !== 'string' || !phone.trim() ||
+            (profilePhoto !== undefined && profilePhoto !== null && typeof profilePhoto !== 'string')
         ) {
-            return res.status(400).json({
-                message: 'Valid name, phone number, and profile photo are required.'
-            });
+            return res.status(400).json({ message: 'Valid name, phone number, and profile photo are required.' });
         }
 
         const result = await pool.query(
-            `UPDATE sa_superadmins
-             SET full_name = $1, phone = $2, profile_photo = $3
-             WHERE LOWER(email) = LOWER($4)
-             RETURNING *`,
-            [
-                fullName.trim(),
-                phone.trim(),
-                profilePhoto ?? null,
-                req.user.email
-            ]
+            `UPDATE sa_superadmins SET full_name = $1, phone = $2, profile_photo = $3 WHERE LOWER(email) = LOWER($4) RETURNING *`,
+            [fullName.trim(), phone.trim(), profilePhoto ?? null, req.user.email]
         );
 
-        if (result.rows.length !== 1) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
+        if (result.rows.length !== 1) return res.status(404).json({ message: 'User not found.' });
 
         const user = result.rows[0];
         delete user.password;
@@ -538,13 +472,10 @@ export const updateProfile = async (req, res) => {
         });
     } catch (error) {
         console.error('Update Profile Error:', error.message);
-        return res.status(500).json({
-            message: 'Server error while updating profile.'
-        });
+        return res.status(500).json({ message: 'Server error while updating profile.' });
     }
 };
 
-// Properly destroys the HttpOnly cookie upon logout bridging Cross-Origin constraints
 export const logout = (req, res) => {
     res.clearCookie('token', {
         httpOnly: true,
