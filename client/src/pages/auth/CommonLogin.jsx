@@ -30,7 +30,7 @@ const CommonLogin = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [focusedField, setFocusedField] = useState(null);
 
-    // Wipe any dead tokens on fresh load
+    // Wipe dead tokens on fresh load
     useEffect(() => {
         if (!user && flowView === 'login') {
             localStorage.removeItem('token');
@@ -85,17 +85,13 @@ const CommonLogin = () => {
                 identifier: identifier.trim(), 
                 password, 
                 role: loginRole
-            }, { withCredentials: true }); 
+            }); // REMOVED withCredentials
             
             if (response.status === 200) {
                 localStorage.removeItem('common_login_attempts');
                 localStorage.removeItem('common_lockout_until');
                 setLoginAttempts(0);
                 
-                // ============================================================
-                // PRO FIX: Stash the generated token in LocalStorage for 
-                // Bearer auth to prevent Fetch API 401/403 drops.
-                // ============================================================
                 if (response.data.token) {
                     localStorage.setItem('token', response.data.token);
                 }
@@ -135,7 +131,7 @@ const CommonLogin = () => {
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/request-otp`, { 
                 email: forgotEmail.trim(), 
                 role: loginRole 
-            }, { withCredentials: true });
+            });
             
             setSuccessMsg('OTP sent to your email successfully.');
             setTimeout(() => { setSuccessMsg(''); setFlowView('verify'); }, 1500);
@@ -153,7 +149,7 @@ const CommonLogin = () => {
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/verify-otp`, { 
                 email: forgotEmail.trim(), 
                 otp: forgotOtp.trim() 
-            }, { withCredentials: true });
+            });
             
             setFlowView('reset');
         } catch (err) {
@@ -175,7 +171,7 @@ const CommonLogin = () => {
                 email: forgotEmail.trim(), 
                 role: loginRole, 
                 newPassword: forgotNewPwd
-            }, { withCredentials: true });
+            });
             
             setSuccessMsg('Password has been reset successfully!');
             setTimeout(() => {

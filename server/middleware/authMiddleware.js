@@ -1,25 +1,20 @@
 import jwt from 'jsonwebtoken';
 
 export const authenticateToken = (req, res, next) => {
-    // FIX 2: Check Header FIRST (Handles LocalStorage Bearer tokens), Fallback to Cookie SECOND
+    const authHeader = req.headers['authorization'];
     let token = null;
 
-    const authHeader = req.headers['authorization'];
     if (authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.split(' ')[1];
     }
 
-    if (!token && req.cookies) {
-        token = req.cookies.token || req.cookies.authToken;
-    }
-
     if (!token) {
-        return res.status(401).json({ message: 'Authentication required. No valid token or cookie found.' });
+        return res.status(401).json({ message: 'Authentication required. No valid token found.' });
     }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded; // Attach user info to request
+        req.user = decoded; 
         next();
     } catch (error) {
         console.error('JWT Verification Error:', error.message);

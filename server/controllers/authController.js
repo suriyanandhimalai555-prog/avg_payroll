@@ -9,11 +9,11 @@ import rateLimit from 'express-rate-limit';
 dotenv.config();
 
 // ============================================================
-// RATE LIMITING MIDDLEWARE (Max 3 requests per 30 seconds)
+// RATE LIMITING MIDDLEWARE
 // ============================================================
 export const loginRateLimiter = rateLimit({
-    windowMs: 30 * 1000, // 30 seconds
-    max: 3, // Limit each IP to 3 login requests per windowMs
+    windowMs: 30 * 1000,
+    max: 3, 
     message: { message: 'Too many login attempts. Please wait 30 seconds before trying again.' },
     standardHeaders: true, 
     legacyHeaders: false, 
@@ -29,7 +29,6 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-// Helper to auto-create OTP table for cluster-safe storage
 const ensureOtpTableExists = async () => {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS password_reset_otps (
@@ -53,60 +52,36 @@ export const activateAccount = async (req, res) => {
     try {
         const { token, password } = req.body ?? {};
 
-        if (
-            typeof token !== 'string' ||
-            !token ||
-            typeof password !== 'string' ||
-            password.length < 12 ||
-            password.length > 128
-        ) {
-            return res.status(400).json({
-                message: 'A valid activation link and a password of 12–128 characters are required.'
-            });
+        if (!token || !password || password.length < 12 || password.length > 128) {
+            return res.status(400).json({ message: 'A valid activation link and a password of 12–128 characters are required.' });
         }
 
         const identity = verifyActivationToken(token);
-
         if (!identity) {
-            return res.status(400).json({
-                message: 'Activation link is invalid or expired. Request a new invitation.'
-            });
+            return res.status(400).json({ message: 'Activation link is invalid or expired. Request a new invitation.' });
         }
 
         const targetTable = getTableByRole(identity.role);
-
         if (!targetTable || identity.role === 'superadmin') {
-            return res.status(400).json({
-                message: 'Invalid activation link.'
-            });
+            return res.status(400).json({ message: 'Invalid activation link.' });
         }
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const result = await pool.query(
-            `UPDATE ${targetTable}
-             SET password = $1, status = 'Active'
-             WHERE LOWER(email) = $2
-               AND (password IS NULL OR password = '')
-             RETURNING email`,
+            `UPDATE ${targetTable} SET password = $1, status = 'Active' WHERE LOWER(email) = $2 AND (password IS NULL OR password = '') RETURNING email`,
             [hashedPassword, identity.email]
         );
 
         if (result.rowCount !== 1) {
-            return res.status(400).json({
-                message: 'Activation link is invalid, already used, or the account is unavailable.'
-            });
+            return res.status(400).json({ message: 'Activation link is invalid, already used, or the account is unavailable.' });
         }
 
-        return res.status(200).json({
-            message: 'Account activated successfully.'
-        });
+        return res.status(200).json({ message: 'Account activated successfully.' });
     } catch (error) {
         console.error('Activation Error:', error.message);
-        return res.status(500).json({
-            message: 'Server error during activation.'
-        });
+        return res.status(500).json({ message: 'Server error during activation.' });
     }
 };
 
@@ -114,16 +89,8 @@ export const login = async (req, res) => {
     try {
         const { identifier, password, role } = req.body;
 
-        if (
-            typeof identifier !== 'string' ||
-            !identifier.trim() ||
-            typeof password !== 'string' ||
-            !password ||
-            !['superadmin', 'hr', 'manager', 'employee'].includes(role)
-        ) {
-            return res.status(400).json({
-                message: 'Identifier, password, and a valid login role are required.'
-            });
+        if (!identifier?.trim() || !password || !['superadmin', 'hr', 'manager', 'employee'].includes(role)) {
+            return res.status(400).json({ message: 'Identifier, password, and a valid login role are required.' });
         }
 
         let values = [identifier.trim()];
@@ -138,11 +105,8 @@ export const login = async (req, res) => {
                 try {
                     result = await pool.query(`SELECT * FROM sa_managers WHERE email ILIKE $1 OR manager_id ILIKE $1`, values);
                 } catch (e) {
-                    if (e.code === '42703') { // undefined_column fallback
-                        result = await pool.query(`SELECT * FROM sa_managers WHERE email ILIKE $1`, values);
-                    } else {
-                        throw e;
-                    }
+                    if (e.code === '42703') result = await pool.query(`SELECT * FROM sa_managers WHERE email ILIKE $1`, values);
+                    else throw e;
                 }
             } else if (role === 'employee') {
                 result = await pool.query(`SELECT * FROM sa_employees WHERE email ILIKE $1 OR employee_id ILIKE $1`, values);
@@ -160,20 +124,13 @@ export const login = async (req, res) => {
 
         const user = result.rows[0];
 
-        if (user.status !== 'Active') {
-            return res.status(403).json({ message: `Account is ${user.status}. Please contact administrator.` });
-        }
-        if (!user.password) {
-            return res.status(403).json({ message: 'Account not activated. Please check your email to set a password.' });
-        }
+        if (user.status !== 'Active') return res.status(403).json({ message: `Account is ${user.status}. Please contact administrator.` });
+        if (!user.password) return res.status(403).json({ message: 'Account not activated. Please check your email to set a password.' });
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(401).json({ message: 'Invalid credentials.' });
-        }
+        if (!isMatch) return res.status(401).json({ message: 'Invalid credentials.' });
 
         delete user.password;
-
         if (role === 'superadmin') {
             user.first_name = user.full_name;
             user.last_name = '';
@@ -181,10 +138,7 @@ export const login = async (req, res) => {
 
         const userPayload = { ...user, role: role };
 
-        if (!process.env.JWT_SECRET) {
-            console.error("CRITICAL: JWT_SECRET is missing from the environment variables.");
-            return res.status(500).json({ message: 'Internal server configuration error.' });
-        }
+        if (!process.env.JWT_SECRET) return res.status(500).json({ message: 'Internal server configuration error.' });
 
         const token = jwt.sign(
             { id: user.id, role: role, email: user.email },
@@ -192,17 +146,9 @@ export const login = async (req, res) => {
             { expiresIn: '7d' } 
         );
 
-        // Retain HttpOnly Cookie for Web fallback
-        res.cookie('token', token, {
-            httpOnly: true, 
-            secure: process.env.NODE_ENV === 'production', 
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', 
-            maxAge: 7 * 24 * 60 * 60 * 1000 
-        });
-
         // ============================================================
-        // PRO FIX: Inject the token directly into the JSON body 
-        // for Mobile App Devs and Frontend LocalStorage saving
+        // PURE STATELESS BEARER AUTH
+        // Removed cookies. App and Web dev rely on token in response.
         // ============================================================
         res.status(200).json({
             message: 'Login successful',
@@ -232,34 +178,19 @@ export const requestOtp = async (req, res) => {
         await ensureOtpTableExists();
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiry = Date.now() + 10 * 60 * 1000; // 10 mins
+        const expiry = Date.now() + 10 * 60 * 1000;
 
         await pool.query(`
             INSERT INTO password_reset_otps (email, otp, expiry, verified) 
             VALUES ($1, $2, $3, false)
-            ON CONFLICT (email) DO UPDATE 
-            SET otp = EXCLUDED.otp, expiry = EXCLUDED.expiry, verified = false
+            ON CONFLICT (email) DO UPDATE SET otp = EXCLUDED.otp, expiry = EXCLUDED.expiry, verified = false
         `, [safeEmail, otp, expiry]);
 
         const mailOptions = {
             from: `"AVG Portal Security" <${process.env.EMAIL_USER}>`,
             to: safeEmail,
             subject: 'Password Reset OTP - AVG Portal',
-            html: `
-                <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-                    <div style="background-color: #0437cc; padding: 20px; text-align: center;">
-                        <h2 style="color: #ffffff; margin: 0;">Password Reset Request</h2>
-                    </div>
-                    <div style="padding: 30px; background-color: #ffffff; text-align: center;">
-                        <p style="color: #475569; font-size: 16px;">Hello ${userRes.rows[0].fname},</p>
-                        <p style="color: #475569; font-size: 16px;">Your One-Time Password (OTP) to reset your account password is:</p>
-                        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #f77704;">
-                            ${otp}
-                        </div>
-                        <p style="color: #94a3b8; font-size: 12px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
-                    </div>
-                </div>
-            `
+            html: `<div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;"><div style="background-color: #0437cc; padding: 20px; text-align: center;"><h2 style="color: #ffffff; margin: 0;">Password Reset Request</h2></div><div style="padding: 30px; background-color: #ffffff; text-align: center;"><p style="color: #475569; font-size: 16px;">Hello ${userRes.rows[0].fname},</p><p style="color: #475569; font-size: 16px;">Your One-Time Password (OTP) to reset your account password is:</p><div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #f77704;">${otp}</div><p style="color: #94a3b8; font-size: 12px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p></div></div>`
         };
 
         await transporter.sendMail(mailOptions);
@@ -276,7 +207,6 @@ export const verifyOtp = async (req, res) => {
         const safeEmail = email.trim().toLowerCase();
         
         await ensureOtpTableExists();
-        
         const result = await pool.query(`SELECT * FROM password_reset_otps WHERE email = $1`, [safeEmail]);
         const storedRecord = result.rows[0];
 
@@ -285,9 +215,7 @@ export const verifyOtp = async (req, res) => {
             await pool.query(`DELETE FROM password_reset_otps WHERE email = $1`, [safeEmail]);
             return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
         }
-        if (storedRecord.otp !== otp.trim()) {
-            return res.status(400).json({ message: 'Incorrect OTP. Please try again.' });
-        }
+        if (storedRecord.otp !== otp.trim()) return res.status(400).json({ message: 'Incorrect OTP. Please try again.' });
 
         await pool.query(`UPDATE password_reset_otps SET verified = true WHERE email = $1`, [safeEmail]);
         res.status(200).json({ message: 'OTP verified successfully.' });
@@ -301,87 +229,32 @@ export const resetPassword = async (req, res) => {
     try {
         const { email, role, newPassword } = req.body ?? {};
 
-        if (
-            typeof email !== 'string' ||
-            !email.trim() ||
-            typeof role !== 'string' ||
-            !['employee', 'hr', 'manager', 'superadmin'].includes(role) ||
-            typeof newPassword !== 'string' ||
-            newPassword.length < 12 ||
-            newPassword.length > 128
-        ) {
-            return res.status(400).json({
-                message: 'A valid email, account role, and password of 12–128 characters are required.'
-            });
+        if (!email?.trim() || !role || !newPassword || newPassword.length < 12 || newPassword.length > 128) {
+            return res.status(400).json({ message: 'A valid email, account role, and password of 12–128 characters are required.' });
         }
 
         const safeEmail = email.trim().toLowerCase();
         const targetTable = getTableByRole(role);
-
-        if (!targetTable) {
-            return res.status(400).json({ message: 'Invalid account role.' });
-        }
+        if (!targetTable) return res.status(400).json({ message: 'Invalid account role.' });
 
         await ensureOtpTableExists();
-
-        const otpResult = await pool.query(
-            `SELECT verified, expiry
-             FROM password_reset_otps
-             WHERE email = $1`,
-            [safeEmail]
-        );
-
+        const otpResult = await pool.query(`SELECT verified, expiry FROM password_reset_otps WHERE email = $1`, [safeEmail]);
         const otpRecord = otpResult.rows[0];
 
-        if (!otpRecord || !otpRecord.verified) {
-            return res.status(403).json({
-                message: 'Unauthorized reset request. Please verify OTP first.'
-            });
-        }
+        if (!otpRecord || !otpRecord.verified) return res.status(403).json({ message: 'Unauthorized reset request. Please verify OTP first.' });
 
-        if (
-            !Number.isFinite(Number(otpRecord.expiry)) ||
-            Date.now() > Number(otpRecord.expiry)
-        ) {
-            await pool.query(
-                `DELETE FROM password_reset_otps WHERE email = $1`,
-                [safeEmail]
-            );
-
-            return res.status(400).json({
-                message: 'OTP has expired. Please request and verify a new OTP.'
-            });
-        }
-
-        const accountTables = ['sa_superadmins', 'sa_hr_users', 'sa_managers', 'sa_employees'];
-        const matchingTables = [];
-
-        for (const table of accountTables) {
-            const accountResult = await pool.query(
-                `SELECT 1 FROM ${table} WHERE LOWER(email) = $1 LIMIT 1`,
-                [safeEmail]
-            );
-            if (accountResult.rows.length > 0) matchingTables.push(table);
-        }
-
-        if (matchingTables.length !== 1 || matchingTables[0] !== targetTable) {
-            return res.status(400).json({ message: 'The account role could not be verified. Request a new password-reset OTP.' });
+        if (!Number.isFinite(Number(otpRecord.expiry)) || Date.now() > Number(otpRecord.expiry)) {
+            await pool.query(`DELETE FROM password_reset_otps WHERE email = $1`, [safeEmail]);
+            return res.status(400).json({ message: 'OTP has expired. Please request and verify a new OTP.' });
         }
 
         const salt = await bcrypt.genSalt(10);
         const hashedPwd = await bcrypt.hash(newPassword, salt);
 
-        const updateResult = await pool.query(
-            `UPDATE ${targetTable} SET password = $1 WHERE LOWER(email) = $2 RETURNING email`,
-            [hashedPwd, safeEmail]
-        );
-
-        if (updateResult.rowCount !== 1) {
-            return res.status(400).json({ message: 'Password could not be reset for this account.' });
-        }
+        const updateResult = await pool.query(`UPDATE ${targetTable} SET password = $1 WHERE LOWER(email) = $2 RETURNING email`, [hashedPwd, safeEmail]);
+        if (updateResult.rowCount !== 1) return res.status(400).json({ message: 'Password could not be reset for this account.' });
 
         await pool.query(`DELETE FROM password_reset_otps WHERE email = $1`, [safeEmail]);
-
         return res.status(200).json({ message: 'Password has been reset successfully.' });
     } catch (error) {
         console.error('Reset Password Error:', error.message);
@@ -396,40 +269,23 @@ export const changePassword = async (req, res) => {
         const { currentPassword, newPassword } = req.body || {};
 
         const targetTable = getTableByRole(role);
+        if (!email || !targetTable) return res.status(401).json({ message: 'Authentication required.' });
 
-        if (!email || !targetTable) {
-            return res.status(401).json({ message: 'Authentication required.' });
-        }
-
-        if (
-            typeof currentPassword !== 'string' ||
-            typeof newPassword !== 'string' ||
-            newPassword.length < 12 ||
-            newPassword.length > 128
-        ) {
+        if (!currentPassword || !newPassword || newPassword.length < 12 || newPassword.length > 128) {
             return res.status(400).json({ message: 'Enter your current password and a new password between 12 and 128 characters.' });
         }
 
-        const userRes = await pool.query(
-            `SELECT password FROM ${targetTable} WHERE email ILIKE $1 LIMIT 1`,
-            [email.trim()]
-        );
-
+        const userRes = await pool.query(`SELECT password FROM ${targetTable} WHERE email ILIKE $1 LIMIT 1`, [email.trim()]);
         if (userRes.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
 
         const user = userRes.rows[0];
         const isMatch = await bcrypt.compare(currentPassword, user.password);
-
         if (!isMatch) return res.status(401).json({ message: 'The current password you entered is incorrect.' });
 
         const salt = await bcrypt.genSalt(10);
         const hashedPwd = await bcrypt.hash(newPassword, salt);
 
-        await pool.query(
-            `UPDATE ${targetTable} SET password = $1 WHERE email ILIKE $2`,
-            [hashedPwd, email.trim()]
-        );
-
+        await pool.query(`UPDATE ${targetTable} SET password = $1 WHERE email ILIKE $2`, [hashedPwd, email.trim()]);
         return res.status(200).json({ message: 'Password updated successfully.' });
     } catch (error) {
         console.error('Change Password Error:', error);
@@ -439,17 +295,11 @@ export const changePassword = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
     try {
-        if (req.user?.role !== 'superadmin' || !req.user.email) {
-            return res.status(403).json({ message: 'You are not authorized to update this profile.' });
-        }
+        if (req.user?.role !== 'superadmin' || !req.user.email) return res.status(403).json({ message: 'You are not authorized to update this profile.' });
 
         const { fullName, phone, profilePhoto } = req.body ?? {};
 
-        if (
-            typeof fullName !== 'string' || !fullName.trim() ||
-            typeof phone !== 'string' || !phone.trim() ||
-            (profilePhoto !== undefined && profilePhoto !== null && typeof profilePhoto !== 'string')
-        ) {
+        if (!fullName?.trim() || !phone?.trim() || (profilePhoto !== undefined && profilePhoto !== null && typeof profilePhoto !== 'string')) {
             return res.status(400).json({ message: 'Valid name, phone number, and profile photo are required.' });
         }
 
@@ -462,14 +312,10 @@ export const updateProfile = async (req, res) => {
 
         const user = result.rows[0];
         delete user.password;
-
         user.first_name = user.full_name;
         user.last_name = '';
 
-        return res.status(200).json({
-            message: 'Profile updated successfully.',
-            user: { ...user, role: 'superadmin' }
-        });
+        return res.status(200).json({ message: 'Profile updated successfully.', user: { ...user, role: 'superadmin' } });
     } catch (error) {
         console.error('Update Profile Error:', error.message);
         return res.status(500).json({ message: 'Server error while updating profile.' });
@@ -477,10 +323,6 @@ export const updateProfile = async (req, res) => {
 };
 
 export const logout = (req, res) => {
-    res.clearCookie('token', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-    });
+    // Pure token-based logout requires no server actions besides returning success
     res.status(200).json({ message: 'Logged out successfully' });
 };

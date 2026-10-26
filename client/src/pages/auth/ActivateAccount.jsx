@@ -4,10 +4,9 @@ import axios from 'axios';
 import { FaLock, FaCheckCircle, FaExclamationCircle, FaEye, FaEyeSlash, FaKey, FaArrowRight } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 
-// Bulletproof Auth Config
+// Bulletproof Stateless Auth Config
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
