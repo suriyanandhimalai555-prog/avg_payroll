@@ -9,6 +9,7 @@ import {
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
+import { useAuth } from '../../context/AuthContext';
 
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full min-w-0">
@@ -22,7 +23,16 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-const HREmployeeManagementCom = () => {
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => ({
+    headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+    }
+});
+
+const HREmployeeCom = () => {
+    const { user } = useAuth();
     const currentYear = new Date().getFullYear();
 
     const INITIAL_FORM_STATE = {
@@ -64,17 +74,23 @@ const HREmployeeManagementCom = () => {
     const isGrossMatchingMonthly = liveGross === parseNum(formData.monthlySalary);
 
     const fetchData = async () => {
+        if (!localStorage.getItem('token') || !user) {
+            setIsLoading(false);
+            return;
+        }
+
         setIsLoading(true);
         try {
+            // Protected catch block array
             const [compRes, branchRes, deptRes, desigRes, locRes, shiftRes, mgrRes, empRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
@@ -91,9 +107,13 @@ const HREmployeeManagementCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        fetchData();
-    }, []);
+        if (user) {
+            fetchData();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]);
 
     const selectedCompanyObj = companies.find(c => c.company_name === formData.company);
     const filteredBranches = branches.filter(b => b.company_id === selectedCompanyObj?.id);
@@ -185,11 +205,11 @@ const HREmployeeManagementCom = () => {
             };
 
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-employees/${editId}`, payload);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-employees/${editId}`, payload, getAuthConfig());
                 setSuccessMsg('Employee profile updated successfully.');
                 handleCancelEdit();
             } else {
-                const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/create`, payload);
+                const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/create`, payload, getAuthConfig());
                 const createdId = response.data.employee?.employee_id || response.data.user?.employee_id || 'Assigned';
                 setSuccessMsg(`Employee "${formData.firstName}" created successfully with ID: ${createdId}!`);
                 setFormData(INITIAL_FORM_STATE);
@@ -265,7 +285,7 @@ const HREmployeeManagementCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to deactivate and remove this Employee?")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-employees/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-employees/${id}`, getAuthConfig());
             fetchData();
             setSuccessMsg('Employee removed successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
@@ -993,4 +1013,4 @@ const HREmployeeManagementCom = () => {
     );
 };
 
-export default HREmployeeManagementCom;
+export default HREmployeeCom;

@@ -12,6 +12,16 @@ import {
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const createImage = (url) =>
     new Promise((resolve, reject) => {
         const image = new Image();
@@ -111,9 +121,14 @@ const HRMyProfileCom = () => {
     };
 
     const fetchProfile = async () => {
-        if (!hrIdentifier) return;
+        if (!hrIdentifier || !localStorage.getItem('token')) {
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`, getAuthConfig());
             const data = response.data;
 
             setProfileData({
@@ -182,17 +197,20 @@ const HRMyProfileCom = () => {
                 }
             });
 
-            setLoading(false);
         } catch (error) {
             console.error("Error fetching HR profile data", error);
+        } finally {
             setLoading(false);
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        if (hrIdentifier) fetchProfile();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hrIdentifier]);
+        if (user && hrIdentifier) {
+            fetchProfile();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user, hrIdentifier]);
 
     const toggleEdit = (section) => setIsEditing({ ...isEditing, [section]: true });
 
@@ -210,9 +228,10 @@ const HRMyProfileCom = () => {
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`, {
                 section: section,
                 data: editForm[section]
-            }, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
+            }, getAuthConfig());
+            
             const updatedUser = { ...response.data.user, role: 'hr' };
-            login(updatedUser, sessionStorage.getItem('token'));
+            login(updatedUser); // Token managed automatically
             setIsEditing({ ...isEditing, [section]: false });
             fetchProfile();
         } catch (error) {
@@ -248,10 +267,10 @@ const HRMyProfileCom = () => {
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/hr-profile/${hrIdentifier}`, {
                 section: 'photo',
                 data: { profile_photo: finalCroppedBase64 }
-            }, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
+            }, getAuthConfig());
 
             const updatedUser = { ...response.data.user, role: 'hr' };
-            login(updatedUser, sessionStorage.getItem('token'));
+            login(updatedUser); // Token managed automatically
             setPhotoModalOpen(false);
             fetchProfile();
         } catch (error) {
@@ -657,6 +676,7 @@ const HRMyProfileCom = () => {
                     />
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1">
+
                         <div className={`sm:col-span-2 bg-gradient-to-br from-blue-50 to-blue-50/50 border border-blue-100 p-3.5 rounded-xl min-w-0 ${isEditing.bank ? 'ring-1 ring-[#0437cc]/20 bg-white' : ''}`}>
                             <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1.5">UAN No (Universal Account Number)</p>
                             {isEditing.bank ? (
