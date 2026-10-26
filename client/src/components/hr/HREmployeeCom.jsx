@@ -23,13 +23,16 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
-const getAuthConfig = () => ({
-    headers: {
-        'Content-Type': 'application/json',
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
-    }
-});
+// Bulletproof Stateless Auth Config (Checks both Session & Local Storage)
+const getAuthConfig = () => {
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+    };
+};
 
 const HREmployeeCom = () => {
     const { user } = useAuth();
@@ -45,8 +48,8 @@ const HREmployeeCom = () => {
     };
 
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
-    const [employees, setEmployees] = useState([]);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [errors, setErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
@@ -56,16 +59,17 @@ const HREmployeeCom = () => {
     const [shifts, setShifts] = useState([]);
     const [managers, setManagers] = useState([]);
 
-    const [errors, setErrors] = useState({});
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
-    const [editId, setEditId] = useState(null);
-    const [successMsg, setSuccessMsg] = useState('');
-    const [apiError, setApiError] = useState('');
-
+    const [editEmployeeId, setEditEmployeeId] = useState(null);
     const [viewEmployee, setViewEmployee] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+
+    const [employees, setEmployees] = useState([]);
+    const [isFetching, setIsFetching] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const [successMsg, setSuccessMsg] = useState('');
+    const [apiError, setApiError] = useState('');
 
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
     const liveGross = parseNum(formData.basic) + parseNum(formData.hra) + parseNum(formData.conveyance) + parseNum(formData.medical) + parseNum(formData.specialAllowance) + parseNum(formData.otherAllowances);
@@ -73,24 +77,16 @@ const HREmployeeCom = () => {
     const liveNet = liveGross - liveDeductions;
     const isGrossMatchingMonthly = liveGross === parseNum(formData.monthlySalary);
 
-    const fetchData = async () => {
-        if (!localStorage.getItem('token') || !user) {
-            setIsLoading(false);
-            return;
-        }
-
-        setIsLoading(true);
+    const fetchOrgData = async () => {
         try {
-            // Protected catch block array
-            const [compRes, branchRes, deptRes, desigRes, locRes, shiftRes, mgrRes, empRes] = await Promise.all([
+            const [compRes, branchRes, deptRes, desigRes, locRes, shiftRes, mgrRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig()).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`, getAuthConfig()).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
@@ -99,28 +95,58 @@ const HREmployeeCom = () => {
             setLocations(locRes.data || []);
             setShifts(shiftRes.data || []);
             setManagers(mgrRes.data || []);
-            setEmployees(empRes.data || []);
+            setApiError('');
         } catch (error) {
-            console.error('Failed to load employee data', error);
-        } finally {
-            setIsLoading(false);
+            console.error('Error fetching org data:', error);
+            if (error.response?.status === 401) {
+                setApiError('Session expired or unauthorized. Please log in again.');
+            }
         }
+    };
+
+    const fetchEmployees = async () => {
+        try {
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }));
+            setEmployees(response.data || []);
+        } catch (error) {
+            console.error('Error fetching employees:', error);
+            if (error.response?.status === 500) {
+                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
+            }
+        }
+    };
+
+    const fetchAllData = async () => {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        if (!token || !user) {
+            setIsFetching(false);
+            return;
+        }
+        
+        setIsFetching(true);
+        await Promise.all([fetchOrgData(), fetchEmployees()]);
+        setIsFetching(false);
     };
 
     // Guarded execution
     useEffect(() => {
-        if (user) {
-            fetchData();
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        if (user && token) {
+            fetchAllData();
+        } else {
+            setIsFetching(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const selectedCompanyObj = companies.find(c => c.company_name === formData.company);
     const filteredBranches = branches.filter(b => b.company_id === selectedCompanyObj?.id);
     const selectedBranchObj = filteredBranches.find(b => b.branch_name === formData.branch);
     const filteredDepartments = departments.filter(d => d.branch_id === selectedBranchObj?.id);
+    const filteredLocations = locations.filter(l => l.branch_id === selectedBranchObj?.id);
     const selectedDeptObj = filteredDepartments.find(d => d.department_name === formData.department);
     const filteredDesignations = designations.filter(des => des.department_id === selectedDeptObj?.id);
+    const availableShifts = shifts.filter(s => s.status === 'Active' && s.company_name === formData.company);
 
     const filteredEmployees = employees.filter(emp => {
         const fullName = `${emp.first_name || emp.firstName || ''} ${emp.last_name || emp.lastName || ''}`.toLowerCase();
@@ -136,11 +162,16 @@ const HREmployeeCom = () => {
         const { name, value } = e.target;
         let updates = { [name]: value };
 
-        if (name === 'company') { updates.branch = ''; updates.department = ''; updates.designation = ''; }
-        else if (name === 'branch') { updates.department = ''; updates.designation = ''; }
-        else if (name === 'department') { updates.designation = ''; }
+        if (name === 'company') {
+            updates.branch = ''; updates.department = ''; updates.location = ''; updates.designation = ''; updates.shift = '';
+        } else if (name === 'branch') {
+            updates.department = ''; updates.location = ''; updates.designation = '';
+        } else if (name === 'department') {
+            updates.designation = '';
+        }
 
         setFormData(prev => ({ ...prev, ...updates }));
+
         if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
         if (apiError) setApiError('');
     };
@@ -149,8 +180,8 @@ const HREmployeeCom = () => {
         let newErrors = {};
 
         const requiredFields = [
-            'firstName', 'lastName', 'email', 'phone', 'dob', 'gender', 'joiningDate',
-            'company', 'branch', 'department', 'designation', 'status',
+            'firstName', 'lastName', 'email', 'phone', 'dob', 'gender', 'address',
+            'employeeId', 'joiningDate', 'company', 'branch', 'department', 'designation', 'empType', 'location', 'shift', 'status',
             'ctc', 'monthlySalary', 'basic', 'hra', 'conveyance', 'medical', 'otherAllowances',
             'epf', 'uanNo',
             'bankName', 'accountHolder', 'accountNumber', 'ifsc'
@@ -178,9 +209,9 @@ const HREmployeeCom = () => {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleCancelEdit = () => {
+    const cancelEdit = () => {
         setIsEditing(false);
-        setEditId(null);
+        setEditEmployeeId(null);
         setFormData(INITIAL_FORM_STATE);
         setErrors({});
     };
@@ -205,16 +236,20 @@ const HREmployeeCom = () => {
             };
 
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-employees/${editId}`, payload, getAuthConfig());
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-employees/${editEmployeeId}`, payload, getAuthConfig());
                 setSuccessMsg('Employee profile updated successfully.');
-                handleCancelEdit();
+                cancelEdit();
             } else {
                 const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/create`, payload, getAuthConfig());
                 const createdId = response.data.employee?.employee_id || response.data.user?.employee_id || 'Assigned';
                 setSuccessMsg(`Employee "${formData.firstName}" created successfully with ID: ${createdId}!`);
                 setFormData(INITIAL_FORM_STATE);
             }
-            fetchData();
+            
+            setIsFetching(true);
+            await fetchEmployees();
+            setIsFetching(false);
+            
             setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
             setApiError(error.response?.data?.message || 'Failed to save employee record. Please try again.');
@@ -278,7 +313,7 @@ const HREmployeeCom = () => {
         });
 
         setIsEditing(true);
-        setEditId(emp.id);
+        setEditEmployeeId(emp.id);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -286,11 +321,13 @@ const HREmployeeCom = () => {
         if (!window.confirm("Are you sure you want to deactivate and remove this Employee?")) return;
         try {
             await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-employees/${id}`, getAuthConfig());
-            fetchData();
+            setIsFetching(true);
+            await fetchEmployees();
+            setIsFetching(false);
             setSuccessMsg('Employee removed successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete employee.');
+            alert('Failed to delete employee. Check authorization.');
         }
     };
 
@@ -310,7 +347,7 @@ const HREmployeeCom = () => {
     };
 
     // ==================== DESIGN-BASED SHIMMER SKELETON ====================
-    if (isLoading) {
+    if (isFetching && employees.length === 0 && companies.length === 0) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden animate-pulse">
                 {/* Sticky Header Shimmer */}
@@ -646,7 +683,7 @@ const HREmployeeCom = () => {
                             ? 'bg-gradient-to-br from-[#f77704] to-orange-500 shadow-[#f77704]/25'
                             : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] shadow-[#0437cc]/25'
                             }`}>
-                            <FaUsers className="text-lg sm:text-xl" />
+                            {isEditing ? <FaUser className="text-lg sm:text-xl" /> : <FaUsers className="text-lg sm:text-xl" />}
                         </span>
                         <div className="min-w-0">
                             <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border mb-1.5 transition-colors ${isEditing ? 'bg-orange-50 border-orange-100' : 'bg-blue-50 border-blue-100'
@@ -657,17 +694,17 @@ const HREmployeeCom = () => {
                                 </span>
                             </div>
                             <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">
-                                {isEditing ? 'Edit Employee' : 'Add New Employee'}
+                                {isEditing ? 'Edit Employee Record' : 'Add New Employee'}
                             </h1>
                             <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">
-                                {isEditing ? 'Update employee profile & salary structure' : 'Onboard, view, and manage company employees'}
+                                {isEditing ? 'Update employee details' : 'Onboard a new team member'}
                             </p>
                         </div>
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
                         {isEditing ? (
-                            <Button variant="ghost" icon={FaTimes} onClick={handleCancelEdit} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Cancel</Button>
+                            <Button variant="ghost" icon={FaTimes} onClick={cancelEdit} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Cancel</Button>
                         ) : (
                             <Button variant="ghost" icon={FaTimes} onClick={() => setFormData(INITIAL_FORM_STATE)} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Clear</Button>
                         )}
@@ -718,13 +755,11 @@ const HREmployeeCom = () => {
                         <FieldWrapper error={errors.phone}><Input label={<>Contact Number <span className="text-red-500">*</span></>} type="tel" name="phone" icon={FaPhoneAlt} value={formData.phone} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.dob}><Input label={<>Date of Birth <span className="text-red-500">*</span></>} type="date" name="dob" value={formData.dob} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.gender}>
-                            <Select label={<>Gender <span className="text-red-500">*</span></>} name="gender" value={formData.gender} onChange={handleInputChange} options={[
-                                { value: '', label: 'Select Gender' }, { value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }
-                            ]} />
+                            <Select label={<>Gender <span className="text-red-500">*</span></>} name="gender" value={formData.gender} onChange={handleInputChange} options={[{ value: '', label: 'Select Gender' }, { value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }]} />
                         </FieldWrapper>
                         <div className="sm:col-span-2 lg:col-span-3">
                             <FieldWrapper error={errors.address}>
-                                <Input label="Residential Address" name="address" placeholder="Full residential address" value={formData.address} onChange={handleInputChange} />
+                                <Input label={<>Residential Address <span className="text-red-500">*</span></>} name="address" value={formData.address} onChange={handleInputChange} />
                             </FieldWrapper>
                         </div>
                     </div>
@@ -743,7 +778,11 @@ const HREmployeeCom = () => {
                         </div>
                     </div>
                     <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                        <Input label="Employee ID" name="employeeId" value={formData.employeeId} disabled className="bg-slate-100 font-mono text-[#0437cc]" />
+                        {/* MANUAL EMPLOYEE ID INPUT */}
+                        <FieldWrapper error={errors.employeeId}>
+                            <Input label={<>Employee ID <span className="text-red-500">*</span></>} name="employeeId" value={formData.employeeId} onChange={handleInputChange} placeholder="e.g. AVG-2026-001" className="font-mono" />
+                        </FieldWrapper>
+
                         <FieldWrapper error={errors.joiningDate}><Input label={<>Joining Date <span className="text-red-500">*</span></>} type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} /></FieldWrapper>
 
                         <FieldWrapper error={errors.company}>
@@ -761,32 +800,27 @@ const HREmployeeCom = () => {
                                 options={[{ value: '', label: 'Select Department' }, ...filteredDepartments.map(d => ({ value: d.department_name, label: d.department_name }))]}
                             />
                         </FieldWrapper>
+                        <FieldWrapper error={errors.location}>
+                            <Select label={<>Location <span className="text-red-500">*</span></>} name="location" value={formData.location} onChange={handleInputChange} disabled={!formData.branch}
+                                options={[{ value: '', label: 'Select Location' }, ...filteredLocations.map(l => ({ value: l.location_name, label: l.location_name }))]}
+                            />
+                        </FieldWrapper>
                         <FieldWrapper error={errors.designation}>
                             <Select label={<>Designation <span className="text-red-500">*</span></>} name="designation" value={formData.designation} onChange={handleInputChange} disabled={!formData.department}
                                 options={[{ value: '', label: 'Select Designation' }, ...filteredDesignations.map(d => ({ value: d.designation_name, label: d.designation_name }))]}
                             />
                         </FieldWrapper>
-                        <FieldWrapper error={errors.empType}>
-                            <Select label="Employment Type" name="empType" value={formData.empType} onChange={handleInputChange}
-                                options={[
-                                    { value: 'Full-Time', label: 'Full-Time' },
-                                    { value: 'Part-Time', label: 'Part-Time' },
-                                    { value: 'Contract', label: 'Contract' },
-                                    { value: 'Intern', label: 'Intern' }
-                                ]}
-                            />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.location}>
-                            <Select label="Work Location" name="location" value={formData.location} onChange={handleInputChange}
-                                options={[
-                                    { value: '', label: 'Select Location' },
-                                    ...locations.map(l => ({ value: l.location_name || l.city || l.branch_name, label: l.location_name || l.city || l.branch_name }))
-                                ]}
-                            />
-                        </FieldWrapper>
                         <FieldWrapper error={errors.shift}>
-                            <Select label="Work Shift" name="shift" value={formData.shift} onChange={handleInputChange}
-                                options={[{ value: '', label: 'Select Shift' }, ...shifts.map(s => ({ value: s.shift_name, label: s.shift_name }))]}
+                            <Select
+                                label={<>Assigned Work Shift <span className="text-red-500">*</span></>}
+                                name="shift"
+                                value={formData.shift}
+                                onChange={handleInputChange}
+                                disabled={!formData.company}
+                                options={[
+                                    { value: '', label: formData.company ? 'Select Target Shift' : 'Select Company First' },
+                                    ...availableShifts.map(s => ({ value: s.shift_name, label: `${s.shift_name} | ${s.shift_type}` }))
+                                ]}
                             />
                         </FieldWrapper>
                         <FieldWrapper error={errors.manager}>
@@ -800,15 +834,17 @@ const HREmployeeCom = () => {
                                 ]}
                             />
                         </FieldWrapper>
+                        <FieldWrapper error={errors.empType}>
+                            <Select label={<>Employment Type <span className="text-red-500">*</span></>} name="empType" value={formData.empType} onChange={handleInputChange} options={[{ value: '', label: 'Select' }, { value: 'Full Time', label: 'Full Time' }, { value: 'Contract', label: 'Contract' }]} />
+                        </FieldWrapper>
+
                         <FieldWrapper error={errors.status}>
-                            <Select label={<>Account Status <span className="text-red-500">*</span></>} name="status" value={formData.status} onChange={handleInputChange}
-                                options={[{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }, { value: 'Pending Activation', label: 'Pending Activation' }]}
-                            />
+                            <Select label={<>Account Status <span className="text-red-500">*</span></>} name="status" value={formData.status} onChange={handleInputChange} options={[{ value: 'Pending Activation', label: 'Pending Activation' }, { value: 'Active', label: 'Active' }, { value: 'Suspended', label: 'Suspended' }, { value: 'Inactive', label: 'Inactive' }]} />
                         </FieldWrapper>
                     </div>
                 </div>
 
-                {/* 3. Salary */}
+                {/* 3. Salary Configuration */}
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-emerald-100/40 rounded-full blur-3xl pointer-events-none"></div>
                     <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -830,7 +866,7 @@ const HREmployeeCom = () => {
                     <div className="relative p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
 
                         {/* Earnings */}
-                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-5 rounded-2xl border border-green-100 overflow-hidden">
+                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-4 rounded-2xl border border-green-100 overflow-hidden">
                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
                             <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-green-100">
                                 <div className="flex items-center gap-2">
@@ -854,14 +890,14 @@ const HREmployeeCom = () => {
                         </div>
 
                         {/* Deductions */}
-                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-5 rounded-2xl border border-red-100 overflow-hidden">
+                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-4 rounded-2xl border border-red-100 overflow-hidden">
                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
                             <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-red-100">
                                 <div className="flex items-center gap-2">
                                     <span className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
                                         <FaMinusCircle className="text-red-600 text-xs" />
                                     </span>
-                                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wider">Deductions</h3>
+                                    <h4 className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Deductions</h4>
                                 </div>
                                 <span className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 tabular-nums">-{formatCurrency(liveDeductions)}</span>
                             </div>
@@ -877,7 +913,7 @@ const HREmployeeCom = () => {
                     </div>
                 </div>
 
-                {/* 4. Bank */}
+                {/* 4. Bank Information */}
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-100/40 rounded-full blur-3xl pointer-events-none"></div>
                     <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
@@ -901,17 +937,17 @@ const HREmployeeCom = () => {
 
             {/* ==================== EMPLOYEES LIST ==================== */}
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+                <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
                 <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white shrink-0 shadow-md shadow-[#0437cc]/20">
                             <FaUsersCog className="text-sm" />
                         </span>
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Active Employees Directory</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredEmployees.length} {filteredEmployees.length === 1 ? 'record' : 'records'} in system
+                                {filteredEmployees.length} of {employees.length} {employees.length === 1 ? 'record' : 'records'} in system
                             </p>
                         </div>
                     </div>
@@ -934,10 +970,15 @@ const HREmployeeCom = () => {
                 </div>
 
                 <div className="relative overflow-x-auto custom-scrollbar">
-                    {filteredEmployees.length === 0 ? (
+                    {isFetching ? (
+                        <div className="p-12 text-center">
+                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
+                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading employees…</p>
+                        </div>
+                    ) : filteredEmployees.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
-                                <FaUsersCog className="text-xl text-slate-300" />
+                                <FaUser className="text-xl text-slate-300" />
                             </div>
                             <p className="text-xs sm:text-sm font-semibold text-slate-400">
                                 {searchTerm ? 'No employees match your search criteria.' : 'No employees have been registered yet.'}
@@ -956,7 +997,7 @@ const HREmployeeCom = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredEmployees.map((emp, i) => (
-                                    <tr key={i} className={`transition-colors group ${isEditing && editId === emp.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}>
+                                    <tr key={i} className={`transition-colors group ${isEditing && editEmployeeId === emp.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}>
                                         <td className="px-5 py-4">
                                             <div className="flex items-center gap-3 min-w-0">
                                                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
@@ -983,15 +1024,17 @@ const HREmployeeCom = () => {
                                         <td className="px-5 py-4 text-center">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${emp.status === 'Active'
                                                 ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                : 'text-red-700 bg-red-50 border-red-200'
+                                                : emp.status === 'Pending Activation'
+                                                    ? 'text-orange-700 bg-orange-50 border-orange-200'
+                                                    : 'text-red-700 bg-red-50 border-red-200'
                                                 }`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500' : emp.status === 'Pending Activation' ? 'bg-orange-500' : 'bg-red-500'}`}></span>
                                                 {emp.status || 'Active'}
                                             </span>
                                         </td>
                                         <td className="px-5 py-4 text-right">
                                             <div className="flex gap-1 justify-end">
-                                                <button onClick={() => handleView(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50" title="View Detailed Dossier">
+                                                <button onClick={() => handleView(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50" title="View Dossier">
                                                     <FaEye className="text-xs" />
                                                 </button>
                                                 <button onClick={() => handleEdit(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50" title="Edit Employee">
