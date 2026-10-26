@@ -62,7 +62,6 @@ const EmployeeAttendanceCom = () => {
             return;
         }
         try {
-            // FIX: Added getAuthConfig() and extracted data accurately based on common Express payloads
             const [attRes, profRes, shiftRes, holRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: {} })),
@@ -101,10 +100,17 @@ const EmployeeAttendanceCom = () => {
             });
             setCompletedMsToday(previousMs);
 
-            // FIX: Gracefully evaluate shift array regardless of whether backend returned an array or nested object
+            // Robustly match the employee's shift name to the shift rules
             const employeeShiftName = profRes.data?.shift;
             const allShifts = shiftRes.data?.shifts || shiftRes.data || [];
-            const assignedShift = Array.isArray(allShifts) ? (allShifts.find(s => s.shift_name === employeeShiftName) || allShifts[0] || null) : null;
+            let assignedShift = null;
+            
+            if (Array.isArray(allShifts)) {
+                assignedShift = allShifts.find(s => s.shift_name?.toLowerCase() === employeeShiftName?.toLowerCase());
+                if (!assignedShift && allShifts.length > 0) {
+                    assignedShift = allShifts[0]; // Fallback to default company shift
+                }
+            }
             
             setShiftDetails(assignedShift);
 
@@ -278,7 +284,6 @@ const EmployeeAttendanceCom = () => {
         setIsEditEodModalOpen(true);
     };
 
-    // Build standard month options based on the past 12 months
     const monthOptions = useMemo(() => {
         const options = [];
         const curr = new Date();
@@ -291,7 +296,7 @@ const EmployeeAttendanceCom = () => {
     }, [selectedMonthYear]);
 
     // ====================================================================================
-    // ADVANCED DATE CONTINUITY GENERATOR
+    // ADVANCED DATE CONTINUITY & WEEKLY OFF GENERATOR
     // ====================================================================================
     const getDisplayedHistory = () => {
         let startDate, endDate;
@@ -316,10 +321,6 @@ const EmployeeAttendanceCom = () => {
             endDate = new Date(today);
         }
 
-        // ==================================================================
-        // ONBOARDING BOUNDARY LOGIC
-        // Prevent showing "Absent" for days before the employee joined.
-        // ==================================================================
         if (joiningDate && startDate < joiningDate) {
             startDate = new Date(joiningDate);
         }
@@ -363,14 +364,34 @@ const EmployeeAttendanceCom = () => {
                 total_hours_sum = `${hrs}:${mins} Hrs`;
             }
 
-            // Core Status Evaluation Logic
+            // Core Status Evaluation Logic: Accurately checks Even/Odd Saturdays
             let status = 'Absent';
             if (sessions.length > 0) {
                 status = late_minutes > 0 ? 'Late' : 'Present';
             } else if (holidayRecord) {
                 status = (holidayRecord.type === 'WEEKLY_OFF' || holidayRecord.type === 'Weekend Holiday') ? 'Week Off' : 'Holiday';
-            } else if (dateObj.getDay() === 0 || dateObj.getDay() === 6) {
-                status = 'Week Off'; // Fallback if weekend generation was not run
+            } else {
+                const dayOfWeek = dateObj.getDay();
+                if (dayOfWeek === 0) {
+                    // Sunday is universally a Week Off
+                    status = 'Week Off';
+                } else if (dayOfWeek === 6) {
+                    // Check if it is an Even Saturday (2nd or 4th of the month)
+                    const weekOfMonth = Math.ceil(dateObj.getDate() / 7);
+                    if (weekOfMonth === 2 || weekOfMonth === 4) {
+                        status = 'Week Off';
+                    } else {
+                        // Odd Saturdays (1st, 3rd, 5th) are Working Days. If no sessions exist, they are Absent.
+                        status = 'Absent';
+                    }
+                } else {
+                    status = 'Absent';
+                }
+            }
+
+            // Prevent marking future scheduled days as Absent
+            if (dateObj > new Date() && status === 'Absent') {
+                status = 'Scheduled';
             }
 
             return {
