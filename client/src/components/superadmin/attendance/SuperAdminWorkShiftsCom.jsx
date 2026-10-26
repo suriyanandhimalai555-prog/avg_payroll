@@ -9,6 +9,7 @@ import {
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
 import Select from '../../../components/common/Select';
+import { useAuth } from '../../../context/AuthContext';
 
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full min-w-0">
@@ -22,10 +23,9 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -34,6 +34,8 @@ const getAuthConfig = () => {
 };
 
 const SuperAdminWorkShiftsCom = () => {
+    const { user } = useAuth();
+    
     const INITIAL_FORM_STATE = {
         companyId: '',
         branchId: '',
@@ -106,9 +108,12 @@ const SuperAdminWorkShiftsCom = () => {
     };
 
     useEffect(() => {
-        fetchOrgData();
-        fetchShifts();
-    }, []);
+        if (user) {
+            fetchOrgData();
+            fetchShifts();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]);
 
     const filteredBranches = branches.filter(b => b.company_id === parseInt(formData.companyId));
     const filteredDepartments = departments.filter(d => d.branch_id === parseInt(formData.branchId));

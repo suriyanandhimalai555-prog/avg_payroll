@@ -55,6 +55,16 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminProfileCom = () => {
     const { user, login } = useAuth();
     const fileInputRef = useRef(null);
@@ -174,8 +184,6 @@ const SuperAdminProfileCom = () => {
         setIsSubmittingProfile(true);
 
         try {
-            const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-
             const response = await axios.put(
                 `${import.meta.env.VITE_API_URL}/api/auth/profile`,
                 {
@@ -183,14 +191,10 @@ const SuperAdminProfileCom = () => {
                     phone: profileData.phone,
                     profilePhoto: profileData.profilePhoto
                 },
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                }
+                getAuthConfig()
             );
 
-            login(response.data.user, sessionStorage.getItem('token') || localStorage.getItem('token'));
+            login(response.data.user);
 
             setSuccessMsg('Personal profile information updated successfully.');
             setTimeout(() => setSuccessMsg(''), 5000);

@@ -11,6 +11,16 @@ import {
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const EmployeeDashboardCom = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -89,14 +99,16 @@ const EmployeeDashboardCom = () => {
     };
 
     const fetchDashboardData = async () => {
-        if (!user?.employee_id) return;
+        if (!user || !user.employee_id) return;
+        const empIdStr = String(user.employee_id).trim();
+
         try {
             const [attRes, profRes, shiftRes, leaveBalRes, leaveReqRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`).catch(() => ({ data: { history: [] } })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } }).catch(() => ({ data: {} })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${user.employee_id}`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empIdStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig()).catch(() => ({ data: {} })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             const fetchedHistory = attRes.data?.history || [];
@@ -140,8 +152,10 @@ const EmployeeDashboardCom = () => {
     };
 
     useEffect(() => {
-        fetchDashboardData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (user && user.employee_id) {
+            fetchDashboardData();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     // Derived States
@@ -269,7 +283,7 @@ const EmployeeDashboardCom = () => {
                 todayDate: todayDate,
                 locationData: locationData,
                 deviceInfo: deviceData
-            });
+            }, getAuthConfig());
             await fetchDashboardData();
         } catch (error) {
             alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
@@ -298,7 +312,7 @@ const EmployeeDashboardCom = () => {
                 locationData: locationData,
                 deviceInfo: deviceData,
                 eodUpdate: eodInput
-            });
+            }, getAuthConfig());
 
             setIsEodModalOpen(false);
             setEodInput('');
@@ -586,7 +600,7 @@ const EmployeeDashboardCom = () => {
                             </div>
                         </div>
 
-                        {/* Legend - scrollable on very small screens */}
+                        {/* Legend */}
                         <div className="relative flex items-center gap-2 sm:gap-4 flex-wrap mb-3 sm:mb-4 text-[8px] sm:text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                             <span className="flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]"></span>
@@ -610,19 +624,17 @@ const EmployeeDashboardCom = () => {
                             </span>
                         </div>
 
-                        {/* Rings - 5 in view on mobile, centered vertically */}
+                        {/* Rings */}
                         <div className="relative flex-1 flex items-center py-2">
                             <div className="w-full grid grid-cols-5 gap-1 sm:gap-2 md:gap-3 lg:gap-4">
                                 {weeklyAttendance.map((day, i) => {
                                     const isToday = i === 4;
                                     const isActive = day.hrs === 'Active';
 
-                                    // Ring math
                                     const CIRC = 2 * Math.PI * 42;
                                     const progress = Math.max(0, Math.min(100, day.height)) / 100;
                                     const dashOffset = CIRC * (1 - progress);
 
-                                    // Status palette
                                     let gradFrom = '#cbd5e1';
                                     let gradTo = '#94a3b8';
                                     let pillBg = 'bg-slate-50';
@@ -648,7 +660,6 @@ const EmployeeDashboardCom = () => {
                                         pillDot = 'bg-red-500'; pillBorder = 'border-red-100';
                                     }
 
-                                    // Center text
                                     let centerMain = '—';
                                     let centerSub = '';
                                     if (isActive) {
@@ -673,14 +684,12 @@ const EmployeeDashboardCom = () => {
                                                     : 'bg-white border-slate-100 hover:border-slate-200 hover:shadow-lg hover:shadow-slate-200/60 hover:-translate-y-0.5'
                                                 }`}
                                         >
-                                            {/* Today Badge */}
                                             {isToday && (
                                                 <span className="absolute -top-1.5 sm:-top-2 left-1/2 -translate-x-1/2 z-10 bg-[#0437cc] text-white text-[6px] sm:text-[8px] font-bold px-1 sm:px-2 py-[1px] sm:py-0.5 rounded-full uppercase tracking-wider shadow-sm shadow-[#0437cc]/30 whitespace-nowrap">
                                                     Today
                                                 </span>
                                             )}
 
-                                            {/* Tooltip - desktop only (hidden on mobile/touch) */}
                                             <div className="hidden sm:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus:opacity-100 group-focus:visible transition-all duration-300 z-[60] pointer-events-none w-max">
                                                 <div className="bg-[#010a1f] text-white p-3 rounded-xl shadow-xl max-w-[200px] sm:max-w-[240px]">
                                                     <p className="text-[10px] text-blue-300 font-bold uppercase tracking-wider border-b border-white/10 pb-1.5 mb-1.5 truncate">
@@ -709,7 +718,6 @@ const EmployeeDashboardCom = () => {
                                                 <div className="w-3 h-3 bg-[#010a1f] transform rotate-45 mx-auto -mt-1.5"></div>
                                             </div>
 
-                                            {/* Day name + date */}
                                             <div className="flex flex-col items-center gap-0">
                                                 <span className={`text-[9px] sm:text-xs font-bold uppercase tracking-wider ${isToday ? 'text-[#0437cc]' : 'text-slate-600 group-hover:text-[#0437cc] transition-colors'}`}>
                                                     {day.day}
@@ -719,7 +727,6 @@ const EmployeeDashboardCom = () => {
                                                 </span>
                                             </div>
 
-                                            {/* Circular Progress Ring */}
                                             <div className="relative w-full aspect-square max-w-[52px] sm:max-w-[100px] md:max-w-[120px] lg:max-w-[130px]">
                                                 <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
                                                     <defs>
@@ -746,7 +753,6 @@ const EmployeeDashboardCom = () => {
                                                     />
                                                 </svg>
 
-                                                {/* Center content */}
                                                 <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
                                                     <span className={`text-[10px] sm:text-sm md:text-base lg:text-lg font-black tabular-nums ${isToday || isActive ? 'text-[#0437cc]' : 'text-[#010a1f]'}`}>
                                                         {centerMain}
@@ -762,7 +768,6 @@ const EmployeeDashboardCom = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Status pill */}
                                             <div className={`inline-flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 rounded-full border max-w-full ${pillBg} ${pillBorder}`}>
                                                 <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full shrink-0 ${pillDot} ${isActive ? 'live-dot' : ''}`}></span>
                                                 <span className={`text-[7px] sm:text-[9px] md:text-[10px] font-bold uppercase tracking-wide truncate ${pillText}`}>

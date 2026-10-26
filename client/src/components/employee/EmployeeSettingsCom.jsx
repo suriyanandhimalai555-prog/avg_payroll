@@ -10,6 +10,16 @@ import ToggleSwitch from '../../components/common/ToggleSwitch';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const EmployeeSettingsCom = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
@@ -109,17 +119,15 @@ const EmployeeSettingsCom = () => {
 
         setStatus({ loading: true, error: '', success: '' });
         try {
-            const token = sessionStorage.getItem('token');
-            if (!token) {
+            if (!localStorage.getItem('token')) {
                 throw new Error('Your session has expired. Please sign in again.');
             }
 
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/change-password`, {
                 currentPassword: passwords.current,
                 newPassword: passwords.new
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            }, getAuthConfig());
+            
             setStatus({ loading: false, error: '', success: 'Password updated successfully!' });
             setPasswords({ current: '', new: '', confirm: '' });
             setTimeout(() => setStatus(prev => ({ ...prev, success: '' })), 4000);
@@ -557,13 +565,17 @@ const EmployeeSettingsCom = () => {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                                <div className="flex flex-wrap items-center gap-2 ml-11.5 mt-1">
                                                     <span className="inline-block text-[10px] font-mono font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md truncate">
                                                         IP: {session.ip}
                                                     </span>
-                                                    <span className="text-[10px] text-slate-400 font-medium truncate">{session.location}</span>
+                                                    <span className="inline-flex items-center gap-1.5 text-[10px] text-slate-500 font-medium truncate">
+                                                        <FaMapMarkerAlt className="text-[9px] shrink-0" /> {session.location}
+                                                    </span>
                                                 </div>
-                                                <p className="text-[10px] text-slate-400 mt-1 font-medium">{session.lastActive}</p>
+                                                <p className={`text-[10px] sm:text-xs font-bold mt-2 ml-11.5 ${session.isCurrent ? 'text-teal-600' : 'text-slate-400'}`}>
+                                                    {session.lastActive}
+                                                </p>
                                             </div>
 
                                             {!session.isCurrent && (

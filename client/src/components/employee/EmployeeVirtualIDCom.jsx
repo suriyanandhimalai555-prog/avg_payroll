@@ -8,6 +8,16 @@ import {
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 /* ============================================================
    LOADING HELPERS
    ============================================================ */
@@ -512,9 +522,14 @@ const EmployeeVirtualIDCom = () => {
     };
 
     const fetchProfile = async () => {
-        if (!user?.employee_id) return;
+        if (!user || !user.employee_id || !localStorage.getItem('token')) {
+            setLoading(false);
+            return;
+        }
+
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } });
+            const empIdStr = String(user.employee_id).trim();
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig());
             const data = response.data;
 
             setProfileData({
@@ -557,9 +572,12 @@ const EmployeeVirtualIDCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        fetchProfile();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (user && user.employee_id) {
+            fetchProfile();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     /* --------- PDF DOWNLOAD --------- */

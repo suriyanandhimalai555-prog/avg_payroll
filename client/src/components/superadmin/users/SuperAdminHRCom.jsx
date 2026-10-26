@@ -21,10 +21,9 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -580,12 +579,12 @@ const SuperAdminHRCom = () => {
                     <div className="relative p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
 
                         {/* Earnings */}
-                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-5 rounded-2xl border border-green-100 overflow-hidden">
+                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-4 rounded-2xl border border-green-100 overflow-hidden">
                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
                             <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-green-100">
                                 <div className="flex items-center gap-2">
                                     <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
-                                        <FaPlusCircle className="text-green-700 text-xs" />
+                                        <FaPlusCircle className="text-green-700 text-[10px]" />
                                     </span>
                                     <h3 className="text-xs font-bold text-green-800 uppercase tracking-wider">Earnings</h3>
                                 </div>
@@ -604,14 +603,14 @@ const SuperAdminHRCom = () => {
                         </div>
 
                         {/* Deductions */}
-                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-5 rounded-2xl border border-red-100 overflow-hidden">
+                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-4 rounded-2xl border border-red-100 overflow-hidden">
                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
                             <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-red-100">
                                 <div className="flex items-center gap-2">
                                     <span className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
-                                        <FaMinusCircle className="text-red-600 text-xs" />
+                                        <FaMinusCircle className="text-red-600 text-[10px]" />
                                     </span>
-                                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wider">Deductions</h3>
+                                    <h4 className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Deductions</h4>
                                 </div>
                                 <span className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 tabular-nums">-{formatCurrency(liveDeductions)}</span>
                             </div>

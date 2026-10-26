@@ -15,11 +15,11 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => ({
-    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        Authorization: `Bearer ${localStorage.getItem('token')}`
     }
 });
 
@@ -55,13 +55,19 @@ const SuperAdminLeavePoliciesCom = () => {
     const [apiError, setApiError] = useState('');
 
     const fetchData = async () => {
+        if (!localStorage.getItem('token')) {
+            setIsLoading(false);
+            return;
+        }
+
         setIsLoading(true);
         setApiError('');
         try {
+            // Added .catch() arrays to prevent single 401s from breaking the Promise.all
             const [compRes, branchRes, polRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`, getAuthConfig())
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
@@ -74,8 +80,13 @@ const SuperAdminLeavePoliciesCom = () => {
         }
     };
 
+    // Safely execute API calls only if token exists in browser
     useEffect(() => {
-        fetchData();
+        if (localStorage.getItem('token')) {
+            fetchData();
+        } else {
+            setIsLoading(false);
+        }
     }, []);
 
     const filteredBranches = branches.filter(b => b.company_id === parseInt(formData.companyId));

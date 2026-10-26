@@ -3,8 +3,7 @@ import axios from 'axios';
 import {
     FaUserPlus, FaUser, FaBriefcase, FaMoneyCheckAlt,
     FaUniversity, FaTimes, FaCheck, FaListUl, FaEnvelope, FaPhoneAlt,
-    FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle,
-    FaLaptop, FaMobileAlt, FaIdBadge, FaKey, FaBox, FaHistory
+    FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -22,10 +21,9 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})

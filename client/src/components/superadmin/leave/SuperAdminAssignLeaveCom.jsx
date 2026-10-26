@@ -21,9 +21,8 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Auth Config
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => ({
-    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
         ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -79,22 +78,23 @@ const SuperAdminAssignLeaveCom = () => {
     const fetchInitialData = async () => {
         setLoading(true);
         try {
-            const [compRes, branchRes, deptRes, empRes, histRes] = await Promise.allSettled([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/all`, getAuthConfig())
+            // Protected with individual catch blocks to prevent Promise.all failure
+            const [compRes, branchRes, deptRes, empRes, histRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/all`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
-            const companyData = compRes.status === 'fulfilled' ? compRes.value.data : [];
-            const branchData = branchRes.status === 'fulfilled' ? branchRes.value.data : [];
-            const deptData = deptRes.status === 'fulfilled' ? deptRes.value.data : [];
+            const companyData = compRes.data || [];
+            const branchData = branchRes.data || [];
+            const deptData = deptRes.data || [];
             
             // Map Employees to internal ID and Foreign IDs for filtering
             let empData = [];
-            if (empRes.status === 'fulfilled') {
-                empData = empRes.value.data.map(e => {
+            if (empRes.data) {
+                empData = empRes.data.map(e => {
                     const c = companyData.find(comp => comp.company_name === e.company);
                     const b = branchData.find(br => br.branch_name === e.branch);
                     const d = deptData.find(dp => dp.department_name === e.department);
@@ -116,8 +116,8 @@ const SuperAdminAssignLeaveCom = () => {
             setEmployees(empData);
 
             // Filter history to ONLY show leaves assigned by Super Admin
-            if (histRes.status === 'fulfilled') {
-                const adminAssigned = histRes.value.data.filter(req => 
+            if (histRes.data) {
+                const adminAssigned = histRes.data.filter(req => 
                     req.reason && req.reason.includes('Super Admin')
                 ).map(req => ({
                     id: req.id,
@@ -138,9 +138,14 @@ const SuperAdminAssignLeaveCom = () => {
         }
     };
 
+    // Guarded execution: Only run when user & token are present
     useEffect(() => {
-        fetchInitialData();
-    }, []);
+        if (user && localStorage.getItem('token')) {
+            fetchInitialData();
+        } else {
+            setLoading(false);
+        }
+    }, [user]);
 
     // Merge Dynamic DB Policies with Standard List (Remove Duplicates)
     const allLeaveTypeOptions = standardLeaveTypes.map(type => ({
@@ -509,11 +514,11 @@ const SuperAdminAssignLeaveCom = () => {
                                     <tr key={i} className="hover:bg-slate-50/60 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md bg-gradient-to-br from-[#0437cc] to-[#1f56d6]`}>
-                                                    {record.emp_name.charAt(0)}
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md ${record.emp_id === 'BULK-ASSIGN' ? 'bg-gradient-to-br from-[#f77704] to-orange-500' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6]'}`}>
+                                                    {record.emp_id === 'BULK-ASSIGN' ? <FaUsers size={16} /> : record.emp_name.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className="text-[13px] font-bold text-[#010a1f]">{record.emp_name}</p>
+                                                    <p className={`text-[13px] font-bold ${record.emp_id === 'BULK-ASSIGN' ? 'text-[#f77704]' : 'text-[#010a1f]'}`}>{record.emp_name}</p>
                                                     <p className="text-[10px] font-mono font-bold text-slate-500">{record.emp_id}</p>
                                                 </div>
                                             </div>

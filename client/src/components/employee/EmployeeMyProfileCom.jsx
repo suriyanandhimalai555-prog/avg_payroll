@@ -47,6 +47,16 @@ const BLOOD_GROUP_OPTIONS = [
     'A +ve', 'A -ve', 'B +ve', 'B -ve', 'O +ve', 'O -ve', 'AB +ve', 'AB -ve'
 ];
 
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const EmployeeMyProfileCom = () => {
     const { user, login } = useAuth();
     const navigate = useNavigate();
@@ -99,8 +109,13 @@ const EmployeeMyProfileCom = () => {
     };
 
     const fetchProfile = async () => {
+        if (!localStorage.getItem('token') || !user?.employee_id) {
+            setLoading(false);
+            return;
+        }
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } });
+            const empIdStr = String(user.employee_id).trim();
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig());
             const data = response.data;
 
             setProfileData({
@@ -189,9 +204,12 @@ const EmployeeMyProfileCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        if (user?.employee_id) fetchProfile();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (user && user.employee_id) {
+            fetchProfile();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const toggleEdit = (section) => setIsEditing({ ...isEditing, [section]: true });
@@ -210,9 +228,9 @@ const EmployeeMyProfileCom = () => {
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, {
                 section: section,
                 data: editForm[section]
-            }, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } });
+            }, getAuthConfig());
             const updatedUser = { ...response.data.user, role: 'employee' };
-            login(updatedUser, sessionStorage.getItem('token'));
+            login(updatedUser); // Token manages itself locally
             setIsEditing({ ...isEditing, [section]: false });
             fetchProfile();
         } catch (error) {
@@ -248,10 +266,10 @@ const EmployeeMyProfileCom = () => {
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, {
                 section: 'photo',
                 data: { profile_photo: finalCroppedBase64 }
-            }, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || ''}` } });
+            }, getAuthConfig());
 
             const updatedUser = { ...response.data.user, role: 'employee' };
-            login(updatedUser, sessionStorage.getItem('token'));
+            login(updatedUser);
             setPhotoModalOpen(false);
             fetchProfile();
         } catch (error) {

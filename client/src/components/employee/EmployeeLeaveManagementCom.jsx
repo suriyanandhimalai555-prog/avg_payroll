@@ -15,9 +15,8 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Auth Config
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => ({
-    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
         ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -55,17 +54,24 @@ const EmployeeLeaveManagementCom = () => {
     ];
 
     const fetchData = async () => {
+        if (!user || !user.employee_id || !localStorage.getItem('token')) {
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
-            const [balRes, reqRes, holRes] = await Promise.allSettled([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${user.employee_id}`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${user.employee_id}`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig())
+            const empIdStr = String(user.employee_id).trim();
+            // Wrapped with .catch() arrays to avoid total promise failure on single route drop
+            const [balRes, reqRes, holRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
-            if (balRes.status === 'fulfilled') setBalances(balRes.value.data);
-            if (reqRes.status === 'fulfilled') setRequests(reqRes.value.data);
-            if (holRes.status === 'fulfilled') setHolidays(holRes.value.data);
+            setBalances(balRes.data || []);
+            setRequests(reqRes.data || []);
+            setHolidays(holRes.data || []);
         } catch (error) {
             console.error("Error fetching leave data", error);
         } finally {
@@ -73,8 +79,11 @@ const EmployeeLeaveManagementCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        if (user?.employee_id) fetchData();
+        if (user && user.employee_id) {
+            fetchData();
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 

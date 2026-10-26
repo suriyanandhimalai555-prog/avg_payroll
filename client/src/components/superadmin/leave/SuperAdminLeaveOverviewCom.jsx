@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import * as XLSX from 'xlsx';
 import {
     FaPlaneDeparture, FaUsers, FaChartPie, FaCalendarDay,
     FaBuilding, FaClock, FaCheckCircle, FaTimesCircle,
@@ -6,6 +8,16 @@ import {
     FaExclamationCircle
 } from 'react-icons/fa';
 import Button from '../../common/Button';
+
+// Bulletproof Stateless Auth Config
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+    };
+};
 
 const SuperAdminLeaveOverviewCom = () => {
     // UI & Data States
@@ -20,42 +32,132 @@ const SuperAdminLeaveOverviewCom = () => {
     const [statusFilter, setStatusFilter] = useState('All');
     const [deptFilter, setDeptFilter] = useState('All');
 
-    // ==================== MOCK DATA GENERATOR ====================
-    useEffect(() => {
+    // Organization States
+    const [companies, setCompanies] = useState([]);
+    const [branches, setBranches] = useState([]);
+    const [departments, setDepartments] = useState([]);
+
+    const fetchOrgData = async () => {
+        if (!localStorage.getItem('token')) return; // Prevent 401 Unauthorized
+        
+        try {
+            const [compRes, branchRes, deptRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] }))
+            ]);
+            setCompanies(compRes.data || []);
+            setBranches(branchRes.data || []);
+            setDepartments(deptRes.data || []);
+        } catch (error) {
+            console.error('Error fetching org data:', error);
+        }
+    };
+
+    // ==================== FETCH LIVE DATA ====================
+    const fetchLeaveData = async () => {
+        if (!localStorage.getItem('token')) {
+            setLoading(false);
+            return; 
+        }
+
         setLoading(true);
-        // Simulate network delay
-        setTimeout(() => {
-            setStats({
-                onLeaveToday: 12,
-                pendingGlobal: 8,
-                upcomingLeaves: 24,
-                activePolicies: 5
+        try {
+            // Fetch actual requests from backend with safe interceptors
+            const [leaveRes, polRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/all`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`, getAuthConfig()).catch(() => ({ data: [] }))
+            ]);
+
+            const allRequests = leaveRes.data || [];
+            const policies = polRes.data || [];
+
+            const mappedRequests = allRequests.map(req => ({
+                id: req.id,
+                emp_id: req.employee_id,
+                name: `${req.first_name || ''} ${req.last_name || ''}`.trim(),
+                role: req.designation || 'Employee',
+                dept: req.department || 'Not Assigned',
+                type: req.leave_type,
+                dates: `${new Date(req.from_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(req.to_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+                duration: `${req.total_days} Day(s)`,
+                status: req.status,
+                applied_on: new Date(req.applied_on).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                from_date: new Date(req.from_date),
+                to_date: new Date(req.to_date)
+            }));
+
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+
+            // Calculate Stats
+            let onLeaveTodayCount = 0;
+            let pendingCount = 0;
+            let upcomingCount = 0;
+
+            mappedRequests.forEach(req => {
+                const start = new Date(req.from_date);
+                start.setHours(0, 0, 0, 0);
+                const end = new Date(req.to_date);
+                end.setHours(0, 0, 0, 0);
+
+                if (req.status === 'Pending') pendingCount++;
+                if (req.status === 'Approved') {
+                    if (now >= start && now <= end) onLeaveTodayCount++;
+                    if (start > now) upcomingCount++;
+                }
             });
 
-            setTodayLeaves([
-                { id: 1, name: 'Arjun Mehta', role: 'Engineering Lead', dept: 'Engineering', type: 'Sick Leave', return: 'Tomorrow', avatar: null },
-                { id: 2, name: 'Priya Patel', role: 'HR Manager', dept: 'Human Resources', type: 'Casual Leave', return: 'Oct 20', avatar: null },
-                { id: 3, name: 'Rohan Sharma', role: 'Sales Executive', dept: 'Sales', type: 'Earned Leave', return: 'Oct 25', avatar: null },
-                { id: 4, name: 'Sneha Reddy', role: 'UI/UX Designer', dept: 'Design', type: 'Sick Leave', return: 'Tomorrow', avatar: null }
-            ]);
+            setStats({
+                onLeaveToday: onLeaveTodayCount,
+                pendingGlobal: pendingCount,
+                upcomingLeaves: upcomingCount,
+                activePolicies: policies.length
+            });
 
-            setDepartmentStats([
-                { dept: 'Engineering', onLeave: 5, total: 45, color: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700' },
-                { dept: 'Sales', onLeave: 4, total: 30, color: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-700' },
-                { dept: 'Human Resources', onLeave: 1, total: 10, color: 'bg-teal-500', bg: 'bg-teal-50', text: 'text-teal-700' },
-                { dept: 'Design', onLeave: 2, total: 15, color: 'bg-purple-500', bg: 'bg-purple-50', text: 'text-purple-700' }
-            ]);
+            setRecentRequests(mappedRequests);
+            setTodayLeaves(mappedRequests.filter(req => req.status === 'Approved' && now >= new Date(req.from_date).setHours(0,0,0,0) && now <= new Date(req.to_date).setHours(0,0,0,0)));
 
-            setRecentRequests([
-                { id: 101, emp_id: 'AVG-2026-045', name: 'Rahul Sharma', role: 'Employee', dept: 'Engineering', type: 'Casual Leave', dates: 'Oct 22 - Oct 23', duration: '2 Days', status: 'Pending', applied_on: 'Oct 15, 2026' },
-                { id: 102, emp_id: 'AVG-2026-012', name: 'Priya Patel', role: 'HR', dept: 'Human Resources', type: 'Sick Leave', dates: 'Oct 16 - Oct 17', duration: '2 Days', status: 'Approved', applied_on: 'Oct 15, 2026' },
-                { id: 103, emp_id: 'AVG-2026-088', name: 'Karan Mehta', role: 'Manager', dept: 'Sales', type: 'Earned Leave', dates: 'Nov 01 - Nov 10', duration: '10 Days', status: 'Pending', applied_on: 'Oct 14, 2026' },
-                { id: 104, emp_id: 'AVG-2026-022', name: 'Anita Roy', role: 'Employee', dept: 'Design', type: 'Unpaid Leave', dates: 'Oct 18 - Oct 18', duration: '1 Day', status: 'Rejected', applied_on: 'Oct 12, 2026' },
-                { id: 105, emp_id: 'AVG-2026-056', name: 'Vikram Singh', role: 'Employee', dept: 'Engineering', type: 'Casual Leave', dates: 'Oct 28 - Oct 29', duration: '2 Days', status: 'Approved', applied_on: 'Oct 10, 2026' }
-            ]);
+            // Calculate department-wise stats
+            const deptMap = {};
+            mappedRequests.filter(req => req.status === 'Approved' && now >= new Date(req.from_date).setHours(0,0,0,0) && now <= new Date(req.to_date).setHours(0,0,0,0)).forEach(req => {
+                if (req.dept !== 'Not Assigned') {
+                    deptMap[req.dept] = (deptMap[req.dept] || 0) + 1;
+                }
+            });
 
+            const deptArray = Object.keys(deptMap).map((dept, index) => {
+                const colors = [
+                    { color: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700' },
+                    { color: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-700' },
+                    { color: 'bg-teal-500', bg: 'bg-teal-50', text: 'text-teal-700' },
+                    { color: 'bg-purple-500', bg: 'bg-purple-50', text: 'text-purple-700' }
+                ];
+                return {
+                    dept,
+                    onLeave: deptMap[dept],
+                    total: deptMap[dept] * 5, // Simulated total for UX
+                    ...colors[index % colors.length]
+                };
+            });
+
+            setDepartmentStats(deptArray);
+
+        } catch (error) {
+            console.error("Failed to load leave overview:", error);
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
+    };
+
+    // Safely execute API calls only if token exists in browser
+    useEffect(() => {
+        if (localStorage.getItem('token')) {
+            fetchOrgData();
+            fetchLeaveData();
+        } else {
+            setLoading(false);
+        }
     }, []);
 
     // ==================== FILTER LOGIC ====================
@@ -78,11 +180,40 @@ const SuperAdminLeaveOverviewCom = () => {
         return 'bg-red-500';
     };
 
+    // ==================== EXCEL LOGIC ====================
+    const handleExportExcel = () => {
+        if (filteredRequests.length === 0) return alert("No records to export.");
+
+        let csvContent = "Employee ID,Name,Role,Department,Leave Type,Dates,Duration,Status,Applied On\n";
+
+        filteredRequests.forEach(req => {
+            const empId = req.emp_id || 'N/A';
+            const name = (req.name || '').replace(/,/g, '');
+            const role = (req.role || 'Employee').replace(/,/g, '');
+            const dept = (req.dept || 'N/A').replace(/,/g, '');
+            const lType = req.type;
+            const dates = req.dates;
+            const duration = req.duration;
+            const stat = req.status;
+            const applied = req.applied_on;
+
+            csvContent += `${empId},${name},${role},${dept},${lType},${dates},${duration},${stat},${applied}\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Leave_Requests_Report_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     // ==================== SHIMMER LOADING SKELETON ====================
     if (loading) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden animate-pulse">
-                {/* Header Shimmer */}
                 <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100">
                     <div className="space-y-2 w-full md:w-1/3">
                         <div className="h-6 md:h-7 bg-slate-200 rounded-md w-3/4"></div>
@@ -90,7 +221,6 @@ const SuperAdminLeaveOverviewCom = () => {
                     </div>
                 </div>
 
-                {/* Stat Cards Shimmer */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                     {[1, 2, 3, 4].map((i) => (
                         <div key={i} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5 flex flex-col gap-3">
@@ -103,7 +233,6 @@ const SuperAdminLeaveOverviewCom = () => {
                     ))}
                 </div>
 
-                {/* Grid Area Shimmer */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
                     <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-80 p-5">
                         <div className="h-5 bg-slate-200 rounded-md w-1/4 mb-5"></div>
@@ -160,6 +289,7 @@ const SuperAdminLeaveOverviewCom = () => {
                         <Button
                             variant="outline"
                             icon={FaDownload}
+                            onClick={handleExportExcel}
                             className="w-full md:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm text-sm py-2 rounded-xl"
                         >
                             Export Report
@@ -235,7 +365,7 @@ const SuperAdminLeaveOverviewCom = () => {
                                     <div className="text-right shrink-0 ml-2">
                                         <p className="text-[11px] font-bold text-[#f77704] bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">{leave.type}</p>
                                         <p className="text-[9px] font-bold text-slate-400 mt-1 flex items-center justify-end gap-1 uppercase tracking-wider">
-                                            Returns: <span className="text-slate-600">{leave.return}</span>
+                                            Dates: <span className="text-slate-600">{leave.dates}</span>
                                         </p>
                                     </div>
                                 </div>
@@ -260,29 +390,32 @@ const SuperAdminLeaveOverviewCom = () => {
                         </div>
                     </div>
 
-                    <div className="relative space-y-5 flex-1">
-                        {departmentStats.map((dept, i) => {
-                            const percentage = (dept.onLeave / dept.total) * 100;
-                            return (
-                                <div key={i} className="w-full">
-                                    <div className="flex justify-between items-end mb-1.5 gap-2">
-                                        <span className="text-[11px] font-bold text-[#010a1f] truncate">{dept.dept}</span>
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${dept.bg} ${dept.text} shrink-0`}>
-                                            {dept.onLeave} Out
-                                        </span>
+                    <div className="relative space-y-5 flex-1 overflow-y-auto custom-scrollbar">
+                        {departmentStats.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center py-6 opacity-60">
+                                <p className="text-xs font-bold text-slate-500">No leaves tracked yet.</p>
+                            </div>
+                        ) : (
+                            departmentStats.map((dept, i) => {
+                                const percentage = (dept.onLeave / dept.total) * 100;
+                                return (
+                                    <div key={i} className="w-full">
+                                        <div className="flex justify-between items-end mb-1.5 gap-2">
+                                            <span className="text-[11px] font-bold text-[#010a1f] truncate">{dept.dept}</span>
+                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${dept.bg} ${dept.text} shrink-0`}>
+                                                {dept.onLeave} Out
+                                            </span>
+                                        </div>
+                                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                            <div 
+                                                className={`h-full rounded-full ${dept.color} transition-all duration-1000 ease-out`}
+                                                style={{ width: `${Math.min(percentage, 100)}%` }}
+                                            ></div>
+                                        </div>
                                     </div>
-                                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                        <div 
-                                            className={`h-full rounded-full ${dept.color} transition-all duration-1000 ease-out`}
-                                            style={{ width: `${Math.min(percentage, 100)}%` }}
-                                        ></div>
-                                    </div>
-                                    <p className="text-[9px] font-semibold text-slate-400 mt-1 text-right">
-                                        {dept.total} Total Employees
-                                    </p>
-                                </div>
-                            );
-                        })}
+                                );
+                            })
+                        )}
                     </div>
                 </div>
 

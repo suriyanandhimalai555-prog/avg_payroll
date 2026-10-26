@@ -8,10 +8,10 @@ import {
     FaUserTie, FaBuilding, FaDownload, FaCalendarAlt
 } from 'react-icons/fa';
 import Button from '../../common/Button';
+import { useAuth } from '../../../context/AuthContext';
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => ({
-    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
         ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -19,6 +19,8 @@ const getAuthConfig = () => ({
 });
 
 const SuperAdminLeaveRequestCom = () => {
+    const { user } = useAuth();
+    
     // UI & Data States
     const [loading, setLoading] = useState(true);
     const [requests, setRequests] = useState([]);
@@ -30,7 +32,7 @@ const SuperAdminLeaveRequestCom = () => {
     const [statusFilter, setStatusFilter] = useState('Pending');
     const [roleFilter, setRoleFilter] = useState('All');
     const [deptFilter, setDeptFilter] = useState('All');
-    const [monthFilter, setMonthFilter] = useState('All'); // NEW: Month Filter State
+    const [monthFilter, setMonthFilter] = useState('All'); 
 
     // Modal State
     const [viewRecord, setViewRecord] = useState(null);
@@ -49,18 +51,23 @@ const SuperAdminLeaveRequestCom = () => {
 
     // ==================== FETCH LIVE DATA ====================
     const fetchAllRequests = async () => {
+        if (!localStorage.getItem('token')) {
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/leave/all`, getAuthConfig());
+            // Protected catch block
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/leave/all`, getAuthConfig()).catch(() => ({ data: [] }));
             
-            // Map the data into the structure expected by the UI
-            const liveData = response.data.map(req => ({
+            const liveData = (response.data || []).map(req => ({
                 id: req.id,
                 emp_id: req.employee_id,
                 first_name: req.first_name || 'Unknown',
                 last_name: req.last_name || 'Employee',
                 profile_photo: req.profile_photo || null,
-                role: 'Employee', // Future enhancement: map exact roles from employee profile join if needed
+                role: 'Employee', 
                 department: req.department || 'Not Assigned',
                 leave_type: req.leave_type,
                 from_date: req.from_date,
@@ -85,9 +92,12 @@ const SuperAdminLeaveRequestCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        fetchAllRequests();
-    }, []);
+        if (user) {
+            fetchAllRequests();
+        }
+    }, [user]);
 
     // ==================== FILTER LOGIC ====================
     const filteredRequests = requests.filter(record => {
@@ -513,7 +523,12 @@ const SuperAdminLeaveRequestCom = () => {
 
                 {/* Table */}
                 <div className="overflow-x-auto custom-scrollbar">
-                    {filteredRequests.length === 0 ? (
+                    {loading ? (
+                        <div className="p-12 text-center">
+                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
+                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading requests…</p>
+                        </div>
+                    ) : filteredRequests.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaExclamationCircle className="text-xl text-slate-300" />

@@ -9,6 +9,7 @@ import {
 import Button from '../../common/Button';
 import Input from '../../common/Input';
 import Select from '../../common/Select';
+import { useAuth } from '../../../context/AuthContext';
 
 const FieldWrapper = ({ error, children }) => (
     <div className="flex flex-col gap-1 w-full min-w-0">
@@ -22,7 +23,17 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Stateless Auth Config
+const getAuthConfig = () => ({
+    headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+    }
+});
+
 const SuperAdminHolidaysCom = () => {
+    const { user } = useAuth();
+
     const INITIAL_FORM_STATE = {
         companyId: '',
         branchId: '',
@@ -66,9 +77,9 @@ const SuperAdminHolidaysCom = () => {
     const fetchOrgData = async () => {
         try {
             const [compRes, branchRes, deptRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
@@ -82,7 +93,7 @@ const SuperAdminHolidaysCom = () => {
         setIsLoading(true);
         setApiError('');
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig());
             setHolidays(response.data || []);
         } catch (error) {
             console.error('Failed to load holidays', error);
@@ -91,10 +102,16 @@ const SuperAdminHolidaysCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        fetchOrgData();
-        fetchHolidays();
-    }, []);
+        if (user && localStorage.getItem('token')) {
+            fetchOrgData();
+            fetchHolidays();
+        } else {
+            setIsLoading(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]);
 
     const filteredBranches = branches.filter(b => b.company_id === parseInt(formData.companyId));
     const filteredDepartments = departments.filter(d => d.branch_id === parseInt(formData.branchId));
@@ -147,11 +164,11 @@ const SuperAdminHolidaysCom = () => {
         setIsSubmitting(true);
         try {
             if (isEditing) {
-                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-holidays/${editId}`, formData);
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-holidays/${editId}`, formData, getAuthConfig());
                 setSuccessMsg('Holiday updated successfully.');
                 handleCancelEdit();
             } else {
-                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-holidays/create`, formData);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-holidays/create`, formData, getAuthConfig());
                 setSuccessMsg(`Holiday "${formData.holidayName}" created successfully!`);
                 setFormData(INITIAL_FORM_STATE);
             }
@@ -181,7 +198,7 @@ const SuperAdminHolidaysCom = () => {
                 branchId: formData.branchId || null,
                 year: autoGenYear,
                 saturdayRule: saturdayRule
-            });
+            }, getAuthConfig());
             setSuccessMsg(response.data.message);
             fetchHolidays();
             setTimeout(() => setSuccessMsg(''), 5000);
@@ -208,7 +225,7 @@ const SuperAdminHolidaysCom = () => {
                 companyId: formData.companyId,
                 branchId: formData.branchId || null,
                 year: autoGenYear
-            });
+            }, getAuthConfig());
             setSuccessMsg(response.data.message);
             fetchHolidays();
             setTimeout(() => setSuccessMsg(''), 6000);
@@ -239,7 +256,7 @@ const SuperAdminHolidaysCom = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this holiday schedule?")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-holidays/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-holidays/${id}`, getAuthConfig());
             fetchHolidays();
             setSuccessMsg('Holiday deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);

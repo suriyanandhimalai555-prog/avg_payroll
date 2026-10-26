@@ -11,9 +11,9 @@ import {
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -49,22 +49,25 @@ const EmployeeAttendanceCom = () => {
     const [editEodInput, setEditEodInput] = useState('');
 
     const fetchAttendanceData = async () => {
-        if (!user?.employee_id) {
+        if (!user || !user.employee_id || !localStorage.getItem('token')) {
             setLoading(false);
             return;
         }
+
         try {
+            const empIdStr = String(user.employee_id).trim();
+
             const [attRes, profRes, shiftRes, holRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: {} })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/shift/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: null })), // Exact shift
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empIdStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig()).catch(() => ({ data: {} })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/shift/${empIdStr}`, getAuthConfig()).catch(() => ({ data: null })), // Exact shift
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
             setFullHistory(fetchedHistory);
             setHolidays(holRes.data || []);
-            setShiftDetails(shiftRes.data); // Directly mapped from the new backend route
+            setShiftDetails(shiftRes.data); 
 
             const profile = profRes.data || {};
             const joinStr = profile.joining_date || profile.created_at || user?.joining_date || user?.created_at;
@@ -99,9 +102,12 @@ const EmployeeAttendanceCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        if (user?.employee_id) fetchAttendanceData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (user && user.employee_id) {
+            fetchAttendanceData();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const latestRecord = todayLogs.length > 0 ? todayLogs[0] : null;
@@ -110,7 +116,6 @@ const EmployeeAttendanceCom = () => {
     const isPendingOldCheckout = isClockedIn && new Date(activeSession.date).toLocaleDateString('en-CA') !== new Date().toLocaleDateString('en-CA');
     const hasWorkedToday = todayLogs.length > 0;
     
-    // Fallback to 8 hours if undefined
     const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8) : 8;
     const targetMs = targetHours * 3600000;
 
@@ -283,14 +288,14 @@ const EmployeeAttendanceCom = () => {
             endDate = new Date(today);
         } else if (activeTab === 'history' || activeTab === 'timesheet') {
             startDate = new Date(today);
-            startDate.setDate(today.getDate() - 9); // Last 10 days
+            startDate.setDate(today.getDate() - 9); 
             endDate = new Date(today);
         } else if (activeTab === 'monthly' && selectedMonthYear) {
             const [monthStr, yearStr] = selectedMonthYear.split(' ');
             const monthIdx = new Date(`${monthStr} 1, ${yearStr}`).getMonth();
             startDate = new Date(yearStr, monthIdx, 1);
             endDate = new Date(yearStr, monthIdx + 1, 0);
-            if (endDate > today) endDate = new Date(today); // Cap at today
+            if (endDate > today) endDate = new Date(today); 
         } else {
             startDate = new Date(today);
             endDate = new Date(today);
@@ -347,13 +352,13 @@ const EmployeeAttendanceCom = () => {
             } else {
                 const dayOfWeek = dateObj.getDay();
                 if (dayOfWeek === 0) {
-                    status = 'Week Off'; // Sundays
+                    status = 'Week Off'; 
                 } else if (dayOfWeek === 6) {
                     const weekOfMonth = Math.ceil(dateObj.getDate() / 7);
                     if (weekOfMonth === 2 || weekOfMonth === 4) {
-                        status = 'Week Off'; // Even Saturdays
+                        status = 'Week Off'; 
                     } else {
-                        status = 'Absent'; // Odd Saturdays
+                        status = 'Absent'; 
                     }
                 } else {
                     status = 'Absent';
@@ -1151,7 +1156,7 @@ const EmployeeAttendanceCom = () => {
                                                                     {group.sessions.length > 0 ? (
                                                                         group.sessions.map((session, idx) => (
                                                                             <div key={idx} className="relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm mt-3 hover:shadow-md transition-shadow">
-                                                                                <span className="absolute -top-2.5 left-3 bg-white border border-slate-200 text-[#010a1f] px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                                                                                <span className="absolute -top-2.5 left-3 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
                                                                                     Session {idx + 1}
                                                                                 </span>
 

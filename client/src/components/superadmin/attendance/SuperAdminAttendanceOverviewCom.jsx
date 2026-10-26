@@ -11,8 +11,20 @@ import {
 import Button from '../../../components/common/Button';
 import Select from '../../../components/common/Select';
 import Input from '../../../components/common/Input';
+import { useAuth } from '../../../context/AuthContext';
+
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
 
 const SuperAdminAttendanceOverviewCom = () => {
+    const { user } = useAuth();
     const [attendanceData, setAttendanceData] = useState([]);
     const [metrics, setMetrics] = useState({ present: 0, absent: 0, pendingApproval: 0, onLeave: 0, wfh: 0, total: 0 });
     const [isLoading, setIsLoading] = useState(true);
@@ -29,13 +41,14 @@ const SuperAdminAttendanceOverviewCom = () => {
     const [filterBranch, setFilterBranch] = useState('All');
     const [filterDepartment, setFilterDepartment] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
 
     const fetchOrgData = async () => {
         try {
             const [compRes, branchRes, deptRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
@@ -50,7 +63,7 @@ const SuperAdminAttendanceOverviewCom = () => {
         setApiError('');
 
         try {
-            const empRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`).catch(() => ({ data: [] }));
+            const empRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }));
             const employees = empRes.data || [];
 
             let records = [];
@@ -58,11 +71,13 @@ const SuperAdminAttendanceOverviewCom = () => {
 
             try {
                 const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-attendance/overview`, {
-                    params: { date: filterDate }
+                    params: { date: filterDate },
+                    ...getAuthConfig()
                 });
                 records = response.data.records || [];
                 if (response.data.metrics) metricsData = response.data.metrics;
             } catch (err) {
+                // If API fails or is not built yet, fallback to mock generation based on live employee data
                 records = employees.map((emp, index) => {
                     const isPresent = index % 3 !== 0;
                     const isWfh = index % 5 === 0;
@@ -116,19 +131,24 @@ const SuperAdminAttendanceOverviewCom = () => {
             setMetrics(metricsData);
         } catch (error) {
             console.error('Failed to load attendance data', error);
-            setApiError('Failed to load attendance records. Please try again later.');
+            setApiError('Failed to load attendance records. Please check your connection.');
         } finally {
             setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchOrgData();
-    }, []);
+        if (user) {
+            fetchOrgData();
+        }
+    }, [user]);
 
     useEffect(() => {
-        fetchAttendanceData();
-    }, [filterDate]);
+        if (user) {
+            fetchAttendanceData();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterDate, user]);
 
     const handleCompanyChange = (e) => {
         setFilterCompany(e.target.value);
@@ -242,8 +262,7 @@ const SuperAdminAttendanceOverviewCom = () => {
 
         try {
             const wb = XLSX.utils.book_new();
-            const exportDate = new Date(filterDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-
+            
             const overallRows = filteredRecords.map(buildExportRow);
             overallRows.push(buildSummaryTotals(filteredRecords));
             const overallSheet = XLSX.utils.json_to_sheet(overallRows);
@@ -293,8 +312,6 @@ const SuperAdminAttendanceOverviewCom = () => {
             setTimeout(() => setApiError(''), 5000);
         }
     };
-
-    const [successMsg, setSuccessMsg] = useState('');
 
     const statCards = [
         { label: 'Total Staff', value: metrics.total, icon: FaUsers, gradient: 'from-slate-500 to-slate-600', glow: 'shadow-slate-500/25' },

@@ -21,10 +21,9 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -630,7 +629,7 @@ const SuperAdminManagersCom = () => {
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#0437cc]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
                     <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
-                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md ${isEditing ? 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] shadow-[#0437cc]/20' : 'bg-gradient-to-br from-[#f77704] to-orange-500 shadow-[#f77704]/20'}`}>
                             <FaUser className="text-sm" />
                         </span>
                         <div className="min-w-0">

@@ -8,6 +8,16 @@ import {
 } from 'react-icons/fa';
 import Button from '../../common/Button';
 
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminSalaryStructureCom = () => {
     // ==================== STATE MANAGEMENT ====================
     const [loading, setLoading] = useState(true);
@@ -67,11 +77,11 @@ const SuperAdminSalaryStructureCom = () => {
         setApiError('');
         try {
             const [compRes, branchRes, hrRes, mgrRes, empRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-hr-users`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-managers`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             setCompanies(compRes.data || []);
@@ -202,7 +212,7 @@ const SuperAdminSalaryStructureCom = () => {
             leaves: calculatedStruct.leaves
         };
 
-        return axios.put(`${import.meta.env.VITE_API_URL}/api/sa-salary-structure/update`, payload);
+        return axios.put(`${import.meta.env.VITE_API_URL}/api/sa-salary-structure/update`, payload, getAuthConfig());
     };
 
     const handleApplySingle = async (uid) => {

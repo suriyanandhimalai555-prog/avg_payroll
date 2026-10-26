@@ -36,10 +36,9 @@ const getAssetIconBg = (type) => {
     }
 };
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -75,12 +74,21 @@ const EmployeeAssetsCom = () => {
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
     const fetchAssets = async () => {
+        if (!user || !user.employee_id || !localStorage.getItem('token')) {
+            setIsLoading(false);
+            return;
+        }
+
         setIsLoading(true);
         try {
-            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${user.employee_id}`, getAuthConfig());
-            const formattedAssets = res.data.map(asset => {
+            const empIdStr = String(user.employee_id).trim();
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/assets/${empIdStr}`, getAuthConfig());
+            
+            const formattedAssets = (res.data || []).map(asset => {
                 let photos = asset.asset_photos || [];
-                if (typeof photos === 'string') photos = JSON.parse(photos);
+                if (typeof photos === 'string') {
+                    try { photos = JSON.parse(photos); } catch(e) { photos = []; }
+                }
                 if (photos.length === 0 && asset.asset_photo) photos = [asset.asset_photo];
 
                 return {
@@ -102,10 +110,12 @@ const EmployeeAssetsCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        if (user?.employee_id) {
+        if (user && user.employee_id) {
             fetchAssets();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const handleInputChange = (e) => {

@@ -21,10 +21,9 @@ if (typeof document !== 'undefined' && !document.getElementById('dm-sans-import'
     document.head.appendChild(styleEl);
 }
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -150,172 +149,176 @@ const EmployeePayrollCom = () => {
         return parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
-    useEffect(() => {
-        const fetchPayroll = async () => {
-            // FIX: Ensure employee ID exists and is fully formatted before fetching
-            const empId = user?.employee_id;
-            if (!empId) {
-                setLoading(false);
-                return;
-            }
+    const fetchPayroll = async () => {
+        if (!user || !user.employee_id || !localStorage.getItem('token')) {
+            setLoading(false);
+            return;
+        }
 
-            try {
-                // FIXED: Destructured properly and applied getAuthConfig() with full URL pathing
-                const [profileRes, attRes, leaveReqRes, leavePolRes, holRes] = await Promise.all([
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empId}`, getAuthConfig()).catch(() => ({ data: {} })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empId}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${empId}`, getAuthConfig()).catch(() => ({ data: [] })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`, getAuthConfig()).catch(() => ({ data: [] })),
-                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
-                ]);
+        try {
+            const empIdStr = String(user.employee_id).trim();
 
-                const profile = profileRes.data || {};
-                const attendanceLogs = attRes.data?.history || [];
-                const leaveRequests = leaveReqRes.data || [];
-                const leavePolicies = leavePolRes.data || [];
-                const holidays = holRes.data || [];
+            // Wrapped with .catch() arrays to avoid total promise failure on single route drop
+            const [profileRes, attRes, leaveReqRes, leavePolRes, holRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig()).catch(() => ({ data: {} })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empIdStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-leave-policies`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
+            ]);
 
-                const approvedLeaves = leaveRequests.filter(req => req.status === 'Approved');
-                const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
+            const profile = profileRes.data || {};
+            const attendanceLogs = attRes.data?.history || [];
+            const leaveRequests = leaveReqRes.data || [];
+            const leavePolicies = leavePolRes.data || [];
+            const holidays = holRes.data || [];
 
-                const basic = parseNum(profile.basic_salary);
-                const hra = parseNum(profile.hra);
-                const conveyance = parseNum(profile.conveyance);
-                const medical = parseNum(profile.medical);
-                const specialAllowance = parseNum(profile.special_allowance);
-                const otherAllowances = parseNum(profile.other_allowances);
+            const approvedLeaves = leaveRequests.filter(req => req.status === 'Approved');
+            const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
 
-                const epf = parseNum(profile.epf);
-                const esi = parseNum(profile.esi);
-                const healthInsurance = parseNum(profile.health_insurance);
-                const pt = parseNum(profile.pt);
-                const tds = parseNum(profile.tds);
+            const basic = parseNum(profile.basic_salary);
+            const hra = parseNum(profile.hra);
+            const conveyance = parseNum(profile.conveyance);
+            const medical = parseNum(profile.medical);
+            const specialAllowance = parseNum(profile.special_allowance);
+            const otherAllowances = parseNum(profile.other_allowances);
 
-                const grossFull = basic + hra + conveyance + medical + specialAllowance + otherAllowances;
-                const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+            const epf = parseNum(profile.epf);
+            const esi = parseNum(profile.esi);
+            const healthInsurance = parseNum(profile.health_insurance);
+            const pt = parseNum(profile.pt);
+            const tds = parseNum(profile.tds);
 
-                let historyArray = [];
-                const todayStr = new Date().toLocaleDateString('en-CA');
+            const grossFull = basic + hra + conveyance + medical + specialAllowance + otherAllowances;
+            const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 
-                for (let i = 0; i < 4; i++) {
-                    const targetDate = new Date();
-                    targetDate.setMonth(targetDate.getMonth() - i);
-                    const y = targetDate.getFullYear();
-                    const m = targetDate.getMonth();
-                    const daysInMonth = getDaysInMonth(y, m);
-                    const monthLabel = targetDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+            let historyArray = [];
+            const todayStr = new Date().toLocaleDateString('en-CA');
 
-                    let presentCount = 0;
-                    let paidLeaveCount = 0;
-                    let unpaidLeaveCount = 0;
-                    let holidayCount = 0;
-                    let sundaysCount = 0;
-                    let saturdaysCount = 0;
-                    let absentCount = 0;
+            for (let i = 0; i < 4; i++) {
+                const targetDate = new Date();
+                targetDate.setMonth(targetDate.getMonth() - i);
+                const y = targetDate.getFullYear();
+                const m = targetDate.getMonth();
+                const daysInMonth = getDaysInMonth(y, m);
+                const monthLabel = targetDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
-                    // Advanced Date Continuity Analyzer
-                    for (let d = 1; d <= daysInMonth; d++) {
-                        const currDate = new Date(y, m, d);
-                        const currDateStr = currDate.toLocaleDateString('en-CA');
-                        
-                        const day = currDate.getDay();
-                        const isSun = day === 0;
-                        let isSat = false;
-                        if (day === 6) {
-                            const weekOfMonth = Math.ceil(currDate.getDate() / 7);
-                            if (weekOfMonth === 2 || weekOfMonth === 4) isSat = true; // 2nd & 4th Sat
-                        }
+                let presentCount = 0;
+                let paidLeaveCount = 0;
+                let unpaidLeaveCount = 0;
+                let holidayCount = 0;
+                let sundaysCount = 0;
+                let saturdaysCount = 0;
+                let absentCount = 0;
 
-                        // Count the physical calendar weekends for the table mapping
-                        if (isSun) sundaysCount++;
-                        if (isSat) saturdaysCount++;
-
-                        // Future days within the current month are projected as working/paid temporarily
-                        if (currDateStr > todayStr) {
-                            continue; 
-                        }
-
-                        // 1. Check Punches
-                        const hasPunch = attendanceLogs.some(l => new Date(l.date).toLocaleDateString('en-CA') === currDateStr && l.clock_in);
-                        if (hasPunch) {
-                            presentCount++;
-                            continue;
-                        }
-
-                        // 2. Check Leaves
-                        const leaveReq = approvedLeaves.find(req => {
-                            const start = new Date(req.from_date).toLocaleDateString('en-CA');
-                            const end = new Date(req.to_date).toLocaleDateString('en-CA');
-                            return currDateStr >= start && currDateStr <= end;
-                        });
-
-                        if (leaveReq) {
-                            const policy = leavePolicies.find(p => p.leave_name === leaveReq.leave_type);
-                            if (policy && policy.paid_status === 'Paid') {
-                                paidLeaveCount++;
-                            } else {
-                                unpaidLeaveCount++;
-                            }
-                            continue;
-                        }
-
-                        // 3. Check Holidays
-                        const isHoliday = holidays.some(h => new Date(h.holiday_date).toLocaleDateString('en-CA') === currDateStr && h.status !== 'Draft');
-                        if (isHoliday) {
-                            holidayCount++;
-                            continue;
-                        }
-
-                        // 4. Skip Weekends from Absence (already counted as Unpaid/Weekends above)
-                        if (isSun || isSat) {
-                            continue;
-                        }
-
-                        // 5. If past day, no punch, no leave, no holiday, no weekend -> Absent
-                        absentCount++;
+                // Advanced Date Continuity Analyzer
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const currDate = new Date(y, m, d);
+                    const currDateStr = currDate.toLocaleDateString('en-CA');
+                    
+                    const day = currDate.getDay();
+                    const isSun = day === 0;
+                    let isSat = false;
+                    if (day === 6) {
+                        const weekOfMonth = Math.ceil(currDate.getDate() / 7);
+                        if (weekOfMonth === 2 || weekOfMonth === 4) isSat = true; // 2nd & 4th Sat
                     }
 
-                    const remainingDays = daysInMonth - sundaysCount - saturdaysCount;
-                    const totalUnpaidDays = absentCount + unpaidLeaveCount;
-                    const dailyRate = grossFull / daysInMonth;
-                    const calculatedLeavesDeduction = totalUnpaidDays * dailyRate;
+                    // Count the physical calendar weekends for the table mapping
+                    if (isSun) sundaysCount++;
+                    if (isSat) saturdaysCount++;
 
-                    const totalDeductions = epf + esi + healthInsurance + pt + tds + calculatedLeavesDeduction;
-                    const netSalary = grossFull - totalDeductions;
+                    // Future days within the current month are projected as working/paid temporarily
+                    if (currDateStr > todayStr) {
+                        continue; 
+                    }
 
-                    historyArray.push({
-                        monthLabel,
-                        daysInMonth,
-                        sundaysCount,
-                        saturdaysCount,
-                        remainingDays,
-                        presentDays: presentCount,
-                        paidLeaveDays: paidLeaveCount,
-                        holidayDays: holidayCount,
-                        absentDays: absentCount,
-                        unpaidLeaveDays: unpaidLeaveCount,
-                        totalUnpaidDays: totalUnpaidDays,
-                        dailyRate: dailyRate,
-                        grossSalary: grossFull,
-                        totalDeductions,
-                        netSalary,
-                        earnings: { basic, hra, conveyance, medical, specialAllowance, otherAllowances },
-                        deductions: { epf, esi, healthInsurance, pt, tds, leaves: calculatedLeavesDeduction }
+                    // 1. Check Punches
+                    const hasPunch = attendanceLogs.some(l => new Date(l.date).toLocaleDateString('en-CA') === currDateStr && l.clock_in);
+                    if (hasPunch) {
+                        presentCount++;
+                        continue;
+                    }
+
+                    // 2. Check Leaves
+                    const leaveReq = approvedLeaves.find(req => {
+                        const start = new Date(req.from_date).toLocaleDateString('en-CA');
+                        const end = new Date(req.to_date).toLocaleDateString('en-CA');
+                        return currDateStr >= start && currDateStr <= end;
                     });
+
+                    if (leaveReq) {
+                        const policy = leavePolicies.find(p => p.leave_name === leaveReq.leave_type);
+                        if (policy && policy.paid_status === 'Paid') {
+                            paidLeaveCount++;
+                        } else {
+                            unpaidLeaveCount++;
+                        }
+                        continue;
+                    }
+
+                    // 3. Check Holidays
+                    const isHoliday = holidays.some(h => new Date(h.holiday_date).toLocaleDateString('en-CA') === currDateStr && h.status !== 'Draft');
+                    if (isHoliday) {
+                        holidayCount++;
+                        continue;
+                    }
+
+                    // 4. Skip Weekends from Absence (already counted as Unpaid/Weekends above)
+                    if (isSun || isSat) {
+                        continue;
+                    }
+
+                    // 5. If past day, no punch, no leave, no holiday, no weekend -> Absent
+                    absentCount++;
                 }
 
-                const currentMonthLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
-                const currentPayroll = historyArray.find(h => h.monthLabel === currentMonthLabel) || historyArray[0];
+                const remainingDays = daysInMonth - sundaysCount - saturdaysCount;
+                const totalUnpaidDays = absentCount + unpaidLeaveCount;
+                const dailyRate = grossFull / daysInMonth;
+                const calculatedLeavesDeduction = totalUnpaidDays * dailyRate;
 
-                setPayrollData({ currentPayroll, history: historyArray });
-                setLoading(false);
-            } catch (error) {
-                console.error("Error fetching dynamic payroll data", error);
-                setLoading(false);
+                const totalDeductions = epf + esi + healthInsurance + pt + tds + calculatedLeavesDeduction;
+                const netSalary = grossFull - totalDeductions;
+
+                historyArray.push({
+                    monthLabel,
+                    daysInMonth,
+                    sundaysCount,
+                    saturdaysCount,
+                    remainingDays,
+                    presentDays: presentCount,
+                    paidLeaveDays: paidLeaveCount,
+                    holidayDays: holidayCount,
+                    absentDays: absentCount,
+                    unpaidLeaveDays: unpaidLeaveCount,
+                    totalUnpaidDays: totalUnpaidDays,
+                    dailyRate: dailyRate,
+                    grossSalary: grossFull,
+                    totalDeductions,
+                    netSalary,
+                    earnings: { basic, hra, conveyance, medical, specialAllowance, otherAllowances },
+                    deductions: { epf, esi, healthInsurance, pt, tds, leaves: calculatedLeavesDeduction }
+                });
             }
-        };
 
-        fetchPayroll();
+            const currentMonthLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+            const currentPayroll = historyArray.find(h => h.monthLabel === currentMonthLabel) || historyArray[0];
+
+            setPayrollData({ currentPayroll, history: historyArray });
+            setLoading(false);
+        } catch (error) {
+            console.error("Error fetching dynamic payroll data", error);
+            setLoading(false);
+        }
+    };
+
+    // Guarded execution
+    useEffect(() => {
+        if (user && user.employee_id) {
+            fetchPayroll();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     // -----------------------------------------------------------------------
@@ -611,7 +614,7 @@ const EmployeePayrollCom = () => {
                             <div className="h-6 md:h-7 bg-slate-200 rounded-md w-3/4"></div>
                             <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
                         </div>
-                        <div className="h-10 bg-slate-200 rounded-xl w-full sm:w-48 shrink-0"></div>
+                        <div className="h-10 bg-slate-200 rounded-xl w-full md:w-48 shrink-0"></div>
                     </div>
                 </div>
 

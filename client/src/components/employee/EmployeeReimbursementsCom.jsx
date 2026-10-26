@@ -16,6 +16,16 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
+// Bulletproof Stateless Auth Config (No Cookies)
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const EmployeeReimbursementsCom = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('submit');
@@ -49,9 +59,15 @@ const EmployeeReimbursementsCom = () => {
     ];
 
     const fetchClaims = async () => {
+        if (!user || !user.employee_id || !localStorage.getItem('token')) {
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/reimbursements/${user.employee_id}`);
+            const empIdStr = String(user.employee_id).trim();
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/reimbursements/${empIdStr}`, getAuthConfig());
             setClaims(response.data);
         } catch (error) {
             console.error("Error fetching claims", error);
@@ -60,8 +76,12 @@ const EmployeeReimbursementsCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        if (user?.employee_id) fetchClaims();
+        if (user && user.employee_id) {
+            fetchClaims();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const handleInputChange = (e) => {
@@ -133,7 +153,7 @@ const EmployeeReimbursementsCom = () => {
     const handleDeleteRequest = async (id) => {
         if (!window.confirm("Are you sure you want to withdraw this reimbursement claim?")) return;
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/reimbursements/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/reimbursements/${id}`, getAuthConfig());
             fetchClaims();
         } catch (error) {
             alert('Failed to withdraw request.');
@@ -148,14 +168,14 @@ const EmployeeReimbursementsCom = () => {
         setIsSubmitting(true);
         try {
             if (isEditing) {
-                const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/reimbursements/${editId}`, claimData);
+                const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/reimbursements/${editId}`, claimData, getAuthConfig());
                 setSubmitMsg({ text: response.data.message, type: 'success' });
                 handleCancelEdit();
             } else {
                 const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/reimbursements/submit`, {
                     employeeId: user.employee_id,
                     ...claimData
-                });
+                }, getAuthConfig());
                 setSubmitMsg({ text: response.data.message, type: 'success' });
                 setClaimData({ expenseType: '', amount: '', date: '', description: '', attachment: '', fileName: '' });
                 if (fileInputRef.current) fileInputRef.current.value = '';
@@ -398,7 +418,7 @@ const EmployeeReimbursementsCom = () => {
                                     </span>
                                     <div className="min-w-0">
                                         <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">{isEditing ? 'Edit Claim' : 'Submit Claim'}</h2>
-                                        <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 leading-snug truncate">Fill out the expense details and upload your receipt · Max 10MB</p>
+                                        <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 leading-snug truncate">Fill out the expense details and upload your receipt 路 Max 10MB</p>
                                     </div>
                                 </div>
                                 {isEditing && (
@@ -504,7 +524,7 @@ const EmployeeReimbursementsCom = () => {
                                                     <p className="mb-0.5 text-xs sm:text-sm font-semibold text-slate-600">
                                                         <span className="text-[#0437cc]">Click to upload</span> or drag and drop
                                                     </p>
-                                                    <p className="text-[10px] sm:text-[11px] text-slate-400">PDF, JPG or PNG · Up to 10MB</p>
+                                                    <p className="text-[10px] sm:text-[11px] text-slate-400">PDF, JPG or PNG 路 Up to 10MB</p>
                                                 </div>
                                                 <input type="file" accept=".pdf, image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
                                             </label>
