@@ -1,4 +1,40 @@
 import pool from '../../config/db.js';
+import initializeEmpAttendanceModel from '../../models/employee/EmpAttendance.js';
+
+await initializeEmpAttendanceModel();
+
+// New dedicated method to reliably get the exact shift for the logged-in employee
+export const getMyShiftDetails = async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        
+        // Find the employee's assigned shift name
+        const empQuery = `SELECT shift FROM sa_employees WHERE employee_id = $1`;
+        const empRes = await pool.query(empQuery, [employeeId]);
+        
+        if (empRes.rows.length === 0) return res.status(404).json({ message: "Employee not found." });
+        
+        const shiftName = empRes.rows[0].shift;
+
+        // Fetch exact shift configuration
+        const shiftQuery = `SELECT * FROM sa_work_shifts WHERE shift_name = $1 AND status = 'Active' LIMIT 1`;
+        const shiftRes = await pool.query(shiftQuery, [shiftName]);
+
+        // Fallback to the first active shift if a specific match isn't found
+        if (shiftRes.rows.length === 0) {
+            const defaultShift = await pool.query(`SELECT * FROM sa_work_shifts WHERE status = 'Active' ORDER BY id ASC LIMIT 1`);
+            if (defaultShift.rows.length > 0) {
+                return res.status(200).json(defaultShift.rows[0]);
+            }
+            return res.status(404).json({ message: "No active shifts configured in the system." });
+        }
+
+        res.status(200).json(shiftRes.rows[0]);
+    } catch (error) {
+        console.error('Fetch Shift Details Error:', error);
+        res.status(500).json({ message: 'Error fetching shift details.' });
+    }
+};
 
 export const getAttendanceHistory = async (req, res) => {
     try {
@@ -21,7 +57,6 @@ export const clockIn = async (req, res) => {
         const { employeeId, todayDate, locationData, deviceInfo } = req.body;
         const now = new Date();
 
-        // 0. STRICT DOUBLE CHECK-IN PREVENTION
         const doubleCheckQuery = `
             SELECT id FROM emp_attendance 
             WHERE employee_id = $1 AND date = $2 AND clock_out IS NULL;
@@ -31,7 +66,6 @@ export const clockIn = async (req, res) => {
             return res.status(400).json({ message: 'You already have an active clock-in session. Please wait for the system to sync.' });
         }
 
-        // 1. Check for Missed Checkout (Forgot to logout on a previous day)
         const openSessionQuery = `
             SELECT id, date FROM emp_attendance 
             WHERE employee_id = $1 AND clock_out IS NULL AND date < $2
@@ -50,7 +84,6 @@ export const clockIn = async (req, res) => {
             `, [missedRecordId]);
         }
 
-        // 2. Shift and Grace Time / Late Marking Logic
         let lateMinutes = 0;
         let status = 'Present';
         
@@ -67,12 +100,11 @@ export const clockIn = async (req, res) => {
 
                 if (shift.shift_type === 'Flexible') {
                     const fivePM = new Date(now);
-                    fivePM.setHours(17, 0, 0, 0); // 5:00 PM Boundary
+                    fivePM.setHours(17, 0, 0, 0); 
                     if (now.getTime() >= fivePM.getTime()) {
                         return res.status(400).json({ message: 'It is past 5:00 PM. Flexible shift check-ins are not allowed at this time. You have been marked as Absent.' });
                     }
                 } else {
-                    // Fixed Shift Rule: Allow login, but mark as Late if past grace period
                     if (shift.start_time) {
                         let [sHrs, sMins] = shift.start_time.split(':').map(Number);
                         
@@ -96,7 +128,6 @@ export const clockIn = async (req, res) => {
             console.warn("Could not calculate shift rules, falling back to default Present.", shiftError.message);
         }
 
-        // 3. Insert new clock-in
         const insertQuery = `
             INSERT INTO emp_attendance (employee_id, date, clock_in, clock_in_location, clock_in_device, late_minutes, status)
             VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6) RETURNING *;

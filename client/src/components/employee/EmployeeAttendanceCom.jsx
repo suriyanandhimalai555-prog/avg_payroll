@@ -11,7 +11,6 @@ import {
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
 const getAuthConfig = () => {
     return {
         withCredentials: true,
@@ -26,7 +25,6 @@ const EmployeeAttendanceCom = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('today');
 
-    // Data States
     const [loading, setLoading] = useState(true);
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [todayLogs, setTodayLogs] = useState([]);
@@ -35,23 +33,17 @@ const EmployeeAttendanceCom = () => {
     const [shiftDetails, setShiftDetails] = useState(null);
     const [joiningDate, setJoiningDate] = useState(null);
 
-    // Accordion State
     const [expandedDates, setExpandedDates] = useState([]);
-
-    // Filter States
     const [selectedMonthYear, setSelectedMonthYear] = useState('');
     const [historyFilterStatus, setHistoryFilterStatus] = useState('All');
     const [historyFilterMonth, setHistoryFilterMonth] = useState('All');
 
-    // Timer States
     const countdownRef = useRef(null);
     const [completedMsToday, setCompletedMsToday] = useState(0);
 
-    // EOD Modals
     const [isEodModalOpen, setIsEodModalOpen] = useState(false);
     const [eodInput, setEodInput] = useState('');
     const [isSubmittingEod, setIsSubmittingEod] = useState(false);
-
     const [isEditEodModalOpen, setIsEditEodModalOpen] = useState(false);
     const [editingRecordId, setEditingRecordId] = useState(null);
     const [editEodInput, setEditEodInput] = useState('');
@@ -65,20 +57,20 @@ const EmployeeAttendanceCom = () => {
             const [attRes, profRes, shiftRes, holRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: {} })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/shift/${user.employee_id}`, getAuthConfig()).catch(() => ({ data: null })), // Exact shift
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
             setFullHistory(fetchedHistory);
             setHolidays(holRes.data || []);
+            setShiftDetails(shiftRes.data); // Directly mapped from the new backend route
 
-            // Establish Employee Joining Date for Calendar Boundary
             const profile = profRes.data || {};
             const joinStr = profile.joining_date || profile.created_at || user?.joining_date || user?.created_at;
             if (joinStr) {
                 const jd = new Date(joinStr);
-                jd.setHours(0, 0, 0, 0); // Normalize to midnight
+                jd.setHours(0, 0, 0, 0); 
                 setJoiningDate(jd);
             }
 
@@ -100,20 +92,6 @@ const EmployeeAttendanceCom = () => {
             });
             setCompletedMsToday(previousMs);
 
-            // Robustly match the employee's shift name to the shift rules
-            const employeeShiftName = profRes.data?.shift;
-            const allShifts = shiftRes.data?.shifts || shiftRes.data || [];
-            let assignedShift = null;
-            
-            if (Array.isArray(allShifts)) {
-                assignedShift = allShifts.find(s => s.shift_name?.toLowerCase() === employeeShiftName?.toLowerCase());
-                if (!assignedShift && allShifts.length > 0) {
-                    assignedShift = allShifts[0]; // Fallback to default company shift
-                }
-            }
-            
-            setShiftDetails(assignedShift);
-
         } catch (error) {
             console.error('Error fetching employee attendance data', error);
         } finally {
@@ -129,10 +107,10 @@ const EmployeeAttendanceCom = () => {
     const latestRecord = todayLogs.length > 0 ? todayLogs[0] : null;
     const activeSession = fullHistory.find(r => r.clock_in && !r.clock_out);
     const isClockedIn = !!activeSession;
-
     const isPendingOldCheckout = isClockedIn && new Date(activeSession.date).toLocaleDateString('en-CA') !== new Date().toLocaleDateString('en-CA');
-
     const hasWorkedToday = todayLogs.length > 0;
+    
+    // Fallback to 8 hours if undefined
     const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8) : 8;
     const targetMs = targetHours * 3600000;
 
@@ -295,9 +273,6 @@ const EmployeeAttendanceCom = () => {
         return options;
     }, [selectedMonthYear]);
 
-    // ====================================================================================
-    // ADVANCED DATE CONTINUITY & WEEKLY OFF GENERATOR
-    // ====================================================================================
     const getDisplayedHistory = () => {
         let startDate, endDate;
         const today = new Date();
@@ -364,7 +339,6 @@ const EmployeeAttendanceCom = () => {
                 total_hours_sum = `${hrs}:${mins} Hrs`;
             }
 
-            // Core Status Evaluation Logic: Accurately checks Even/Odd Saturdays
             let status = 'Absent';
             if (sessions.length > 0) {
                 status = late_minutes > 0 ? 'Late' : 'Present';
@@ -373,23 +347,19 @@ const EmployeeAttendanceCom = () => {
             } else {
                 const dayOfWeek = dateObj.getDay();
                 if (dayOfWeek === 0) {
-                    // Sunday is universally a Week Off
-                    status = 'Week Off';
+                    status = 'Week Off'; // Sundays
                 } else if (dayOfWeek === 6) {
-                    // Check if it is an Even Saturday (2nd or 4th of the month)
                     const weekOfMonth = Math.ceil(dateObj.getDate() / 7);
                     if (weekOfMonth === 2 || weekOfMonth === 4) {
-                        status = 'Week Off';
+                        status = 'Week Off'; // Even Saturdays
                     } else {
-                        // Odd Saturdays (1st, 3rd, 5th) are Working Days. If no sessions exist, they are Absent.
-                        status = 'Absent';
+                        status = 'Absent'; // Odd Saturdays
                     }
                 } else {
                     status = 'Absent';
                 }
             }
 
-            // Prevent marking future scheduled days as Absent
             if (dateObj > new Date() && status === 'Absent') {
                 status = 'Scheduled';
             }
@@ -408,7 +378,6 @@ const EmployeeAttendanceCom = () => {
             };
         });
 
-        // Filter Logic
         let finalData = displayData;
         if (activeTab === 'history' && historyFilterStatus !== 'All') {
             finalData = finalData.filter(g => g.status === historyFilterStatus || (historyFilterStatus === 'Late' && g.status === 'Late'));
@@ -1182,7 +1151,7 @@ const EmployeeAttendanceCom = () => {
                                                                     {group.sessions.length > 0 ? (
                                                                         group.sessions.map((session, idx) => (
                                                                             <div key={idx} className="relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm mt-3 hover:shadow-md transition-shadow">
-                                                                                <span className="absolute -top-2.5 left-3 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                                                                                <span className="absolute -top-2.5 left-3 bg-white border border-slate-200 text-[#010a1f] px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
                                                                                     Session {idx + 1}
                                                                                 </span>
 
