@@ -22,19 +22,14 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Streamlined Auth Config: Relies on the browser to send the HttpOnly cookie automatically
+// Bulletproof Stateless Auth Config
 const getAuthConfig = () => {
-    const config = {
-        withCredentials: true // CRITICAL: This allows cookies to be sent cross-origin to your backend
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
     };
-    
-    // Fallback just in case token is ever stored in localStorage
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    if (token) {
-        config.headers = { Authorization: `Bearer ${token}` };
-    }
-    
-    return config;
 };
 
 const SuperAdminCompanyProfileCom = () => {

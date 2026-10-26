@@ -22,10 +22,9 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
+// Bulletproof Stateless Auth Config
 const getAuthConfig = () => {
     return {
-        withCredentials: true,
         headers: {
             'Content-Type': 'application/json',
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
@@ -77,14 +76,13 @@ const SuperAdminBranchesCom = () => {
             if (companyRes.data && companyRes.data.length > 0 && !isEditing) {
                 setFormData(prev => ({ ...prev, companyId: companyRes.data[0].id }));
             }
-            setApiError(''); // clear any previous errors on success
+            setApiError(''); 
 
         } catch (error) {
             console.error('Failed to load core data', error);
             if (error.response?.status === 401) {
                 setApiError('Session expired or unauthorized. Please log in again.');
             } else if (error.response?.status === 500) {
-                // Surface the exact PostgreSQL error message if it exists
                 setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
             } else {
                 setApiError('Failed to establish connection with the server.');

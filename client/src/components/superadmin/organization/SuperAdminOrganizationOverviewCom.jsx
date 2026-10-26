@@ -8,6 +8,16 @@ import {
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 
+// Bulletproof Stateless Auth Config
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
+
 const SuperAdminOrganizationOverviewCom = () => {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(true);
@@ -28,7 +38,7 @@ const SuperAdminOrganizationOverviewCom = () => {
         const fetchOverviewData = async () => {
             setIsLoading(true);
             try {
-                const safeGet = (endpoint) => axios.get(`${import.meta.env.VITE_API_URL}${endpoint}`).catch(() => ({ data: [] }));
+                const safeGet = (endpoint) => axios.get(`${import.meta.env.VITE_API_URL}${endpoint}`, getAuthConfig()).catch(() => ({ data: [] }));
 
                 const [compRes, branchRes, deptRes, desigRes, locRes, hrRes, empRes] = await Promise.all([
                     safeGet('/api/sa-company-profile'),
@@ -36,7 +46,7 @@ const SuperAdminOrganizationOverviewCom = () => {
                     safeGet('/api/sa-departments'),
                     safeGet('/api/sa-designations'),
                     safeGet('/api/sa-locations'),
-                    safeGet('/api/sa-hr'),
+                    safeGet('/api/sa-hr-users'), 
                     safeGet('/api/sa-employees')
                 ]);
 
@@ -68,7 +78,7 @@ const SuperAdminOrganizationOverviewCom = () => {
         if (!window.confirm(`WARNING: Are you sure you want to delete ${companyName}? This action will cascade and delete all associated branches, departments, and locations.`)) return;
 
         try {
-            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-company-profile/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-company-profile/${id}`, getAuthConfig());
             setData(prev => ({
                 ...prev,
                 companies: prev.companies.filter(c => c.id !== id)
@@ -78,7 +88,6 @@ const SuperAdminOrganizationOverviewCom = () => {
         }
     };
 
-    // ==================== STAT CARD ====================
     const StatCard = ({ title, count, icon: Icon, gradient, glow, link }) => (
         <div
             onClick={() => navigate(link)}
