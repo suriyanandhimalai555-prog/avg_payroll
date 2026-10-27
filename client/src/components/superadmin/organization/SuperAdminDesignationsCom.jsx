@@ -22,12 +22,23 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
+// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, ''); // Sanitize stringified tokens
+    }
+    return token;
+};
+
+// Pure Stateless Auth Config (No Cookies, No CORS preflight issues)
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -67,9 +78,9 @@ const SuperAdminDesignationsCom = () => {
         setIsLoading(true);
         try {
             const [compRes, deptRes, desigRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig())
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             setCompanies(compRes.data || []);
@@ -79,23 +90,23 @@ const SuperAdminDesignationsCom = () => {
             if (deptRes.data && deptRes.data.length > 0 && !isEditing) {
                 setFormData(prev => ({ ...prev, departmentId: deptRes.data[0].id }));
             }
-            setApiError(''); // clear any previous errors
+            setApiError(''); 
         } catch (error) {
             console.error('Failed to load core data', error);
-            if (error.response?.status === 401) {
-                setApiError('Session expired or unauthorized. Please log in again.');
-            } else if (error.response?.status === 500) {
-                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
-            } else {
-                setApiError('Failed to establish connection with the server.');
-            }
         } finally {
             setIsLoading(false);
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        fetchCoreData();
+        const token = getCleanToken();
+        if (token) {
+            fetchCoreData();
+        } else {
+            setIsLoading(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleInputChange = (e) => {

@@ -4,7 +4,6 @@ import {
     FaBuilding, FaInfoCircle, FaCheck, FaTimes,
     FaMapMarkerAlt, FaCodeBranch, FaUserTie, FaPhoneAlt,
     FaSitemap, FaEye, FaEdit, FaTrash, FaSearch, FaFilter,
-    FaPlusCircle
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -22,12 +21,23 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config
+// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, ''); // Sanitize stringified tokens
+    }
+    return token;
+};
+
+// Pure Stateless Auth Config (No Cookies, No CORS preflight issues)
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -63,11 +73,6 @@ const SuperAdminBranchesCom = () => {
     const [apiError, setApiError] = useState('');
 
     const fetchCoreData = async () => {
-        if (!localStorage.getItem('token')) {
-            setIsLoading(false);
-            return;
-        }
-
         setIsLoading(true);
         try {
             const [companyRes, branchRes] = await Promise.all([
@@ -91,7 +96,12 @@ const SuperAdminBranchesCom = () => {
 
     // Guarded execution
     useEffect(() => {
-        fetchCoreData();
+        const token = getCleanToken();
+        if (token) {
+            fetchCoreData();
+        } else {
+            setIsLoading(false);
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

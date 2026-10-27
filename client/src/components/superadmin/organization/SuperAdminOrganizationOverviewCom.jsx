@@ -8,12 +8,23 @@ import {
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 
-// Bulletproof Stateless Auth Config (No Cookies)
+// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, ''); // Sanitize stringified tokens
+    }
+    return token;
+};
+
+// Pure Stateless Auth Config (No Cookies, No CORS preflight issues)
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -72,7 +83,12 @@ const SuperAdminOrganizationOverviewCom = () => {
 
     // Guarded execution
     useEffect(() => {
-        fetchOverviewData();
+        const token = getCleanToken();
+        if (token) {
+            fetchOverviewData();
+        } else {
+            setIsLoading(false);
+        }
     }, []);
 
     const handleView = (company) => {

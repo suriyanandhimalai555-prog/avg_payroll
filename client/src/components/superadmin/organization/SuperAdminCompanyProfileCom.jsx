@@ -22,12 +22,23 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
+// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, ''); // Sanitize stringified tokens
+    }
+    return token;
+};
+
+// Pure Stateless Auth Config (No Cookies, No CORS preflight issues)
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -56,11 +67,6 @@ const SuperAdminCompanyProfileCom = () => {
     const [apiError, setApiError] = useState('');
 
     const fetchProfiles = async () => {
-        if (!localStorage.getItem('token')) {
-            setIsFetching(false);
-            return;
-        }
-
         setIsFetching(true);
         try {
             const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig());
@@ -68,9 +74,6 @@ const SuperAdminCompanyProfileCom = () => {
             setApiError('');
         } catch (error) {
             console.error('Failed to load profiles:', error);
-            if (error.response?.status === 401) {
-                setApiError('Session expired or unauthorized. Please log in again.');
-            }
         } finally {
             setIsFetching(false);
         }
@@ -78,7 +81,12 @@ const SuperAdminCompanyProfileCom = () => {
 
     // Guarded execution
     useEffect(() => {
-        fetchProfiles();
+        const token = getCleanToken();
+        if (token) {
+            fetchProfiles();
+        } else {
+            setIsFetching(false);
+        }
     }, []);
 
     const handleInputChange = (e) => {

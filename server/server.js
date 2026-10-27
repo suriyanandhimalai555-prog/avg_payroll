@@ -130,11 +130,14 @@ if (cluster.isPrimary) {
                 callback(new Error('Not allowed by CORS'));
             }
         },
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-        credentials: true, // FIXED: Required for any cross-origin auth flow
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'Origin'],
+        credentials: true, // This enables the 'Access-Control-Allow-Credentials' response header
         optionsSuccessStatus: 200
     }));
+
+    // Handle Pre-flight explicitly
+    app.options('*', cors());
 
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -153,7 +156,7 @@ if (cluster.isPrimary) {
 
     app.get('/health/ready', async (_req, res) => {
         try {
-            pool.query({ text: 'SELECT 1', query_timeout: 2000 });
+            await pool.query({ text: 'SELECT 1', query_timeout: 2000 });
             res.status(200).json({ status: 'ready' });
         } catch {
             res.status(503).json({ status: 'not_ready' });

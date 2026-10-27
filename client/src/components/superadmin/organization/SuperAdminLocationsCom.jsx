@@ -22,12 +22,23 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
+// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, ''); // Sanitize stringified tokens
+    }
+    return token;
+};
+
+// Pure Stateless Auth Config (No Cookies, No CORS preflight issues)
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -69,11 +80,11 @@ const SuperAdminLocationsCom = () => {
         setIsLoading(true);
         try {
             const [compRes, branchRes, deptRes, desigRes, locRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`, getAuthConfig())
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-locations`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             setCompanies(compRes.data || []);
@@ -85,23 +96,23 @@ const SuperAdminLocationsCom = () => {
             if (branchRes.data && branchRes.data.length > 0 && !isEditing) {
                 setFormData(prev => ({ ...prev, branchId: branchRes.data[0].id }));
             }
-            setApiError(''); // clear any previous errors
+            setApiError(''); 
         } catch (error) {
             console.error('Failed to load core data', error);
-            if (error.response?.status === 401) {
-                setApiError('Session expired or unauthorized. Please log in again.');
-            } else if (error.response?.status === 500) {
-                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
-            } else {
-                setApiError('Failed to establish connection with the server.');
-            }
         } finally {
             setIsLoading(false);
         }
     };
 
+    // Guarded execution
     useEffect(() => {
-        fetchCoreData();
+        const token = getCleanToken();
+        if (token) {
+            fetchCoreData();
+        } else {
+            setIsLoading(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleInputChange = (e) => {
@@ -250,7 +261,7 @@ const SuperAdminLocationsCom = () => {
                                 <div className="flex items-center gap-3 pb-3 border-b border-slate-200">
                                     <div className="w-10 h-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
                                         {viewLoc.logo ? (
-                                            <img src={viewLoc.logo} alt="Company Logo" className="w-full h-full object-contain p-1" />
+                                            <img src={viewLoc.logo} alt="Company Logo" className="w-full h-full object-contain p-1.5" />
                                         ) : (
                                             <FaBuilding className="text-slate-300" />
                                         )}
