@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cluster from 'cluster';
-import os from 'os';
 import pool from './config/db.js';
 
 dotenv.config();
@@ -123,7 +122,7 @@ if (cluster.isPrimary) {
                 'https://api.avgpayroll.com'
             ];
             
-            // Dynamically allow any subdomain (e.g., admin.avgpayroll.com, app.avgpayroll.com)
+            // Dynamically allow any subdomain
             if (!origin || allowedOrigins.includes(origin) || /\.avgpayroll\.com$/.test(origin)) {
                 callback(null, true);
             } else {
@@ -132,12 +131,9 @@ if (cluster.isPrimary) {
         },
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'Origin'],
-        credentials: true, // This enables the 'Access-Control-Allow-Credentials' response header
+        credentials: true, 
         optionsSuccessStatus: 200
     }));
-
-    // Handle Pre-flight explicitly
-    app.options('*', cors());
 
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
