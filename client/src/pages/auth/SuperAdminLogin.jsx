@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import Input from '../../components/common/Input';
@@ -14,16 +14,8 @@ const SuperAdminLogin = () => {
     const [loginAttempts, setLoginAttempts] = useState(() => parseInt(localStorage.getItem('sa_login_attempts')) || 0);
     const [blockCountdown, setBlockCountdown] = useState(0);
 
-    const { login, user } = useAuth();
+    const { login, user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
-
-    // Clear ANY legacy tokens completely on fresh load
-    useEffect(() => {
-        if (!user) {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
-        }
-    }, [user]);
 
     useEffect(() => {
         const checkLockout = () => {
@@ -46,6 +38,19 @@ const SuperAdminLogin = () => {
         
         return () => clearInterval(timer);
     }, [error]);
+
+    if (authLoading) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-3">
+                <div className="w-10 h-10 border-3 border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin"></div>
+                <p className="text-sm font-bold text-[#0437cc] uppercase tracking-widest">Loading Portal...</p>
+            </div>
+        );
+    }
+
+    if (user && user.role === 'superadmin') {
+        return <Navigate to="/superadmin" replace />;
+    }
 
     const handleChange = (e) => {
         setCredentials({ ...credentials, [e.target.name]: e.target.value });
@@ -70,13 +75,8 @@ const SuperAdminLogin = () => {
             localStorage.removeItem('sa_lockout_until');
             setLoginAttempts(0);
             
-            // Store strictly in localStorage
-            if (response.data.token) {
-                localStorage.setItem('token', response.data.token);
-            }
-            
-            login(response.data.user);
-            navigate('/superadmin');
+            login(response.data.user, response.data.token);
+            navigate('/superadmin', { replace: true });
 
         } catch (err) {
             let newAttempts = loginAttempts;

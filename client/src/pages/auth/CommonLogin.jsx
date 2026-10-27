@@ -30,14 +30,6 @@ const CommonLogin = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [focusedField, setFocusedField] = useState(null);
 
-    // Clear ANY legacy tokens completely on fresh load
-    useEffect(() => {
-        if (!user && flowView === 'login') {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
-        }
-    }, [user, flowView]);
-
     useEffect(() => {
         const checkLockout = () => {
             const lockoutUntil = parseInt(localStorage.getItem('common_lockout_until'), 10);
@@ -72,6 +64,7 @@ const CommonLogin = () => {
         if (user.role === 'employee') return <Navigate to="/employee" replace />;
         if (user.role === 'hr') return <Navigate to="/hr" replace />;
         if (user.role === 'manager') return <Navigate to="/manager" replace />;
+        if (user.role === 'superadmin') return <Navigate to="/superadmin" replace />;
     }
 
     const handleLogin = async (e) => {
@@ -93,16 +86,11 @@ const CommonLogin = () => {
                 localStorage.removeItem('common_lockout_until');
                 setLoginAttempts(0);
                 
-                // Store strictly in localStorage (removes sessionStorage fragmentation)
-                if (response.data.token) {
-                    localStorage.setItem('token', response.data.token);
-                }
+                login(response.data.user, response.data.token);
                 
-                login(response.data.user);
-                
-                if (loginRole === 'hr') navigate('/hr');
-                else if (loginRole === 'manager') navigate('/manager');
-                else navigate('/employee');
+                if (loginRole === 'hr') navigate('/hr', { replace: true });
+                else if (loginRole === 'manager') navigate('/manager', { replace: true });
+                else navigate('/employee', { replace: true });
             }
         } catch (err) {
             let newAttempts = loginAttempts;
@@ -163,8 +151,8 @@ const CommonLogin = () => {
 
     const handleResetPassword = async (e) => {
         e.preventDefault();
-        if (forgotNewPwd.length < 12 || forgotNewPwd.length > 128) {
-            return setError("Password must be between 12 and 128 characters.");
+        if (forgotNewPwd.length < 8 || forgotNewPwd.length > 128) {
+            return setError("Password must be between 8 and 128 characters.");
         }
 
         setError(''); setIsSubmitting(true);
@@ -369,7 +357,6 @@ const CommonLogin = () => {
                         </>
                     )}
 
-                    {/* ============ REQUEST OTP VIEW ============ */}
                     {flowView === 'request' && (
                         <div className="animate-in slide-in-from-right-8 duration-300">
                             <div className="mb-6 text-center">
@@ -431,7 +418,6 @@ const CommonLogin = () => {
                         </div>
                     )}
 
-                    {/* ============ VERIFY OTP VIEW ============ */}
                     {flowView === 'verify' && (
                         <div className="animate-in slide-in-from-right-8 duration-300">
                             <div className="mb-6 text-center">
@@ -479,7 +465,6 @@ const CommonLogin = () => {
                         </div>
                     )}
 
-                    {/* ============ RESET PASSWORD VIEW ============ */}
                     {flowView === 'reset' && (
                         <div className="animate-in slide-in-from-right-8 duration-300">
                             <div className="mb-6 text-center">
@@ -530,7 +515,6 @@ const CommonLogin = () => {
 
                 </div>
 
-                {/* ==================== FOOTER ==================== */}
                 <div className="flex flex-col items-center gap-1 sm:gap-2 mt-6 sm:mt-8">
                     <p className="text-center text-[10px] sm:text-[11px] font-medium text-slate-400 uppercase tracking-widest">
                         Secure Authentication • © {new Date().getFullYear()} AVG Prime Tech

@@ -48,12 +48,13 @@ const getTableByRole = (role) => {
 export const activateAccount = async (req, res) => {
     try {
         const { token, password } = req.body ?? {};
+        const cleanToken = typeof token === 'string' ? token.replace(/^["']|["']$/g, '').trim() : '';
 
-        if (!token || !password || password.length < 12 || password.length > 128) {
-            return res.status(400).json({ message: 'A valid activation link and a password of 12–128 characters are required.' });
+        if (!cleanToken || !password || password.length < 8 || password.length > 128) {
+            return res.status(400).json({ message: 'A valid activation link and a password of 8–128 characters are required.' });
         }
 
-        const identity = verifyActivationToken(token);
+        const identity = verifyActivationToken(cleanToken);
         if (!identity) {
             return res.status(400).json({ message: 'Activation link is invalid or expired. Request a new invitation.' });
         }
@@ -67,8 +68,8 @@ export const activateAccount = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const result = await pool.query(
-            `UPDATE ${targetTable} SET password = $1, status = 'Active' WHERE LOWER(email) = $2 AND (password IS NULL OR password = '') RETURNING email`,
-            [hashedPassword, identity.email]
+            `UPDATE ${targetTable} SET password = $1, status = 'Active' WHERE LOWER(email) = LOWER($2) AND (password IS NULL OR password = '') RETURNING email`,
+            [hashedPassword, identity.email.trim()]
         );
 
         if (result.rowCount !== 1) {
@@ -222,8 +223,8 @@ export const resetPassword = async (req, res) => {
     try {
         const { email, role, newPassword } = req.body ?? {};
 
-        if (!email?.trim() || !role || !newPassword || newPassword.length < 12 || newPassword.length > 128) {
-            return res.status(400).json({ message: 'A valid email, account role, and password of 12–128 characters are required.' });
+        if (!email?.trim() || !role || !newPassword || newPassword.length < 8 || newPassword.length > 128) {
+            return res.status(400).json({ message: 'A valid email, account role, and password of 8–128 characters are required.' });
         }
 
         const safeEmail = email.trim().toLowerCase();
@@ -264,8 +265,8 @@ export const changePassword = async (req, res) => {
         const targetTable = getTableByRole(role);
         if (!email || !targetTable) return res.status(401).json({ message: 'Authentication required.' });
 
-        if (!currentPassword || !newPassword || newPassword.length < 12 || newPassword.length > 128) {
-            return res.status(400).json({ message: 'Enter your current password and a new password between 12 and 128 characters.' });
+        if (!currentPassword || !newPassword || newPassword.length < 8 || newPassword.length > 128) {
+            return res.status(400).json({ message: 'Enter your current password and a new password between 8 and 128 characters.' });
         }
 
         const userRes = await pool.query(`SELECT password FROM ${targetTable} WHERE email ILIKE $1 LIMIT 1`, [email.trim()]);

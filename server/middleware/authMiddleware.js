@@ -1,18 +1,24 @@
 import jwt from 'jsonwebtoken';
 
 export const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
+    const authHeader = req.headers['authorization'] || req.headers['Authorization'];
     let token = null;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1];
+    if (authHeader && typeof authHeader === 'string') {
+        if (authHeader.startsWith('Bearer ')) {
+            token = authHeader.slice(7).trim();
+        } else {
+            token = authHeader.trim();
+        }
+    } else if (req.headers['x-access-token']) {
+        token = String(req.headers['x-access-token']).trim();
     }
 
     if (!token || token === 'null' || token === 'undefined') {
         return res.status(401).json({ message: 'Authentication required. No valid token found.' });
     }
 
-    token = token.replace(/^["']|["']$/g, '');
+    token = token.replace(/^["']|["']$/g, '').trim();
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);

@@ -1,31 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { FaLock, FaCheckCircle, FaExclamationCircle, FaEye, FaEyeSlash, FaKey, FaArrowRight } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 
-// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
-const getCleanToken = () => {
-    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    if (token === 'null' || token === 'undefined') return null;
-    if (token) token = token.replace(/^["']|["']$/g, '');
-    return token;
-};
-
-// Bulletproof Auth Config
-const getAuthConfig = () => {
-    const token = getCleanToken();
-    return {
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-    };
-};
-
 const ActivateAccount = () => {
     const [searchParams] = useSearchParams();
-    const token = searchParams.get('token');
+    const params = useParams();
+    const rawToken = searchParams.get('token') || params.token || '';
+    const token = rawToken ? rawToken.replace(/^["']|["']$/g, '').trim() : '';
 
     const navigate = useNavigate();
 
@@ -61,6 +44,10 @@ const ActivateAccount = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        if (!token) {
+            return setStatus({ ...status, error: 'Invalid activation link. No activation token provided.' });
+        }
+
         if (formData.password !== formData.confirmPassword) {
             return setStatus({ ...status, error: 'Passwords do not match.' });
         }
@@ -72,10 +59,16 @@ const ActivateAccount = () => {
         setStatus({ ...status, loading: true, error: '' });
 
         try {
-            const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/activate`, {
-                token,
-                password: formData.password
-            }, getAuthConfig()); 
+            const response = await axios.post(
+                `${import.meta.env.VITE_API_URL}/api/auth/activate`,
+                {
+                    token,
+                    password: formData.password
+                },
+                {
+                    headers: { 'Content-Type': 'application/json' }
+                }
+            );
 
             if (response.status === 200) {
                 setStatus({ loading: false, error: '', success: true });
