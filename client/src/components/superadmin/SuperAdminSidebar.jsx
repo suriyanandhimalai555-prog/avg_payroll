@@ -9,7 +9,6 @@ import {
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 
-/* ==================== MENU CONFIG (STATIC) ==================== */
 const menuItems = [
     { title: 'Dashboard', icon: FaTachometerAlt, path: '/superadmin' },
     {
@@ -84,7 +83,6 @@ const menuItems = [
     { title: 'Profile', icon: FaUserCircle, path: '/superadmin/profile' },
 ];
 
-/* ==================== SIDEBAR ITEM (MEMOIZED) ==================== */
 const SidebarItem = memo(function SidebarItem({
     item,
     isActiveParent,
@@ -104,7 +102,6 @@ const SidebarItem = memo(function SidebarItem({
 
     if (hasSubItems) {
         const parentHighlighted = isExpandedSubmenu || isActiveParent;
-        // Whether the parent should look "active" while collapsed
         const collapsedActive = isCollapsed && (isFlyoutActive || isActiveParent);
 
         return (
@@ -148,7 +145,6 @@ const SidebarItem = memo(function SidebarItem({
                     />
                 </button>
 
-                {/* Inline Submenu (expanded mode only) */}
                 <div
                     className={`overflow-hidden transition-[max-height,opacity] duration-200 ${
                         isExpandedSubmenu && (!isCollapsed || isMobile)
@@ -235,7 +231,6 @@ const SidebarItem = memo(function SidebarItem({
     );
 });
 
-/* ==================== FLYOUT PANEL (MEMOIZED) ==================== */
 const FlyoutPanel = memo(
     function FlyoutPanel({ flyout, onKeepOpen, onClose, onItemClick }) {
         if (!flyout) return null;
@@ -311,7 +306,6 @@ const FlyoutPanel = memo(
         prev.flyout?.top === next.flyout?.top
 );
 
-/* ==================== MAIN COMPONENT ==================== */
 const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, setIsDesktopCollapsed }) => {
     const [openSubmenu, setOpenSubmenu] = useState('');
     const [flyout, setFlyout] = useState(null);
@@ -319,9 +313,8 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
     const flyoutTitleRef = useRef(null);
     const location = useLocation();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
 
-    // Auto-open parent of active route (only when pathname changes)
     useEffect(() => {
         const activeParent = menuItems.find(item =>
             item.subItems?.some(sub => location.pathname.includes(sub.path))
@@ -329,7 +322,6 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
         setOpenSubmenu(activeParent ? activeParent.title : '');
     }, [location.pathname]);
 
-    // Close flyout when the sidebar expands
     useEffect(() => {
         if (!isDesktopCollapsed) {
             setFlyout(null);
@@ -337,14 +329,11 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
         }
     }, [isDesktopCollapsed]);
 
-    // Cleanup timeouts on unmount
     useEffect(() => {
         return () => {
             if (flyoutTimeoutRef.current) clearTimeout(flyoutTimeoutRef.current);
         };
     }, []);
-
-    /* ---------- STABLE CALLBACKS ---------- */
 
     const cancelHideFlyout = useCallback(() => {
         if (flyoutTimeoutRef.current) {
@@ -399,14 +388,10 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
         flyoutTitleRef.current = null;
     }, []);
 
-    const handleLogout = useCallback(() => {
-        localStorage.removeItem('token');
-        sessionStorage.clear();
-        localStorage.removeItem('user');
-        navigate('/portal/superadmin-secure-auth');
-    }, [navigate]);
-
-    /* ---------- RENDER ---------- */
+    const handleLogout = useCallback(async () => {
+        await logout();
+        navigate('/portal/superadmin-secure-auth', { replace: true });
+    }, [logout, navigate]);
 
     return (
         <>
@@ -418,7 +403,6 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
                 .superadmin-flyout-scroll { scrollbar-width: thin; }
             `}</style>
 
-            {/* ==================== MOBILE BACKDROP OVERLAY ==================== */}
             <div
                 className={`fixed inset-0 bg-[#010a1f]/50 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${
                     isOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'
@@ -436,7 +420,6 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
                         : 'w-[280px] max-w-[85vw] md:w-72'
                 }`}
             >
-                {/* ==================== BRAND HEADER ==================== */}
                 <div
                     className={`relative flex items-center h-20 border-b border-slate-100 shrink-0 bg-gradient-to-b from-slate-50/80 to-white transition-all duration-300 ${
                         isDesktopCollapsed ? 'md:justify-center md:px-0 px-6' : 'justify-between px-6'
@@ -476,7 +459,6 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
                     </button>
                 </div>
 
-                {/* ==================== NAVIGATION ==================== */}
                 <nav className="superadmin-nav-scroll flex-1 py-4 px-3 overflow-y-auto overflow-x-hidden">
                     <p
                         className={`text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em] mb-2 transition-all duration-300 ${
@@ -513,7 +495,6 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
                     </ul>
                 </nav>
 
-                {/* ==================== FOOTER: PROFILE + LOGOUT ==================== */}
                 <div
                     className={`border-t border-slate-100 shrink-0 bg-gradient-to-t from-slate-50/80 to-white transition-all duration-300 flex flex-col ${
                         isDesktopCollapsed
@@ -580,7 +561,6 @@ const SuperAdminSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed, se
                 </div>
             </aside>
 
-            {/* ==================== FLYOUT PANEL (COLLAPSED MODE) ==================== */}
             {isDesktopCollapsed && (
                 <FlyoutPanel
                     flyout={flyout}

@@ -7,7 +7,6 @@ import {
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 
-/* ==================== SIDEBAR ITEM (MEMOIZED) ==================== */
 const SidebarItem = memo(function SidebarItem({
     item,
     isCollapsed,
@@ -38,7 +37,6 @@ const SidebarItem = memo(function SidebarItem({
             >
                 {({ isActive }) => (
                     <>
-                        {/* Active left indicator (expanded mode only) */}
                         {isActive && !isCollapsed && (
                             <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white/80 rounded-r-full"></span>
                         )}
@@ -67,7 +65,6 @@ const SidebarItem = memo(function SidebarItem({
     );
 });
 
-/* ==================== FLYOUT PANEL (MEMOIZED) ==================== */
 const FlyoutPanel = memo(
     function FlyoutPanel({ flyout, onKeepOpen, onClose }) {
         if (!flyout) return null;
@@ -102,7 +99,6 @@ const FlyoutPanel = memo(
         prev.flyout?.top === next.flyout?.top
 );
 
-/* ==================== MAIN COMPONENT ==================== */
 const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) => {
     const navigate = useNavigate();
     const { logout, user } = useAuth();
@@ -111,8 +107,6 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
     const flyoutTimeoutRef = useRef(null);
     const flyoutTitleRef = useRef(null);
 
-    /* ---------- DYNAMIC MENU (permission-based) ---------- */
-    // Safely parse permissions (may be a JSON string or object)
     const p = typeof user?.permissions === 'string'
         ? (() => { try { return JSON.parse(user.permissions); } catch { return {}; } })()
         : (user?.permissions || {});
@@ -132,8 +126,6 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
     ];
 
     const menuItems = rawMenuItems.filter(item => item.show !== false);
-
-    /* ---------- STABLE CALLBACKS ---------- */
 
     const cancelHideFlyout = useCallback(() => {
         if (flyoutTimeoutRef.current) {
@@ -171,24 +163,18 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
         if (window.innerWidth < 768) toggleMobileSidebar();
     }, [toggleMobileSidebar]);
 
-    const handleLogout = useCallback(() => {
-        localStorage.removeItem('token');
-        sessionStorage.clear();
-        logout();
-        navigate('/login');
+    const handleLogout = useCallback(async () => {
+        await logout();
+        navigate('/login', { replace: true });
     }, [logout, navigate]);
-
-    /* ---------- RENDER ---------- */
 
     return (
         <>
-            {/* Hide scrollbar entirely on the nav scroll container */}
             <style>{`
                 .employee-nav-scroll::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
                 .employee-nav-scroll { scrollbar-width: none !important; -ms-overflow-style: none !important; }
             `}</style>
 
-            {/* ==================== MOBILE BACKDROP OVERLAY ==================== */}
             <div
                 className={`fixed inset-0 bg-[#010a1f]/50 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'
                     }`}
@@ -203,7 +189,6 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
                         : 'w-[280px] max-w-[85vw] md:w-72'
                     }`}
             >
-                {/* ==================== BRAND HEADER ==================== */}
                 <div
                     className={`relative flex items-center h-20 border-b border-slate-100 shrink-0 bg-gradient-to-b from-slate-50/80 to-white transition-all duration-300 ${isDesktopCollapsed ? 'md:justify-center md:px-0 px-6' : 'justify-between px-6'
                         }`}
@@ -235,7 +220,6 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
                     </button>
                 </div>
 
-                {/* ==================== NAVIGATION ==================== */}
                 <nav className="employee-nav-scroll flex-1 py-4 px-3 overflow-y-auto overflow-x-hidden">
                     <p
                         className={`text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em] mb-2 transition-all duration-300 ${isDesktopCollapsed ? 'md:opacity-0 md:h-0 md:mb-0 md:overflow-hidden px-3' : 'px-3'
@@ -263,7 +247,6 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
                     </ul>
                 </nav>
 
-                {/* ==================== FOOTER: LOGOUT ==================== */}
                 <div
                     className={`border-t border-slate-100 shrink-0 bg-gradient-to-t from-slate-50/80 to-white transition-all duration-300 ${isDesktopCollapsed ? 'md:p-3 p-3' : 'p-4'
                         }`}
@@ -289,7 +272,6 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
                 </div>
             </aside>
 
-            {/* ==================== FLYOUT PANEL (COLLAPSED MODE) ==================== */}
             {isDesktopCollapsed && (
                 <FlyoutPanel
                     flyout={flyout}

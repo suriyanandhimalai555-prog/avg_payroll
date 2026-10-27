@@ -88,17 +88,19 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = async () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('avg_user');
+        localStorage.removeItem('user');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('avg_user');
+        sessionStorage.clear();
+        delete axios.defaults.headers.common['Authorization'];
+        setUser(null);
+
         try {
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`);
         } catch (err) {
             console.error('Logout error', err);
-        } finally {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
-            localStorage.removeItem('avg_user');
-            sessionStorage.removeItem('avg_user');
-            delete axios.defaults.headers.common['Authorization'];
-            setUser(null);
         }
     };
 
