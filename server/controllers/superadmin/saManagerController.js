@@ -69,18 +69,127 @@ export const createManager = async (req, res) => {
                 to: data.email,
                 subject: 'Manager Portal Access - Set up your account',
                 html: `
-                    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-                        <div style="background-color: #f77704; padding: 30px; text-align: center;">
-                            <h1 style="color: #ffffff; margin: 0;">Welcome to Management</h1>
-                        </div>
-                        <div style="padding: 40px 30px; background-color: #ffffff;">
-                            <h2 style="color: #010a1f; margin-top: 0;">Hello ${data.firstName},</h2>
-                            <p style="color: #475569; line-height: 1.6;">You have been assigned Managerial access. Please activate your account by clicking the button below:</p>
-                            <div style="text-align: center; margin-top: 30px;">
-                                <a href="${activationLink}" style="display: inline-block; padding: 14px 32px; background-color: #0437cc; color: #ffffff; text-decoration: none; font-weight: bold; border-radius: 8px;">Activate Manager Account</a>
-                            </div>
-                        </div>
-                    </div>
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Welcome Manager</title>
+                </head>
+                <body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
+                    
+                    <!-- Outer Wrapper -->
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f7f6; padding: 40px 10px;">
+                        <tr>
+                            <td align="center">
+                                <!-- Main Container -->
+                                <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(1, 10, 31, 0.06);">
+                                    
+                                    <!-- Top Accent Bar -->
+                                    <tr>
+                                        <td height="6" style="background: linear-gradient(90deg, #0437cc 0%, #f77704 100%);"></td>
+                                    </tr>
+
+                                    <!-- Header / Logo Row -->
+                                    <tr>
+                                        <td style="background-color: #ffffff; padding: 25px 30px; border-bottom: 1px solid #f1f5f9;">
+                                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                                <tr>
+                                                    <td align="left" valign="middle">
+                                                        <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                    </td>
+                                                    <td align="right" valign="middle">
+                                                        <span style="display: inline-block; padding: 6px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
+                                                            Manager Portal
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Hero Banner -->
+                                    <tr>
+                                        <td style="background: linear-gradient(135deg, #0437cc 0%, #1f56d6 100%); padding: 40px 30px; text-align: center;">
+                                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Welcome to Management</h1>
+                                            <p style="color: #bfdbfe; margin: 10px 0 0 0; font-size: 14px; font-weight: 500;">Your managerial access is ready</p>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Content Body -->
+                                    <tr>
+                                        <td style="padding: 40px 30px;">
+                                            <h2 style="color: #010a1f; margin: 0 0 15px 0; font-size: 18px; font-weight: 700;">Hello ${data.firstName},</h2>
+                                            
+                                            <p style="color: #475569; line-height: 1.6; font-size: 15px; margin: 0 0 30px 0;">
+                                                You have been assigned Managerial access at <strong>${data.company}</strong>. Please activate your account and set up your secure password to access your team's dashboard.
+                                            </p>
+
+                                            <!-- Detail Cards Grid -->
+                                            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 30px;">
+                                                <!-- Row 1: Designation & Department -->
+                                                <tr>
+                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Designation</p>
+                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.designation || 'Manager'}</p>
+                                                    </td>
+                                                    <td width="4%"></td>
+                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Department</p>
+                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.department || 'Operations'}</p>
+                                                    </td>
+                                                </tr>
+                                                <!-- Spacer -->
+                                                <tr><td height="10" colspan="3"></td></tr>
+                                                <!-- Row 2: Branch & Company -->
+                                                <tr>
+                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Branch</p>
+                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.branch}</p>
+                                                    </td>
+                                                    <td width="4%"></td>
+                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Company</p>
+                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.company}</p>
+                                                    </td>
+                                                </tr>
+                                            </table>
+
+                                            <p style="color: #475569; line-height: 1.6; font-size: 15px; margin: 0 0 35px 0; text-align: center;">
+                                                To access your Manager dashboard, activate your account by clicking the button below.
+                                            </p>
+
+                                            <!-- CTA Button -->
+                                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                                <tr>
+                                                    <td align="center">
+                                                        <a href="${activationLink}" style="display: inline-block; padding: 16px 45px; background: linear-gradient(135deg, #f77704 0%, #ea580c 100%); color: #ffffff; text-decoration: none; font-weight: 700; border-radius: 8px; font-size: 15px; box-shadow: 0 4px 12px rgba(247, 119, 4, 0.3);">
+                                                            Activate Manager Account
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Footer -->
+                                    <tr>
+                                        <td style="background-color: #f8fafc; padding: 25px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+                                            <p style="margin: 0 0 5px 0; color: #64748b; font-size: 12px; font-weight: 500;">
+                                                This is an automated security notification. Please do not reply to this email.
+                                            </p>
+                                            <p style="margin: 0; color: #94a3b8; font-size: 11px;">
+                                                &copy; ${new Date().getFullYear()} AVG Prime Tech. All rights reserved.
+                                            </p>
+                                        </td>
+                                    </tr>
+
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>
                 `
             };
 

@@ -39,7 +39,7 @@ export const createEmployee = async (req, res) => {
             data.dob || null,
             data.gender || 'Other',
             data.address || 'N/A',
-            data.employeeId, 
+            data.employeeId,
             data.joiningDate || data.joining_date || new Date().toISOString().split('T')[0],
             data.company,
             data.branch,
@@ -98,15 +98,14 @@ export const createEmployee = async (req, res) => {
             });
 
             const activationToken = createActivationToken(data.email, 'employee');
-            
+
             // ============================================================================
             // ENVIRONMENT-AWARE URL ROUTING
-            // Dynamically selects the correct base URL regardless of missing env variables
             // ============================================================================
             const isProd = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
             const fallbackUrl = isProd ? 'https://avgpayroll.com' : 'http://localhost:5173';
             const frontendBaseUrl = process.env.FRONTEND_URL || fallbackUrl;
-            
+
             const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
             const mailOptions = {
@@ -114,29 +113,127 @@ export const createEmployee = async (req, res) => {
                 to: data.email,
                 subject: 'Welcome to the Team! Action Required: Set up your account',
                 html: `
-                    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
-                        <div style="background-color: #0437cc; padding: 30px 20px; text-align: center;">
-                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;">Welcome to ${data.company}!</h1>
-                        </div>
-                        
-                        <div style="padding: 40px 30px; background-color: #ffffff;">
-                            <h2 style="color: #010a1f; margin-top: 0; font-size: 20px;">Hello ${data.firstName} ${data.lastName},</h2>
-                            <p style="color: #475569; line-height: 1.6; font-size: 15px;">We are thrilled to welcome you aboard. Your official employee profile has been successfully generated in our system.</p>
-                            
-                            <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0; border: 1px solid #e2e8f0;">
-                                <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Employee ID:</strong> <span style="color: #0437cc; font-family: monospace; font-size: 16px;">${data.employeeId}</span></p>
-                                <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Role:</strong> ${data.designation}</p>
-                                <p style="margin: 0 0 10px 0; color: #010a1f; font-size: 15px;"><strong>Department:</strong> ${data.department}</p>
-                                <p style="margin: 0; color: #010a1f; font-size: 15px;"><strong>Location:</strong> ${data.location || data.branch} (${data.branch})</p>
-                            </div>
-                            
-                            <p style="color: #475569; line-height: 1.6; font-size: 15px; margin-bottom: 30px;">To get started and access your employee dashboard, please activate your account and set up a secure password by clicking the button below:</p>
-                            
-                            <div style="text-align: center;">
-                                <a href="${activationLink}" style="display: inline-block; padding: 14px 32px; background-color: #f77704; color: #ffffff; text-decoration: none; font-weight: bold; border-radius: 8px; font-size: 16px; transition: background-color 0.3s;">Activate My Account</a>
-                            </div>
-                        </div>
-                    </div>
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Welcome</title>
+                </head>
+                <body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
+                    
+                    <!-- Outer Wrapper -->
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f7f6; padding: 40px 10px;">
+                        <tr>
+                            <td align="center">
+                                <!-- Main Container -->
+                                <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(1, 10, 31, 0.06);">
+                                    
+                                    <!-- Top Accent Bar -->
+                                    <tr>
+                                        <td height="6" style="background: linear-gradient(90deg, #0437cc 0%, #f77704 100%);"></td>
+                                    </tr>
+
+                                    <!-- Header / Logo Row -->
+                                    <tr>
+                                        <td style="background-color: #ffffff; padding: 25px 30px; border-bottom: 1px solid #f1f5f9;">
+                                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                                <tr>
+                                                    <td align="left" valign="middle">
+                                                        <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                    </td>
+                                                    <td align="right" valign="middle">
+                                                        <span style="display: inline-block; padding: 6px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
+                                                            Welcome
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Hero Banner -->
+                                    <tr>
+                                        <td style="background: linear-gradient(135deg, #0437cc 0%, #1f56d6 100%); padding: 40px 30px; text-align: center;">
+                                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Welcome to ${data.company}!</h1>
+                                            <p style="color: #bfdbfe; margin: 10px 0 0 0; font-size: 14px; font-weight: 500;">Let's get your account set up</p>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Content Body -->
+                                    <tr>
+                                        <td style="padding: 40px 30px;">
+                                            <h2 style="color: #010a1f; margin: 0 0 15px 0; font-size: 18px; font-weight: 700;">Hello ${data.firstName} ${data.lastName},</h2>
+                                            
+                                            <p style="color: #475569; line-height: 1.6; font-size: 15px; margin: 0 0 30px 0;">
+                                                We are thrilled to welcome you aboard. Your official employee profile has been successfully generated in our system. Here is a quick summary of your profile:
+                                            </p>
+
+                                            <!-- Detail Cards Grid -->
+                                            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 30px;">
+                                                <!-- Row 1: ID & Role -->
+                                                <tr>
+                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Employee ID</p>
+                                                        <p style="margin: 5px 0 0 0; color: #0437cc; font-size: 16px; font-weight: 800; font-family: monospace;">${data.employeeId}</p>
+                                                    </td>
+                                                    <td width="4%"></td>
+                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Designation</p>
+                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.designation}</p>
+                                                    </td>
+                                                </tr>
+                                                <!-- Spacer -->
+                                                <tr><td height="10" colspan="3"></td></tr>
+                                                <!-- Row 2: Department & Location -->
+                                                <tr>
+                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Department</p>
+                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.department}</p>
+                                                    </td>
+                                                    <td width="4%"></td>
+                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Location</p>
+                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.location || data.branch} <span style="color:#64748b; font-weight: 500; font-size: 12px;">(${data.branch})</span></p>
+                                                    </td>
+                                                </tr>
+                                            </table>
+
+                                            <p style="color: #475569; line-height: 1.6; font-size: 15px; margin: 0 0 35px 0; text-align: center;">
+                                                To get started and access your employee dashboard, please activate your account and set up a secure password by clicking the button below.
+                                            </p>
+
+                                            <!-- CTA Button -->
+                                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                                <tr>
+                                                    <td align="center">
+                                                        <a href="${activationLink}" style="display: inline-block; padding: 16px 45px; background: linear-gradient(135deg, #f77704 0%, #ea580c 100%); color: #ffffff; text-decoration: none; font-weight: 700; border-radius: 8px; font-size: 15px; box-shadow: 0 4px 12px rgba(247, 119, 4, 0.3);">
+                                                            Activate My Account
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Footer -->
+                                    <tr>
+                                        <td style="background-color: #f8fafc; padding: 25px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+                                            <p style="margin: 0 0 5px 0; color: #64748b; font-size: 12px; font-weight: 500;">
+                                                This is an automated security notification. Please do not reply to this email.
+                                            </p>
+                                            <p style="margin: 0; color: #94a3b8; font-size: 11px;">
+                                                &copy; ${new Date().getFullYear()} AVG Prime Tech. All rights reserved.
+                                            </p>
+                                        </td>
+                                    </tr>
+
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>
                 `
             };
 
