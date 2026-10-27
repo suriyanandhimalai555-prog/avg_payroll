@@ -37,10 +37,11 @@ export const getPayrollData = async (req, res) => {
         if (empRes.rows.length === 0) return res.status(404).json({ message: "Employee not found." });
         const emp = empRes.rows[0];
 
-        // 2. Fetch Raw Ecosystem Data (with safety catch blocks to prevent 500 crashes)
+        // 2. Fetch Raw Ecosystem Data 
+        // Explicitly exclude 'WEEKLY_OFF' so weekends aren't counted as paid Government Holidays
         const attRes = await pool.query(`SELECT date, clock_in, clock_out FROM emp_attendance WHERE employee_id = $1`, [employeeId]).catch(() => ({ rows: [] }));
         const leaveReqRes = await pool.query(`SELECT from_date, to_date, leave_type, status FROM emp_leaves WHERE employee_id = $1 AND status = 'Approved'`, [employeeId]).catch(() => ({ rows: [] }));
-        const holRes = await pool.query(`SELECT holiday_date FROM sa_holidays WHERE status != 'Draft'`).catch(() => ({ rows: [] }));
+        const holRes = await pool.query(`SELECT holiday_date FROM sa_holidays WHERE status = 'Active' AND type != 'WEEKLY_OFF'`).catch(() => ({ rows: [] }));
 
         const attendanceLogs = attRes.rows || [];
         const approvedLeaves = leaveReqRes.rows || [];
@@ -124,13 +125,13 @@ export const getPayrollData = async (req, res) => {
                     continue;
                 }
 
-                // Priority 3: Company Holidays
+                // Priority 3: Genuine Company / Government Holidays
                 if (holidays.includes(currDateStr)) {
                     holidayCount++;
                     continue;
                 }
 
-                // Priority 4: Week Offs (Sundays & Even Saturdays -> Unpaid)
+                // Priority 4: Week Offs (Sundays & Even Saturdays -> Unpaid but Not Countable)
                 if (isWeekOff) {
                     weekOffCount++;
                     continue;
@@ -144,15 +145,15 @@ export const getPayrollData = async (req, res) => {
                 }
             }
 
-            // Financial Calculations
-            const dailyRate = grossFull / daysInMonth;
+            // Financial Calculations - Week Offs are Non-Countable
+            const countableDays = daysInMonth - weekOffCount;
+            const dailyRate = grossFull / (countableDays || 1); // Avoid division by zero
 
-            // Detailed Deductions based on Attendance Rules
-            const weekOffDeduction = weekOffCount * dailyRate;
+            // Deductions apply ONLY to unexcused absences and unpaid leaves
             const absentDeduction = absentCount * dailyRate;
             const unpaidLeaveDeduction = unpaidLeaveCount * dailyRate;
 
-            const totalUnpaidDays = absentCount + unpaidLeaveCount + weekOffCount;
+            const totalUnpaidDays = absentCount + unpaidLeaveCount; // Week Offs removed from deductions
             const calculatedLeavesDeduction = totalUnpaidDays * dailyRate;
 
             const staticDeductionSum = Object.values(statutoryDeductions).reduce((a, b) => a + b, 0);
@@ -162,6 +163,7 @@ export const getPayrollData = async (req, res) => {
             historyArray.push({
                 monthLabel,
                 daysInMonth,
+                countableDays,
                 presentDays: presentCount,
                 paidLeaveDays: paidLeaveCount,
                 holidayDays: holidayCount,
@@ -180,7 +182,6 @@ export const getPayrollData = async (req, res) => {
                     ...statutoryDeductions, 
                     totalAttendanceDeduction: calculatedLeavesDeduction,
                     breakdown: {
-                        weekOffDeduction,
                         absentDeduction,
                         unpaidLeaveDeduction
                     }

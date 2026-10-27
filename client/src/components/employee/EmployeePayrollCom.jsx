@@ -21,7 +21,6 @@ if (typeof document !== 'undefined' && !document.getElementById('dm-sans-import'
     document.head.appendChild(styleEl);
 }
 
-// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -170,7 +169,6 @@ const EmployeePayrollCom = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
-
     // ==================== PDF GENERATOR ====================
     const downloadPDF = async (record) => {
         try {
@@ -305,9 +303,8 @@ const EmployeePayrollCom = () => {
 
             const tableStartY = infoY + leftRows.length * 6.5 + 8;
 
-            // Combine Statutory and Attendance Deductions
+            // Statutory and Attendance Deductions (Week Offs removed from deductions array)
             const combinedDeductions = [
-                { label: 'Unpaid Week Offs', amount: record.deductions.breakdown.weekOffDeduction },
                 { label: 'Absences', amount: record.deductions.breakdown.absentDeduction },
                 { label: 'Unpaid Leaves', amount: record.deductions.breakdown.unpaidLeaveDeduction },
                 { label: 'EPF Deduction', amount: record.deductions.epf },
@@ -600,15 +597,59 @@ const EmployeePayrollCom = () => {
                                     </div>
                                 </div>
                                 <span className="inline-flex items-center gap-1.5 bg-white text-[#0437cc] text-[10px] font-bold px-2.5 py-1 rounded-lg border border-blue-100 shadow-sm uppercase tracking-wider shrink-0 w-max">
-                                    <FaCalendarDay className="text-[9px]" /> Divisor: {currentPayroll.daysInMonth} Days
+                                    <FaCalendarDay className="text-[9px]" /> Divisor: {currentPayroll.countableDays} Working Days
                                 </span>
                             </div>
 
                             <div className="relative p-5 flex-1 flex flex-col space-y-6">
                                 
-                                {/* 1. Detailed Attendance & Salary Breakdown */}
+                                {/* 1. Salary Percentages Per Day */}
                                 <div>
-                                    <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">1. Attendance & Leave Payout Breakdown</h3>
+                                    <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">1. Salary Percentages Per Day</h3>
+                                    <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm custom-scrollbar">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-slate-50/80 border-b border-slate-200 text-[10px] text-slate-500 uppercase tracking-wider">
+                                                    <th className="px-4 py-3 font-bold whitespace-nowrap">Earnings</th>
+                                                    <th className="px-4 py-3 font-bold whitespace-nowrap">Monthly %</th>
+                                                    <th className="px-4 py-3 font-bold whitespace-nowrap">Monthly Amount</th>
+                                                    <th className="px-4 py-3 font-bold whitespace-nowrap bg-blue-50/50 text-[#0437cc]">Per-Day Amount</th>
+                                                    <th className="px-4 py-3 font-bold whitespace-nowrap bg-blue-50/50 text-[#0437cc]">Per-Day %</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {Object.entries({
+                                                    'Basic Salary': currentPayroll.earnings.basic,
+                                                    'HRA': currentPayroll.earnings.hra,
+                                                    'Conveyance': currentPayroll.earnings.conveyance,
+                                                    'Medical Allowance': currentPayroll.earnings.medical,
+                                                    'Special Allowance': currentPayroll.earnings.specialAllowance,
+                                                    'Other Allowances': currentPayroll.earnings.otherAllowances
+                                                }).map(([label, val], i) => (
+                                                    <tr key={i} className="hover:bg-slate-50/60 transition-colors">
+                                                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{label}</td>
+                                                        <td className="px-4 py-2.5 text-xs font-medium text-slate-500">{safePercent(val, currentPayroll.grossSalary)}%</td>
+                                                        <td className="px-4 py-2.5 text-xs font-bold text-[#010a1f] tabular-nums">₹{formatCurrency(val)}</td>
+                                                        <td className="px-4 py-2.5 text-xs font-bold text-[#0437cc] bg-blue-50/20 tabular-nums">₹{formatCurrency(val / currentPayroll.countableDays)}</td>
+                                                        <td className="px-4 py-2.5 text-xs font-bold text-[#0437cc] bg-blue-50/20 tabular-nums">{safePercent(val / currentPayroll.countableDays, currentPayroll.grossSalary)}%</td>
+                                                    </tr>
+                                                ))}
+                                                <tr className="bg-slate-50/80">
+                                                    <td className="px-4 py-3 text-xs font-black text-[#010a1f]">Total</td>
+                                                    <td className="px-4 py-3 text-xs font-black text-slate-600">100%</td>
+                                                    <td className="px-4 py-3 text-[13px] font-black text-green-700 tabular-nums">₹{formatCurrency(currentPayroll.grossSalary)}</td>
+                                                    <td className="px-4 py-3 text-[13px] font-black text-[#0437cc] tabular-nums">₹{formatCurrency(currentPayroll.dailyRate)}</td>
+                                                    <td className="px-4 py-3 text-xs font-black text-[#0437cc] tabular-nums">{(100 / currentPayroll.countableDays).toFixed(4)}%</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-2 italic">* The daily amount is calculated by dividing each monthly amount by {currentPayroll.countableDays} countable working days.</p>
+                                </div>
+
+                                {/* 2. Detailed Attendance Breakdown */}
+                                <div>
+                                    <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">2. Attendance & Leave Payout Breakdown</h3>
                                     <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm custom-scrollbar">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
@@ -632,7 +673,7 @@ const EmployeePayrollCom = () => {
                                                     <td className="px-4 py-3 text-xs font-bold text-green-600 text-right tabular-nums">+ ₹{formatCurrency(currentPayroll.presentDays * currentPayroll.dailyRate)}</td>
                                                 </tr>
                                                 <tr className="hover:bg-slate-50/60">
-                                                    <td className="px-4 py-3 text-xs font-bold text-green-700 flex items-center gap-2"><FaCheckCircle className="text-green-500" /> Government Holidays</td>
+                                                    <td className="px-4 py-3 text-xs font-bold text-green-700 flex items-center gap-2"><FaCheckCircle className="text-green-500" /> Govt / Company Holidays</td>
                                                     <td className="px-4 py-3 text-sm font-bold text-[#010a1f] text-center tabular-nums">{currentPayroll.holidayDays}</td>
                                                     <td className="px-4 py-3 text-[11px] font-medium text-slate-500">Fully Paid</td>
                                                     <td className="px-4 py-3 text-xs font-bold text-green-600 text-right tabular-nums">+ ₹{formatCurrency(currentPayroll.holidayDays * currentPayroll.dailyRate)}</td>
@@ -655,12 +696,6 @@ const EmployeePayrollCom = () => {
                                                     <td className="px-4 py-2 text-[10px] font-bold text-red-400 uppercase" colSpan="4">Deducted / Unpaid Days</td>
                                                 </tr>
                                                 <tr className="hover:bg-red-50/30">
-                                                    <td className="px-4 py-3 text-xs font-bold text-red-700 flex items-center gap-2"><FaTimesCircle className="text-red-500" /> Week Offs</td>
-                                                    <td className="px-4 py-3 text-sm font-bold text-red-600 text-center tabular-nums">{currentPayroll.weekOffCount}</td>
-                                                    <td className="px-4 py-3 text-[11px] font-medium text-slate-600">Sundays & Even Saturdays (Unpaid)</td>
-                                                    <td className="px-4 py-3 text-xs font-bold text-red-600 text-right tabular-nums">- ₹{formatCurrency(currentPayroll.deductions.breakdown.weekOffDeduction)}</td>
-                                                </tr>
-                                                <tr className="hover:bg-red-50/30">
                                                     <td className="px-4 py-3 text-xs font-bold text-red-700 flex items-center gap-2"><FaTimesCircle className="text-red-500" /> Absent</td>
                                                     <td className="px-4 py-3 text-sm font-bold text-red-600 text-center tabular-nums">{currentPayroll.absentDays}</td>
                                                     <td className="px-4 py-3 text-[11px] font-medium text-slate-600">Unexcused Absence (Unpaid)</td>
@@ -671,6 +706,17 @@ const EmployeePayrollCom = () => {
                                                     <td className="px-4 py-3 text-sm font-bold text-red-600 text-center tabular-nums">{currentPayroll.unpaidLeaveDays}</td>
                                                     <td className="px-4 py-3 text-[11px] font-medium text-slate-600">Approved LOP (Unpaid)</td>
                                                     <td className="px-4 py-3 text-xs font-bold text-red-600 text-right tabular-nums">- ₹{formatCurrency(currentPayroll.deductions.breakdown.unpaidLeaveDeduction)}</td>
+                                                </tr>
+
+                                                {/* NON-COUNTABLE SECTION */}
+                                                <tr className="bg-slate-50/40">
+                                                    <td className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase" colSpan="4">Non-Countable Days</td>
+                                                </tr>
+                                                <tr className="hover:bg-slate-50/60">
+                                                    <td className="px-4 py-3 text-xs font-bold text-slate-600 flex items-center gap-2"><FaCalendarDay className="text-slate-400" /> Week Offs</td>
+                                                    <td className="px-4 py-3 text-sm font-bold text-[#010a1f] text-center tabular-nums">{currentPayroll.weekOffCount}</td>
+                                                    <td className="px-4 py-3 text-[11px] font-medium text-slate-500">Sundays & Even Saturdays</td>
+                                                    <td className="px-4 py-3 text-xs font-bold text-slate-400 text-right">Not Counted</td>
                                                 </tr>
 
                                                 {/* TOTALS */}
@@ -684,11 +730,11 @@ const EmployeePayrollCom = () => {
                                         </table>
                                     </div>
                                     <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-                                        * Note: Sundays and Even Saturdays are structurally marked as Unpaid Leaves across the company and are deducted from your Monthly Gross automatically.
+                                        * Note: Sundays and Even Saturdays are considered Non-Countable Week Offs. They are neither paid nor deducted. Your daily rate is calculated by dividing the Gross Salary by the total countable working days ({currentPayroll.countableDays}).
                                     </p>
                                 </div>
 
-                                {/* 2. Mathematical Payout Equation */}
+                                {/* 3. Mathematical Payout Equation */}
                                 <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5">
                                     <h3 className="text-[11px] font-bold text-[#010a1f] uppercase tracking-wider mb-4 flex items-center gap-2">
                                         <FaCalculator className="text-[#0437cc]" /> Final Mathematical Equation

@@ -60,7 +60,7 @@ const EmployeeAttendanceCom = () => {
             const [attRes, profRes, shiftRes, holRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empIdStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig()).catch(() => ({ data: {} })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/shift/${empIdStr}`, getAuthConfig()).catch(() => ({ data: null })), // Exact shift
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/shift/${empIdStr}`, getAuthConfig()).catch(() => ({ data: null })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
