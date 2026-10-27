@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import {
     FaUser, FaLock, FaSignInAlt, FaUserTie,
@@ -8,11 +8,23 @@ import {
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
+const VALID_ROLES = ['employee', 'hr', 'manager'];
+
 const CommonLogin = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
     const { login, user, loading: authLoading } = useAuth();
 
-    const [loginRole, setLoginRole] = useState('employee');
+    const getInitialRole = () => {
+        const stateRole = location.state?.role?.toLowerCase();
+        const queryRole = searchParams.get('role')?.toLowerCase();
+        if (VALID_ROLES.includes(stateRole)) return stateRole;
+        if (VALID_ROLES.includes(queryRole)) return queryRole;
+        return 'employee';
+    };
+
+    const [loginRole, setLoginRole] = useState(getInitialRole);
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -29,6 +41,13 @@ const CommonLogin = () => {
     const [successMsg, setSuccessMsg] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [focusedField, setFocusedField] = useState(null);
+
+    useEffect(() => {
+        const incomingRole = location.state?.role?.toLowerCase() || searchParams.get('role')?.toLowerCase();
+        if (VALID_ROLES.includes(incomingRole)) {
+            setLoginRole(incomingRole);
+        }
+    }, [location.state, searchParams]);
 
     useEffect(() => {
         const checkLockout = () => {
@@ -238,7 +257,7 @@ const CommonLogin = () => {
                                             key={r.id}
                                             type="button"
                                             disabled={blockCountdown > 0}
-                                            onClick={() => setLoginRole(r.id)}
+                                            onClick={() => { setLoginRole(r.id); setError(''); }}
                                             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 text-[10px] sm:text-[11px] font-bold rounded-xl transition-all ${isActive
                                                 ? 'bg-white text-[#0437cc] shadow-sm shadow-[#0437cc]/10 ring-1 ring-[#0437cc]/10'
                                                 : 'text-slate-500 hover:text-slate-700'
