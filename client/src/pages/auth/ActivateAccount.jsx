@@ -4,12 +4,21 @@ import axios from 'axios';
 import { FaLock, FaCheckCircle, FaExclamationCircle, FaEye, FaEyeSlash, FaKey, FaArrowRight } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 
-// Bulletproof Stateless Auth Config
+// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) token = token.replace(/^["']|["']$/g, '');
+    return token;
+};
+
+// Bulletproof Auth Config
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };

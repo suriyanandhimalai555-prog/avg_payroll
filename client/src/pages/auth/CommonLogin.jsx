@@ -30,10 +30,11 @@ const CommonLogin = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [focusedField, setFocusedField] = useState(null);
 
-    // Wipe dead tokens on fresh load
+    // Clear ANY legacy tokens completely on fresh load
     useEffect(() => {
         if (!user && flowView === 'login') {
             localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
         }
     }, [user, flowView]);
 
@@ -85,13 +86,14 @@ const CommonLogin = () => {
                 identifier: identifier.trim(), 
                 password, 
                 role: loginRole
-            }); // REMOVED withCredentials
+            });
             
             if (response.status === 200) {
                 localStorage.removeItem('common_login_attempts');
                 localStorage.removeItem('common_lockout_until');
                 setLoginAttempts(0);
                 
+                // Store strictly in localStorage (removes sessionStorage fragmentation)
                 if (response.data.token) {
                     localStorage.setItem('token', response.data.token);
                 }

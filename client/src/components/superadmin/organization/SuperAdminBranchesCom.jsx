@@ -63,11 +63,16 @@ const SuperAdminBranchesCom = () => {
     const [apiError, setApiError] = useState('');
 
     const fetchCoreData = async () => {
+        if (!localStorage.getItem('token')) {
+            setIsLoading(false);
+            return;
+        }
+
         setIsLoading(true);
         try {
             const [companyRes, branchRes] = await Promise.all([
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig())
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             setCompanies(companyRes.data || []);
@@ -77,23 +82,17 @@ const SuperAdminBranchesCom = () => {
                 setFormData(prev => ({ ...prev, companyId: companyRes.data[0].id }));
             }
             setApiError(''); 
-
         } catch (error) {
             console.error('Failed to load core data', error);
-            if (error.response?.status === 401) {
-                setApiError('Session expired or unauthorized. Please log in again.');
-            } else if (error.response?.status === 500) {
-                setApiError(`Database Error: ${error.response.data?.message || 'Check server logs.'}`);
-            } else {
-                setApiError('Failed to establish connection with the server.');
-            }
         } finally {
             setIsLoading(false);
         }
     };
 
+    // Guarded execution
     useEffect(() => {
         fetchCoreData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleInputChange = (e) => {

@@ -22,7 +22,7 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -56,6 +56,11 @@ const SuperAdminCompanyProfileCom = () => {
     const [apiError, setApiError] = useState('');
 
     const fetchProfiles = async () => {
+        if (!localStorage.getItem('token')) {
+            setIsFetching(false);
+            return;
+        }
+
         setIsFetching(true);
         try {
             const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig());
@@ -71,6 +76,7 @@ const SuperAdminCompanyProfileCom = () => {
         }
     };
 
+    // Guarded execution
     useEffect(() => {
         fetchProfiles();
     }, []);
@@ -260,7 +266,16 @@ const SuperAdminCompanyProfileCom = () => {
                                         <p className="text-[10px] text-blue-500 font-bold uppercase mb-0.5">GST</p>
                                         <p className="text-xs sm:text-sm font-mono font-bold text-[#010a1f] truncate">{viewProfile.gst}</p>
                                     </div>
+                                    <div className="col-span-2">
+                                        <p className="text-[10px] text-blue-500 font-bold uppercase mb-1">Financial Year</p>
+                                        <p className="text-xs sm:text-sm font-bold text-[#010a1f]">{viewProfile.financial_year}</p>
+                                    </div>
                                 </div>
+                            </div>
+
+                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Registered Website</p>
+                                <p className="text-xs sm:text-sm font-bold text-[#0437cc] break-all">{viewProfile.website || 'No Website Provided'}</p>
                             </div>
 
                             <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">

@@ -8,9 +8,6 @@ import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
-// ============================================================
-// RATE LIMITING MIDDLEWARE
-// ============================================================
 export const loginRateLimiter = rateLimit({
     windowMs: 30 * 1000,
     max: 3, 
@@ -146,10 +143,6 @@ export const login = async (req, res) => {
             { expiresIn: '7d' } 
         );
 
-        // ============================================================
-        // PURE STATELESS BEARER AUTH
-        // Removed cookies. App and Web dev rely on token in response.
-        // ============================================================
         res.status(200).json({
             message: 'Login successful',
             user: userPayload,
@@ -323,6 +316,5 @@ export const updateProfile = async (req, res) => {
 };
 
 export const logout = (req, res) => {
-    // Pure token-based logout requires no server actions besides returning success
     res.status(200).json({ message: 'Logged out successfully' });
 };

@@ -17,8 +17,12 @@ const SuperAdminLogin = () => {
     const { login, user } = useAuth();
     const navigate = useNavigate();
 
+    // Clear ANY legacy tokens completely on fresh load
     useEffect(() => {
-        if (!user) localStorage.removeItem('token');
+        if (!user) {
+            localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
+        }
     }, [user]);
 
     useEffect(() => {
@@ -66,6 +70,7 @@ const SuperAdminLogin = () => {
             localStorage.removeItem('sa_lockout_until');
             setLoginAttempts(0);
             
+            // Store strictly in localStorage
             if (response.data.token) {
                 localStorage.setItem('token', response.data.token);
             }

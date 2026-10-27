@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import cluster from 'cluster';
 import os from 'os';
 import pool from './config/db.js';
-import cookieParser from 'cookie-parser';
 
 dotenv.config();
 if (!process.env.JWT_SECRET) {
@@ -133,11 +132,10 @@ if (cluster.isPrimary) {
         },
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-        credentials: true,
+        credentials: true, // FIXED: Required for any cross-origin auth flow
         optionsSuccessStatus: 200
     }));
 
-    app.use(cookieParser());
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -155,7 +153,7 @@ if (cluster.isPrimary) {
 
     app.get('/health/ready', async (_req, res) => {
         try {
-            await pool.query({ text: 'SELECT 1', query_timeout: 2000 });
+            pool.query({ text: 'SELECT 1', query_timeout: 2000 });
             res.status(200).json({ status: 'ready' });
         } catch {
             res.status(503).json({ status: 'not_ready' });

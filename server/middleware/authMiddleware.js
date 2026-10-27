@@ -8,9 +8,11 @@ export const authenticateToken = (req, res, next) => {
         token = authHeader.split(' ')[1];
     }
 
-    if (!token) {
+    if (!token || token === 'null' || token === 'undefined') {
         return res.status(401).json({ message: 'Authentication required. No valid token found.' });
     }
+
+    token = token.replace(/^["']|["']$/g, '');
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);

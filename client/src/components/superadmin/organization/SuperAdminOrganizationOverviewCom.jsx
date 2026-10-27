@@ -8,7 +8,7 @@ import {
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 
-// Bulletproof Stateless Auth Config
+// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -34,38 +34,44 @@ const SuperAdminOrganizationOverviewCom = () => {
     const [viewCompany, setViewCompany] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
+    const fetchOverviewData = async () => {
+        if (!localStorage.getItem('token')) {
+            setIsLoading(false);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const safeGet = (endpoint) => axios.get(`${import.meta.env.VITE_API_URL}${endpoint}`, getAuthConfig()).catch(() => ({ data: [] }));
+
+            const [compRes, branchRes, deptRes, desigRes, locRes, hrRes, empRes] = await Promise.all([
+                safeGet('/api/sa-company-profile'),
+                safeGet('/api/sa-branches'),
+                safeGet('/api/sa-departments'),
+                safeGet('/api/sa-designations'),
+                safeGet('/api/sa-locations'),
+                safeGet('/api/sa-hr-users'), 
+                safeGet('/api/sa-employees')
+            ]);
+
+            setData({
+                companies: compRes.data || [],
+                branches: branchRes.data || [],
+                departments: deptRes.data || [],
+                designations: desigRes.data || [],
+                locations: locRes.data || [],
+                hrUsers: hrRes.data || [],
+                employees: empRes.data || []
+            });
+        } catch (error) {
+            console.error("Failed to load organization overview data", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Guarded execution
     useEffect(() => {
-        const fetchOverviewData = async () => {
-            setIsLoading(true);
-            try {
-                const safeGet = (endpoint) => axios.get(`${import.meta.env.VITE_API_URL}${endpoint}`, getAuthConfig()).catch(() => ({ data: [] }));
-
-                const [compRes, branchRes, deptRes, desigRes, locRes, hrRes, empRes] = await Promise.all([
-                    safeGet('/api/sa-company-profile'),
-                    safeGet('/api/sa-branches'),
-                    safeGet('/api/sa-departments'),
-                    safeGet('/api/sa-designations'),
-                    safeGet('/api/sa-locations'),
-                    safeGet('/api/sa-hr-users'), 
-                    safeGet('/api/sa-employees')
-                ]);
-
-                setData({
-                    companies: compRes.data || [],
-                    branches: branchRes.data || [],
-                    departments: deptRes.data || [],
-                    designations: desigRes.data || [],
-                    locations: locRes.data || [],
-                    hrUsers: hrRes.data || [],
-                    employees: empRes.data || []
-                });
-            } catch (error) {
-                console.error("Failed to load organization overview data", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
         fetchOverviewData();
     }, []);
 

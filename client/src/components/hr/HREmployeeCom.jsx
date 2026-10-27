@@ -23,14 +23,25 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (Checks both Session & Local Storage)
+// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, ''); // Sanitize stringified tokens
+    }
+    return token;
+};
+
+// Bulletproof Auth Config
 const getAuthConfig = () => {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+        },
+        withCredentials: true // Added for strict cross-origin fallback
     };
 };
 
@@ -100,11 +111,13 @@ const HREmployeeCom = () => {
             console.error('Error fetching org data:', error);
             if (error.response?.status === 401) {
                 setApiError('Session expired or unauthorized. Please log in again.');
+            } else {
+                setApiError('Failed to establish connection with the server.');
             }
         }
     };
 
-    const fetchEmployees = async () => {
+    const fetchEmployeesData = async () => {
         try {
             const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }));
             setEmployees(response.data || []);
@@ -116,26 +129,21 @@ const HREmployeeCom = () => {
         }
     };
 
-    const fetchAllData = async () => {
-        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+    // Guarded unified execution
+    useEffect(() => {
+        const token = getCleanToken();
         if (!token || !user) {
             setIsFetching(false);
             return;
         }
-        
-        setIsFetching(true);
-        await Promise.all([fetchOrgData(), fetchEmployees()]);
-        setIsFetching(false);
-    };
 
-    // Guarded execution
-    useEffect(() => {
-        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-        if (user && token) {
-            fetchAllData();
-        } else {
+        const loadAllData = async () => {
+            setIsFetching(true);
+            await Promise.all([fetchOrgData(), fetchEmployeesData()]);
             setIsFetching(false);
-        }
+        };
+
+        loadAllData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
@@ -246,10 +254,8 @@ const HREmployeeCom = () => {
                 setFormData(INITIAL_FORM_STATE);
             }
             
-            setIsFetching(true);
-            await fetchEmployees();
-            setIsFetching(false);
-            
+            // Refresh table
+            await fetchEmployeesData();
             setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
             setApiError(error.response?.data?.message || 'Failed to save employee record. Please try again.');
@@ -321,9 +327,7 @@ const HREmployeeCom = () => {
         if (!window.confirm("Are you sure you want to deactivate and remove this Employee?")) return;
         try {
             await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-employees/${id}`, getAuthConfig());
-            setIsFetching(true);
-            await fetchEmployees();
-            setIsFetching(false);
+            await fetchEmployeesData();
             setSuccessMsg('Employee removed successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
@@ -399,113 +403,6 @@ const HREmployeeCom = () => {
                             <div key={i} className="space-y-2">
                                 <div className="h-3.5 bg-slate-200 rounded w-1/3"></div>
                                 <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Section 3: Salary Configuration Shimmer */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-slate-200 shrink-0"></div>
-                            <div className="space-y-1.5 w-48">
-                                <div className="h-4 bg-slate-200 rounded w-full"></div>
-                                <div className="h-3 bg-slate-200 rounded w-2/3"></div>
-                            </div>
-                        </div>
-                        <div className="h-10 w-44 bg-slate-200 rounded-xl"></div>
-                    </div>
-                    <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-                        <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-100 space-y-4">
-                            <div className="flex justify-between items-center pb-3 border-b border-slate-200/60">
-                                <div className="h-4 w-28 bg-slate-200 rounded"></div>
-                                <div className="h-5 w-20 bg-slate-200 rounded"></div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                                    <div key={i} className="space-y-2">
-                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                                        <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-100 space-y-4">
-                            <div className="flex justify-between items-center pb-3 border-b border-slate-200/60">
-                                <div className="h-4 w-28 bg-slate-200 rounded"></div>
-                                <div className="h-5 w-20 bg-slate-200 rounded"></div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {[1, 2, 3, 4, 5, 6].map(i => (
-                                    <div key={i} className="space-y-2">
-                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                                        <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Section 4: Bank Information Shimmer */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-slate-200 shrink-0"></div>
-                        <div className="space-y-1.5 w-44">
-                            <div className="h-4 bg-slate-200 rounded w-full"></div>
-                            <div className="h-3 bg-slate-200 rounded w-2/3"></div>
-                        </div>
-                    </div>
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        {[1, 2, 3, 4, 5].map(i => (
-                            <div key={i} className="space-y-2">
-                                <div className="h-3.5 bg-slate-200 rounded w-1/3"></div>
-                                <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Employee List Table Shimmer */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-slate-200 shrink-0"></div>
-                            <div className="space-y-1.5 w-48">
-                                <div className="h-4 bg-slate-200 rounded w-full"></div>
-                                <div className="h-3 bg-slate-200 rounded w-2/3"></div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 w-full sm:w-auto">
-                            <div className="h-9 w-full sm:w-64 bg-slate-200 rounded-xl"></div>
-                            <div className="h-7 w-24 bg-slate-200 rounded-full shrink-0"></div>
-                        </div>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                        {[1, 2, 3, 4, 5].map(i => (
-                            <div key={i} className="px-5 py-4 flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3 w-1/4">
-                                    <div className="w-10 h-10 rounded-xl bg-slate-200 shrink-0"></div>
-                                    <div className="space-y-1.5 flex-1">
-                                        <div className="h-3.5 bg-slate-200 rounded w-3/4"></div>
-                                        <div className="h-4 bg-slate-200 rounded w-1/2"></div>
-                                    </div>
-                                </div>
-                                <div className="space-y-1.5 w-1/4 hidden sm:block">
-                                    <div className="h-3.5 bg-slate-200 rounded w-3/4"></div>
-                                    <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                                </div>
-                                <div className="space-y-1.5 w-1/4 hidden md:block">
-                                    <div className="h-3.5 bg-slate-200 rounded w-2/3"></div>
-                                    <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                                </div>
-                                <div className="h-6 w-16 bg-slate-200 rounded-full"></div>
-                                <div className="flex gap-1.5">
-                                    <div className="w-8 h-8 rounded-lg bg-slate-200"></div>
-                                    <div className="w-8 h-8 rounded-lg bg-slate-200"></div>
-                                    <div className="w-8 h-8 rounded-lg bg-slate-200"></div>
-                                </div>
                             </div>
                         ))}
                     </div>
@@ -873,7 +770,7 @@ const HREmployeeCom = () => {
                                     <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
                                         <FaPlusCircle className="text-green-700 text-xs" />
                                     </span>
-                                    <h3 className="text-xs font-bold text-green-800 uppercase tracking-wider">Earnings</h3>
+                                    <h4 className="text-[11px] font-bold text-green-800 uppercase tracking-wider">Earnings</h4>
                                 </div>
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border tabular-nums ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{formatCurrency(liveGross)}</span>
                             </div>
