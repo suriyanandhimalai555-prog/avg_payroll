@@ -1,7 +1,4 @@
 import pool from '../../config/db.js';
-import initializeEmpAttendanceModel from '../../models/employee/EmpAttendance.js';
-
-await initializeEmpAttendanceModel();
 
 // New dedicated method to reliably get the exact shift for the logged-in employee
 export const getMyShiftDetails = async (req, res) => {

@@ -1,9 +1,4 @@
 import pool from '../../config/db.js';
-import initializeAttendanceModel from '../../models/employee/EmpAttendance.js';
-import initializeLeaveModels from '../../models/employee/EmpLeave.js';
-
-await initializeAttendanceModel();
-await initializeLeaveModels();
 
 const canAccessEmployeePayroll = async (req, employeeId) => {
     if (['hr', 'superadmin'].includes(req.user.role)) return true;
@@ -12,8 +7,12 @@ const canAccessEmployeePayroll = async (req, employeeId) => {
     let table = req.user.role === 'employee' ? 'sa_employees' : 'sa_managers';
     let idColumn = req.user.role === 'employee' ? 'employee_id' : 'manager_id';
 
-    const result = await pool.query(`SELECT ${idColumn} as auth_id FROM ${table} WHERE LOWER(email) = LOWER($1) LIMIT 1`, [req.user.email]);
-    return result.rows.length > 0 && String(result.rows[0].auth_id) === String(employeeId);
+    try {
+        const result = await pool.query(`SELECT ${idColumn} as auth_id FROM ${table} WHERE LOWER(email) = LOWER($1) LIMIT 1`, [req.user.email]);
+        return result.rows.length > 0 && String(result.rows[0].auth_id) === String(employeeId);
+    } catch (e) {
+        return false;
+    }
 };
 
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
@@ -38,18 +37,14 @@ export const getPayrollData = async (req, res) => {
         if (empRes.rows.length === 0) return res.status(404).json({ message: "Employee not found." });
         const emp = empRes.rows[0];
 
-        // 2. Fetch Raw Ecosystem Data
-        const [attRes, leaveReqRes, leavePolRes, holRes] = await Promise.all([
-            pool.query(`SELECT date, clock_in, clock_out FROM emp_attendance WHERE employee_id = $1`, [employeeId]),
-            pool.query(`SELECT from_date, to_date, leave_type, status FROM emp_leaves WHERE employee_id = $1 AND status = 'Approved'`, [employeeId]),
-            pool.query(`SELECT leave_name, paid_status FROM sa_leave_policies`),
-            pool.query(`SELECT holiday_date FROM sa_holidays WHERE status != 'Draft'`)
-        ]);
+        // 2. Fetch Raw Ecosystem Data (with safety catch blocks to prevent 500 crashes)
+        const attRes = await pool.query(`SELECT date, clock_in, clock_out FROM emp_attendance WHERE employee_id = $1`, [employeeId]).catch(() => ({ rows: [] }));
+        const leaveReqRes = await pool.query(`SELECT from_date, to_date, leave_type, status FROM emp_leaves WHERE employee_id = $1 AND status = 'Approved'`, [employeeId]).catch(() => ({ rows: [] }));
+        const holRes = await pool.query(`SELECT holiday_date FROM sa_holidays WHERE status != 'Draft'`).catch(() => ({ rows: [] }));
 
-        const attendanceLogs = attRes.rows;
-        const approvedLeaves = leaveReqRes.rows;
-        const leavePolicies = leavePolRes.rows;
-        const holidays = holRes.rows.map(h => new Date(h.holiday_date).toLocaleDateString('en-CA'));
+        const attendanceLogs = attRes.rows || [];
+        const approvedLeaves = leaveReqRes.rows || [];
+        const holidays = (holRes.rows || []).map(h => new Date(h.holiday_date).toLocaleDateString('en-CA'));
 
         const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
 
@@ -85,10 +80,11 @@ export const getPayrollData = async (req, res) => {
             let paidLeaveCount = 0;
             let unpaidLeaveCount = 0;
             let holidayCount = 0;
-            let sundaysCount = 0;
-            let saturdaysCount = 0;
+            let weekOffCount = 0; 
             let absentCount = 0;
+            let projectedDays = 0; 
 
+            // Core Evaluation Loop for Every Single Day in the Month
             for (let d = 1; d <= daysInMonth; d++) {
                 const currDate = new Date(y, m, d);
                 const currDateStr = currDate.toLocaleDateString('en-CA');
@@ -96,52 +92,67 @@ export const getPayrollData = async (req, res) => {
                 const day = currDate.getDay();
                 const isSun = day === 0;
                 let isSat = false;
+                
                 if (day === 6) {
                     const weekOfMonth = Math.ceil(currDate.getDate() / 7);
                     if (weekOfMonth === 2 || weekOfMonth === 4) isSat = true;
                 }
 
-                if (isSun) sundaysCount++;
-                if (isSat) saturdaysCount++;
+                const isWeekOff = isSun || isSat;
 
-                if (currDateStr > todayStr) continue;
-
-                // Priority 1: Punched In
+                // Priority 1: Punched In (Past & Today only)
                 const hasPunch = attendanceLogs.some(l => new Date(l.date).toLocaleDateString('en-CA') === currDateStr && l.clock_in);
-                if (hasPunch) {
+                if (currDateStr <= todayStr && hasPunch) {
                     presentCount++;
                     continue;
                 }
 
-                // Priority 2: Approved Leave
+                // Priority 2: Approved Leaves (Past & Future)
                 const leaveReq = approvedLeaves.find(req => {
                     const start = new Date(req.from_date).toLocaleDateString('en-CA');
                     const end = new Date(req.to_date).toLocaleDateString('en-CA');
                     return currDateStr >= start && currDateStr <= end;
                 });
+                
                 if (leaveReq) {
-                    const policy = leavePolicies.find(p => p.leave_name === leaveReq.leave_type);
-                    if (policy && policy.paid_status === 'Paid') paidLeaveCount++;
-                    else unpaidLeaveCount++;
+                    const isUnpaid = leaveReq.leave_type.toLowerCase().includes('unpaid') || leaveReq.leave_type.toLowerCase().includes('lop');
+                    if (!isUnpaid) {
+                        paidLeaveCount++;
+                    } else {
+                        unpaidLeaveCount++;
+                    }
                     continue;
                 }
 
-                // Priority 3: Holiday
+                // Priority 3: Company Holidays
                 if (holidays.includes(currDateStr)) {
                     holidayCount++;
                     continue;
                 }
 
-                // Priority 4: Standard Weekends (Unpaid by Policy)
-                if (isSun || isSat) continue;
+                // Priority 4: Week Offs (Sundays & Even Saturdays -> Unpaid)
+                if (isWeekOff) {
+                    weekOffCount++;
+                    continue;
+                }
 
-                // Priority 5: Unexcused Absence
-                absentCount++;
+                // Priority 5: Unexcused Absence vs Projected Future Work
+                if (currDateStr <= todayStr) {
+                    absentCount++;
+                } else {
+                    projectedDays++;
+                }
             }
 
-            const remainingDays = daysInMonth - sundaysCount - saturdaysCount;
-            const totalUnpaidDays = absentCount + unpaidLeaveCount;
+            // Financial Calculations
             const dailyRate = grossFull / daysInMonth;
+
+            // Detailed Deductions based on Attendance Rules
+            const weekOffDeduction = weekOffCount * dailyRate;
+            const absentDeduction = absentCount * dailyRate;
+            const unpaidLeaveDeduction = unpaidLeaveCount * dailyRate;
+
+            const totalUnpaidDays = absentCount + unpaidLeaveCount + weekOffCount;
             const calculatedLeavesDeduction = totalUnpaidDays * dailyRate;
 
             const staticDeductionSum = Object.values(statutoryDeductions).reduce((a, b) => a + b, 0);
@@ -151,21 +162,29 @@ export const getPayrollData = async (req, res) => {
             historyArray.push({
                 monthLabel,
                 daysInMonth,
-                sundaysCount,
-                saturdaysCount,
-                remainingDays,
                 presentDays: presentCount,
                 paidLeaveDays: paidLeaveCount,
                 holidayDays: holidayCount,
+                projectedDays: projectedDays,
                 absentDays: absentCount,
                 unpaidLeaveDays: unpaidLeaveCount,
+                weekOffCount: weekOffCount,
                 totalUnpaidDays,
+                totalPaidDays: presentCount + paidLeaveCount + holidayCount + projectedDays,
                 dailyRate,
                 grossSalary: grossFull,
                 totalDeductions,
                 netSalary,
                 earnings,
-                deductions: { ...statutoryDeductions, leaves: calculatedLeavesDeduction }
+                deductions: { 
+                    ...statutoryDeductions, 
+                    totalAttendanceDeduction: calculatedLeavesDeduction,
+                    breakdown: {
+                        weekOffDeduction,
+                        absentDeduction,
+                        unpaidLeaveDeduction
+                    }
+                }
             });
         }
 

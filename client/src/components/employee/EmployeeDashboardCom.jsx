@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import Countdown from 'react-countdown';
 import {
     FaUserClock, FaRegClock, FaPlaneDeparture, FaRupeeSign,
     FaSignInAlt, FaSignOutAlt, FaFileInvoiceDollar, FaClipboardList,
@@ -35,7 +34,6 @@ const EmployeeDashboardCom = () => {
     const [alerts, setAlerts] = useState([]);
 
     // Live Timer State
-    const countdownRef = useRef(null);
     const [completedMsToday, setCompletedMsToday] = useState(0);
 
     // EOD Modals
@@ -103,10 +101,9 @@ const EmployeeDashboardCom = () => {
         const empIdStr = String(user.employee_id).trim();
 
         try {
-            const [attRes, profRes, shiftRes, leaveBalRes, leaveReqRes] = await Promise.all([
+            const [attRes, profRes, leaveBalRes, leaveReqRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empIdStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig()).catch(() => ({ data: {} })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-shifts`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
@@ -127,9 +124,9 @@ const EmployeeDashboardCom = () => {
             });
             setCompletedMsToday(previousMs);
 
-            const employeeShiftName = profRes.data?.shift;
-            const assignedShift = (shiftRes.data || []).find(s => s.shift_name === employeeShiftName);
-            setShiftDetails(assignedShift || null);
+            // Extract shift details directly from profile data to prevent 403 errors
+            const employeeProfile = profRes.data || {};
+            setShiftDetails(employeeProfile.shift_details || employeeProfile.shift || null);
 
             setLeaveBalances(leaveBalRes.data || []);
 
@@ -159,15 +156,18 @@ const EmployeeDashboardCom = () => {
     }, [user]);
 
     // Derived States
-    const latestRecord = todayLogs.length > 0 ? todayLogs[0] : null;
     const activeSession = fullHistory.find(r => r.clock_in && !r.clock_out);
     const isClockedIn = !!activeSession;
 
     const isPendingOldCheckout = isClockedIn && new Date(activeSession.date).toLocaleDateString('en-CA') !== new Date().toLocaleDateString('en-CA');
     const hasWorkedToday = todayLogs.length > 0;
 
-    const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8) : 8;
-    const targetMs = targetHours * 3600000;
+    // Safely parse target working hours from extracted shift details (fallback to 8)
+    let parsedWorkingHours = 8;
+    if (shiftDetails && typeof shiftDetails === 'object') {
+        parsedWorkingHours = parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8);
+    }
+    const targetHours = parsedWorkingHours || 8;
 
     let liveProgressMs = completedMsToday;
     if (isClockedIn && !isPendingOldCheckout) {

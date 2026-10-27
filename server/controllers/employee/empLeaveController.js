@@ -1,7 +1,4 @@
 import pool from '../../config/db.js';
-import initializeEmpLeaveModel from '../../models/employee/EmpLeave.js';
-
-await initializeEmpLeaveModel();
 
 export const applyLeave = async (req, res) => {
     try {
