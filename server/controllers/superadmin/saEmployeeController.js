@@ -11,7 +11,6 @@ export const createEmployee = async (req, res) => {
     try {
         const data = req.body;
 
-        // Ensure employeeId is passed manually from the frontend
         if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.department || !data.uanNo || !data.employeeId) {
             return res.status(400).json({ message: "Missing required employee details including Employee ID and UAN NO. Please complete all mandatory fields." });
         }
@@ -39,7 +38,7 @@ export const createEmployee = async (req, res) => {
             data.dob || null,
             data.gender || 'Other',
             data.address || 'N/A',
-            data.employeeId,
+            data.employeeId, 
             data.joiningDate || data.joining_date || new Date().toISOString().split('T')[0],
             data.company,
             data.branch,
@@ -75,9 +74,6 @@ export const createEmployee = async (req, res) => {
         const result = await pool.query(insertQuery, values);
         const newEmployee = result.rows[0];
 
-        // ============================================================================
-        // SAFE SMTP DISPATCH: Prevents 500 error if K8s pod is missing credentials
-        // ============================================================================
         if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
             console.warn('Production Warning: Missing SMTP credentials (EMAIL_USER / EMAIL_PASS). Skipping email dispatch.');
             return res.status(201).json({
@@ -98,14 +94,11 @@ export const createEmployee = async (req, res) => {
             });
 
             const activationToken = createActivationToken(data.email, 'employee');
-
-            // ============================================================================
-            // ENVIRONMENT-AWARE URL ROUTING
-            // ============================================================================
+            
             const isProd = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
             const fallbackUrl = isProd ? 'https://avgpayroll.com' : 'http://localhost:5173';
             const frontendBaseUrl = process.env.FRONTEND_URL || fallbackUrl;
-
+            
             const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
             const mailOptions = {
@@ -140,7 +133,18 @@ export const createEmployee = async (req, res) => {
                                             <table width="100%" border="0" cellspacing="0" cellpadding="0">
                                                 <tr>
                                                     <td align="left" valign="middle">
-                                                        <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                        <table border="0" cellspacing="0" cellpadding="0">
+                                                            <tr>
+                                                                <td valign="middle" style="padding-right: 12px;">
+                                                                    <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                                </td>
+                                                                <td valign="middle">
+                                                                    <span style="font-size: 22px; font-weight: 800; color: #010a1f; letter-spacing: -0.5px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                                                        AVG <span style="color: #f77704;">Payroll</span>
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
                                                     </td>
                                                     <td align="right" valign="middle">
                                                         <span style="display: inline-block; padding: 6px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
@@ -273,10 +277,6 @@ export const updateEmployee = async (req, res) => {
         }
         const existing = existingRes.rows[0];
 
-        // ============================================================================
-        // SELF-HEALING DATABASE FIX FOR FOREIGN KEY CASCADES
-        // Forces emp_attendance to cascade updates if the user alters the Employee ID
-        // ============================================================================
         if (data.employeeId && data.employeeId !== existing.employee_id) {
             try {
                 await pool.query(`

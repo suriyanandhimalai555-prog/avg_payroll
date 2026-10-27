@@ -18,11 +18,11 @@ const transporter = nodemailer.createTransport({
 export const updateSalaryStructure = async (req, res) => {
     try {
         const data = req.body;
-        const {
-            role, id, email, firstName, lastName, company,
-            ctc, monthlySalary, basic, hra, conveyance, medical,
-            specialAllowance, otherAllowances, epf, esi,
-            healthInsurance, pt, tds, leaves
+        const { 
+            role, id, email, firstName, lastName, company, 
+            ctc, monthlySalary, basic, hra, conveyance, medical, 
+            specialAllowance, otherAllowances, epf, esi, 
+            healthInsurance, pt, tds, leaves 
         } = data;
 
         // Route to the correct database table based on the user's role
@@ -46,7 +46,7 @@ export const updateSalaryStructure = async (req, res) => {
         ];
 
         const result = await pool.query(updateQuery, values);
-
+        
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'User not found in the database.' });
         }
@@ -90,7 +90,18 @@ export const updateSalaryStructure = async (req, res) => {
                                             <table width="100%" border="0" cellspacing="0" cellpadding="0">
                                                 <tr>
                                                     <td align="left" valign="middle">
-                                                        <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                        <table border="0" cellspacing="0" cellpadding="0">
+                                                            <tr>
+                                                                <td valign="middle" style="padding-right: 12px;">
+                                                                    <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                                </td>
+                                                                <td valign="middle">
+                                                                    <span style="font-size: 22px; font-weight: 800; color: #010a1f; letter-spacing: -0.5px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                                                        AVG <span style="color: #f77704;">Payroll</span>
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
                                                     </td>
                                                     <td align="right" valign="middle">
                                                         <span style="display: inline-block; padding: 6px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">

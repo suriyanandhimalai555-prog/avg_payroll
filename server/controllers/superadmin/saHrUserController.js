@@ -99,7 +99,18 @@ export const createHrUser = async (req, res) => {
                                             <table width="100%" border="0" cellspacing="0" cellpadding="0">
                                                 <tr>
                                                     <td align="left" valign="middle">
-                                                        <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                        <table border="0" cellspacing="0" cellpadding="0">
+                                                            <tr>
+                                                                <td valign="middle" style="padding-right: 12px;">
+                                                                    <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                                </td>
+                                                                <td valign="middle">
+                                                                    <span style="font-size: 22px; font-weight: 800; color: #010a1f; letter-spacing: -0.5px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                                                        AVG <span style="color: #f77704;">Payroll</span>
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
                                                     </td>
                                                     <td align="right" valign="middle">
                                                         <span style="display: inline-block; padding: 6px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
