@@ -83,10 +83,17 @@ const SuperAdminManagersCom = () => {
     const [viewUser, setViewUser] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
+    // FIX: Variables calculated globally to avoid ReferenceError in shimmer
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
     const liveGross = parseNum(formData.basic) + parseNum(formData.hra) + parseNum(formData.conveyance) + parseNum(formData.medical) + parseNum(formData.otherAllowances);
     const liveDeductions = parseNum(formData.epf) + parseNum(formData.esi) + parseNum(formData.healthInsurance) + parseNum(formData.pt) + parseNum(formData.tds) + parseNum(formData.leaves);
     const liveNet = liveGross - liveDeductions;
+    const isGrossMatchingMonthly = liveGross === parseNum(formData.monthlySalary);
+
+    const formatCurrency = (amount) => {
+        if (amount === undefined || amount === null) return '₹0';
+        return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
+    };
 
     const fetchData = async () => {
         setIsLoading(true);
@@ -280,11 +287,6 @@ const SuperAdminManagersCom = () => {
     const handleView = (mgr) => {
         setViewUser(mgr);
         setIsViewModalOpen(true);
-    };
-
-    const formatCurrency = (amount) => {
-        if (amount === undefined || amount === null) return '₹0';
-        return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
     };
 
     const ToggleSwitch = ({ checked, onChange }) => (
@@ -547,8 +549,8 @@ const SuperAdminManagersCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
-            <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* ==================== NON-STICKY HEADER ==================== */}
+            <div className="relative bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#0437cc]/[0.05]' : 'bg-[#f77704]/[0.06]'}`}></div>
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
