@@ -26,9 +26,9 @@ export const getPayrollData = async (req, res) => {
         const allowed = await canAccessEmployeePayroll(req, employeeId);
         if (!allowed) return res.status(403).json({ message: 'You are not authorized to access this payroll.' });
 
-        // 1. Fetch Salary Config
+        // 1. Fetch Salary Config AND Shift Info
         const empQuery = `
-            SELECT first_name, last_name, employee_id, department, designation, 
+            SELECT first_name, last_name, employee_id, department, designation, shift,
                    basic_salary, hra, conveyance, medical, special_allowance, other_allowances,
                    epf, esi, health_insurance, pt, tds 
             FROM sa_employees WHERE employee_id = $1 LIMIT 1
@@ -37,8 +37,11 @@ export const getPayrollData = async (req, res) => {
         if (empRes.rows.length === 0) return res.status(404).json({ message: "Employee not found." });
         const emp = empRes.rows[0];
 
+        // Shift Configuration
+        const isFlexibleShift = emp.shift?.toLowerCase().includes('flex');
+        const allowedUnpaidGraceDays = isFlexibleShift ? 2 : 0;
+
         // 2. Fetch Raw Ecosystem Data 
-        // Explicitly exclude 'WEEKLY_OFF' so weekends aren't counted as paid Government Holidays
         const attRes = await pool.query(`SELECT date, clock_in, clock_out FROM emp_attendance WHERE employee_id = $1`, [employeeId]).catch(() => ({ rows: [] }));
         const leaveReqRes = await pool.query(`SELECT from_date, to_date, leave_type, status FROM emp_leaves WHERE employee_id = $1 AND status = 'Approved'`, [employeeId]).catch(() => ({ rows: [] }));
         const holRes = await pool.query(`SELECT holiday_date FROM sa_holidays WHERE status = 'Active' AND type != 'WEEKLY_OFF'`).catch(() => ({ rows: [] }));
@@ -145,16 +148,18 @@ export const getPayrollData = async (req, res) => {
                 }
             }
 
-            // Financial Calculations - Week Offs are Non-Countable
+            // --- FINANCIAL CALCULATIONS ---
             const countableDays = daysInMonth - weekOffCount;
             const dailyRate = grossFull / (countableDays || 1); // Avoid division by zero
 
-            // Deductions apply ONLY to unexcused absences and unpaid leaves
-            const absentDeduction = absentCount * dailyRate;
-            const unpaidLeaveDeduction = unpaidLeaveCount * dailyRate;
+            // Calculate total days the employee was missing (Absent + Unpaid Leaves)
+            const rawMissingDays = absentCount + unpaidLeaveCount;
 
-            const totalUnpaidDays = absentCount + unpaidLeaveCount; // Week Offs removed from deductions
-            const calculatedLeavesDeduction = totalUnpaidDays * dailyRate;
+            // Apply Shift-Based LOP Grace Rules
+            let deductibleMissingDays = Math.max(0, rawMissingDays - allowedUnpaidGraceDays);
+            let forgivenDays = Math.min(rawMissingDays, allowedUnpaidGraceDays);
+
+            const calculatedLeavesDeduction = deductibleMissingDays * dailyRate;
 
             const staticDeductionSum = Object.values(statutoryDeductions).reduce((a, b) => a + b, 0);
             const totalDeductions = staticDeductionSum + calculatedLeavesDeduction;
@@ -171,8 +176,12 @@ export const getPayrollData = async (req, res) => {
                 absentDays: absentCount,
                 unpaidLeaveDays: unpaidLeaveCount,
                 weekOffCount: weekOffCount,
-                totalUnpaidDays,
-                totalPaidDays: presentCount + paidLeaveCount + holidayCount + projectedDays,
+                rawMissingDays,
+                forgivenDays,
+                deductibleMissingDays,
+                isFlexibleShift,
+                allowedUnpaidGraceDays,
+                totalPaidDays: presentCount + paidLeaveCount + holidayCount + projectedDays + forgivenDays,
                 dailyRate,
                 grossSalary: grossFull,
                 totalDeductions,
@@ -180,11 +189,7 @@ export const getPayrollData = async (req, res) => {
                 earnings,
                 deductions: { 
                     ...statutoryDeductions, 
-                    totalAttendanceDeduction: calculatedLeavesDeduction,
-                    breakdown: {
-                        absentDeduction,
-                        unpaidLeaveDeduction
-                    }
+                    totalAttendanceDeduction: calculatedLeavesDeduction
                 }
             });
         }

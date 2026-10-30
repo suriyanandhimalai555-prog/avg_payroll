@@ -6,7 +6,7 @@ import {
     FaSignOutAlt, FaSignInAlt, FaTasks, FaFingerprint,
     FaBusinessTime, FaWalking, FaExclamationTriangle,
     FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp, FaTimes, FaCheck, FaEdit, FaFilter,
-    FaUmbrellaBeach
+    FaUmbrellaBeach, FaPlaneDeparture
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -30,6 +30,7 @@ const EmployeeAttendanceCom = () => {
     const [todayLogs, setTodayLogs] = useState([]);
     const [fullHistory, setFullHistory] = useState([]);
     const [holidays, setHolidays] = useState([]);
+    const [leaveRequests, setLeaveRequests] = useState([]);
     const [shiftDetails, setShiftDetails] = useState(null);
     const [joiningDate, setJoiningDate] = useState(null);
 
@@ -57,16 +58,24 @@ const EmployeeAttendanceCom = () => {
         try {
             const empIdStr = String(user.employee_id).trim();
 
-            const [attRes, profRes, shiftRes, holRes] = await Promise.all([
+            const [attRes, profRes, shiftRes, holRes, leaveRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empIdStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig()).catch(() => ({ data: {} })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/shift/${empIdStr}`, getAuthConfig()).catch(() => ({ data: null })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
             const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
             setFullHistory(fetchedHistory);
-            setHolidays(holRes.data || []);
+            
+            // Filter out 'WEEKLY_OFF' so they aren't confused with paid company holidays
+            const actualHolidays = (holRes.data || []).filter(h => h.status !== 'Draft' && h.type !== 'WEEKLY_OFF');
+            setHolidays(actualHolidays);
+            
+            // Fetch Approved Leaves
+            setLeaveRequests((leaveRes.data || []).filter(req => req.status === 'Approved'));
+            
             setShiftDetails(shiftRes.data); 
 
             const profile = profRes.data || {};
@@ -313,7 +322,14 @@ const EmployeeAttendanceCom = () => {
         const displayData = dateArray.map(dateObj => {
             const dateStr = dateObj.toLocaleDateString('en-CA');
             const sessions = fullHistory.filter(r => new Date(r.date).toLocaleDateString('en-CA') === dateStr);
-            const holidayRecord = holidays.find(h => new Date(h.holiday_date).toLocaleDateString('en-CA') === dateStr && h.status !== 'Draft');
+            const holidayRecord = holidays.find(h => new Date(h.holiday_date).toLocaleDateString('en-CA') === dateStr);
+            
+            // Check for Approved Leave
+            const approvedLeave = leaveRequests.find(req => {
+                const start = new Date(req.from_date).toLocaleDateString('en-CA');
+                const end = new Date(req.to_date).toLocaleDateString('en-CA');
+                return dateStr >= start && dateStr <= end;
+            });
 
             let totalMins = 0;
             let first_clock_in = null;
@@ -345,10 +361,15 @@ const EmployeeAttendanceCom = () => {
             }
 
             let status = 'Absent';
+            let leaveName = null;
+
             if (sessions.length > 0) {
                 status = late_minutes > 0 ? 'Late' : 'Present';
+            } else if (approvedLeave) {
+                status = 'Leave';
+                leaveName = approvedLeave.leave_type;
             } else if (holidayRecord) {
-                status = (holidayRecord.type === 'WEEKLY_OFF' || holidayRecord.type === 'Weekend Holiday') ? 'Week Off' : 'Holiday';
+                status = 'Holiday';
             } else {
                 const dayOfWeek = dateObj.getDay();
                 if (dayOfWeek === 0) {
@@ -379,7 +400,8 @@ const EmployeeAttendanceCom = () => {
                 late_minutes,
                 total_hours_sum,
                 status,
-                holidayName: holidayRecord ? holidayRecord.holiday_name : null
+                holidayName: holidayRecord ? holidayRecord.holiday_name : null,
+                leaveName: leaveName
             };
         });
 
@@ -411,6 +433,7 @@ const EmployeeAttendanceCom = () => {
         if (status === 'Absent') return 'text-red-700 bg-red-50 border-red-200';
         if (status === 'Week Off') return 'text-purple-700 bg-purple-50 border-purple-200';
         if (status === 'Holiday') return 'text-[#0437cc] bg-blue-50 border-blue-200';
+        if (status === 'Leave') return 'text-pink-700 bg-pink-50 border-pink-200';
         return 'text-slate-600 bg-slate-50 border-slate-200';
     };
 
@@ -420,6 +443,7 @@ const EmployeeAttendanceCom = () => {
         if (status === 'Absent') return 'bg-red-500';
         if (status === 'Week Off') return 'bg-purple-500';
         if (status === 'Holiday') return 'bg-[#0437cc]';
+        if (status === 'Leave') return 'bg-pink-500';
         return 'bg-slate-500';
     };
 
@@ -951,6 +975,7 @@ const EmployeeAttendanceCom = () => {
                                             <option value="Absent">Absent</option>
                                             <option value="Week Off">Week Off</option>
                                             <option value="Holiday">Holiday</option>
+                                            <option value="Leave">Leave</option>
                                         </select>
                                     </div>
                                 </div>
@@ -1000,7 +1025,7 @@ const EmployeeAttendanceCom = () => {
                                                             </div>
                                                             <div className="flex items-center gap-2 shrink-0">
                                                                 <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded-lg text-[#0437cc] shadow-sm">
-                                                                    {group.total_hours_sum || (group.status === 'Week Off' || group.status === 'Holiday' ? group.status : 'No Data')}
+                                                                    {group.total_hours_sum || (group.status === 'Week Off' || group.status === 'Holiday' || group.status === 'Leave' ? group.status : 'No Data')}
                                                                 </span>
                                                                 <span className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${isExpanded ? 'bg-[#0437cc] text-white' : 'bg-white text-slate-400 border border-slate-200'}`}>
                                                                     {isExpanded ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
@@ -1050,7 +1075,7 @@ const EmployeeAttendanceCom = () => {
                                                                 ) : (
                                                                     <div className="text-center py-4">
                                                                         <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-2 border border-slate-100">
-                                                                            {group.status === 'Holiday' || group.status === 'Week Off' ? (
+                                                                            {group.status === 'Holiday' || group.status === 'Week Off' || group.status === 'Leave' ? (
                                                                                 <FaUmbrellaBeach className="text-purple-400" />
                                                                             ) : (
                                                                                 <FaTimes className="text-red-400" />
@@ -1103,6 +1128,11 @@ const EmployeeAttendanceCom = () => {
                                                             {group.holidayName && (
                                                                 <span className="text-[9px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-purple-100">
                                                                     {group.holidayName}
+                                                                </span>
+                                                            )}
+                                                            {group.leaveName && (
+                                                                <span className="text-[9px] text-pink-700 font-bold bg-pink-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-pink-100">
+                                                                    {group.leaveName}
                                                                 </span>
                                                             )}
                                                             {group.sessions.length > 1 && (
@@ -1209,7 +1239,7 @@ const EmployeeAttendanceCom = () => {
                                                                     ) : (
                                                                         <div className="col-span-2 text-center py-6">
                                                                             <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-2 border border-slate-100">
-                                                                                {group.status === 'Holiday' || group.status === 'Week Off' ? (
+                                                                                {group.status === 'Holiday' || group.status === 'Week Off' || group.status === 'Leave' ? (
                                                                                     <FaUmbrellaBeach className="text-purple-400" />
                                                                                 ) : (
                                                                                     <FaTimes className="text-red-400" />

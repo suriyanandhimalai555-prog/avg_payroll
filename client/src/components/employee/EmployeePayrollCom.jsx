@@ -4,15 +4,13 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
     FaMoneyCheckAlt, FaFileInvoiceDollar, FaHistory,
-    FaPercentage, FaDownload, FaCalculator, FaCalendarDay, FaCheckCircle, FaTimesCircle
+    FaPercentage, FaDownload, FaCalculator, FaCalendarDay, FaCheckCircle, FaTimesCircle, FaUmbrellaBeach
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
-// Base64 Placeholder Logo
 const COMPANY_LOGO_BASE64 = "https://avgwork.avgprimetech.com/assets/icon-C5ZMRYg3.png";
 
-// Inject DM Sans via @import
 if (typeof document !== 'undefined' && !document.getElementById('dm-sans-import')) {
     const styleEl = document.createElement('style');
     styleEl.id = 'dm-sans-import';
@@ -169,7 +167,6 @@ const EmployeePayrollCom = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
-    // ==================== PDF GENERATOR ====================
     const downloadPDF = async (record) => {
         try {
             const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
@@ -303,10 +300,8 @@ const EmployeePayrollCom = () => {
 
             const tableStartY = infoY + leftRows.length * 6.5 + 8;
 
-            // Statutory and Attendance Deductions (Week Offs removed from deductions array)
             const combinedDeductions = [
-                { label: 'Absences', amount: record.deductions.breakdown.absentDeduction },
-                { label: 'Unpaid Leaves', amount: record.deductions.breakdown.unpaidLeaveDeduction },
+                { label: 'LOP (Leave Deductions)', amount: record.deductions.totalAttendanceDeduction },
                 { label: 'EPF Deduction', amount: record.deductions.epf },
                 { label: 'ESI Deduction', amount: record.deductions.esi },
                 { label: 'Professional Tax', amount: record.deductions.pt },
@@ -360,7 +355,7 @@ const EmployeePayrollCom = () => {
                     0: { cellWidth: 60 },
                     1: { cellWidth: 33, halign: 'right' },
                     2: { cellWidth: 55 },
-                    3: { cellWidth: 32, halign: 'right', textColor: [220, 38, 38] }, // Red text for deductions
+                    3: { cellWidth: 32, halign: 'right', textColor: [220, 38, 38] }, 
                 },
                 head: [['EARNINGS', 'AMOUNT', 'DEDUCTIONS', 'AMOUNT']],
                 body: bodyData,
@@ -385,7 +380,7 @@ const EmployeePayrollCom = () => {
             doc.text('Gross Salary', margin + 4, y + 5.4);
             doc.text(`₹${formatCurrency(record.grossSalary)}`, margin + 89, y + 5.4, { align: 'right' });
             doc.text('Total Deductions', margin + 97, y + 5.4);
-            doc.setTextColor(220, 38, 38); // Red
+            doc.setTextColor(220, 38, 38); 
             doc.text(`₹${formatCurrency(record.totalDeductions)}`, pageW - margin - 4, y + 5.4, { align: 'right' });
 
             y += rowH;
@@ -475,7 +470,6 @@ const EmployeePayrollCom = () => {
         }
     };
 
-    // ==================== SHIMMER ====================
     if (loading || !payrollData) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden animate-pulse">
@@ -649,7 +643,25 @@ const EmployeePayrollCom = () => {
 
                                 {/* 2. Detailed Attendance Breakdown */}
                                 <div>
-                                    <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">2. Attendance & Leave Payout Breakdown</h3>
+                                    <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">2. Attendance & LOP Breakdown</h3>
+                                    
+                                    {/* Shift Context Card */}
+                                    <div className={`mb-3 p-3 rounded-xl border ${currentPayroll.isFlexibleShift ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'} flex items-center gap-3 shadow-sm`}>
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${currentPayroll.isFlexibleShift ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                                            <FaUmbrellaBeach className="text-sm" />
+                                        </div>
+                                        <div>
+                                            <p className={`text-xs font-bold ${currentPayroll.isFlexibleShift ? 'text-green-800' : 'text-orange-800'}`}>
+                                                Shift Type: {currentPayroll.isFlexibleShift ? 'Flexible Shift' : 'General Shift'}
+                                            </p>
+                                            <p className={`text-[10px] mt-0.5 ${currentPayroll.isFlexibleShift ? 'text-green-700' : 'text-orange-700'}`}>
+                                                {currentPayroll.isFlexibleShift 
+                                                    ? `You are allowed ${currentPayroll.allowedUnpaidGraceDays} paid unexcused absences per month.` 
+                                                    : `No unexcused absences allowed. Every day missing directly incurs an LOP deduction.`}
+                                            </p>
+                                        </div>
+                                    </div>
+
                                     <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm custom-scrollbar">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
@@ -684,6 +696,14 @@ const EmployeePayrollCom = () => {
                                                     <td className="px-4 py-3 text-[11px] font-medium text-slate-500">Approved Paid Quota</td>
                                                     <td className="px-4 py-3 text-xs font-bold text-green-600 text-right tabular-nums">+ ₹{formatCurrency(currentPayroll.paidLeaveDays * currentPayroll.dailyRate)}</td>
                                                 </tr>
+                                                {currentPayroll.forgivenDays > 0 && (
+                                                    <tr className="hover:bg-green-50/60 bg-green-50/30">
+                                                        <td className="px-4 py-3 text-xs font-bold text-green-700 flex items-center gap-2"><FaCheckCircle className="text-green-500" /> Shift Grace Period</td>
+                                                        <td className="px-4 py-3 text-sm font-bold text-[#010a1f] text-center tabular-nums">{currentPayroll.forgivenDays}</td>
+                                                        <td className="px-4 py-3 text-[11px] font-bold text-green-700">Forgiven Absences (Flex Shift)</td>
+                                                        <td className="px-4 py-3 text-xs font-bold text-green-600 text-right tabular-nums">+ ₹{formatCurrency(currentPayroll.forgivenDays * currentPayroll.dailyRate)}</td>
+                                                    </tr>
+                                                )}
                                                 <tr className="hover:bg-slate-50/60">
                                                     <td className="px-4 py-3 text-xs font-bold text-blue-700 flex items-center gap-2"><FaCalendarDay className="text-blue-500" /> Projected Working Days</td>
                                                     <td className="px-4 py-3 text-sm font-bold text-[#010a1f] text-center tabular-nums">{currentPayroll.projectedDays}</td>
@@ -693,19 +713,13 @@ const EmployeePayrollCom = () => {
 
                                                 {/* UNPAID / DEDUCTED SECTION */}
                                                 <tr className="bg-red-50/30">
-                                                    <td className="px-4 py-2 text-[10px] font-bold text-red-400 uppercase" colSpan="4">Deducted / Unpaid Days</td>
+                                                    <td className="px-4 py-2 text-[10px] font-bold text-red-400 uppercase" colSpan="4">Deducted (LOP) Days</td>
                                                 </tr>
                                                 <tr className="hover:bg-red-50/30">
-                                                    <td className="px-4 py-3 text-xs font-bold text-red-700 flex items-center gap-2"><FaTimesCircle className="text-red-500" /> Absent</td>
-                                                    <td className="px-4 py-3 text-sm font-bold text-red-600 text-center tabular-nums">{currentPayroll.absentDays}</td>
-                                                    <td className="px-4 py-3 text-[11px] font-medium text-slate-600">Unexcused Absence (Unpaid)</td>
-                                                    <td className="px-4 py-3 text-xs font-bold text-red-600 text-right tabular-nums">- ₹{formatCurrency(currentPayroll.deductions.breakdown.absentDeduction)}</td>
-                                                </tr>
-                                                <tr className="hover:bg-red-50/30">
-                                                    <td className="px-4 py-3 text-xs font-bold text-red-700 flex items-center gap-2"><FaTimesCircle className="text-red-500" /> Unpaid Leaves</td>
-                                                    <td className="px-4 py-3 text-sm font-bold text-red-600 text-center tabular-nums">{currentPayroll.unpaidLeaveDays}</td>
-                                                    <td className="px-4 py-3 text-[11px] font-medium text-slate-600">Approved LOP (Unpaid)</td>
-                                                    <td className="px-4 py-3 text-xs font-bold text-red-600 text-right tabular-nums">- ₹{formatCurrency(currentPayroll.deductions.breakdown.unpaidLeaveDeduction)}</td>
+                                                    <td className="px-4 py-3 text-xs font-bold text-red-700 flex items-center gap-2"><FaTimesCircle className="text-red-500" /> Deductible Absences</td>
+                                                    <td className="px-4 py-3 text-sm font-bold text-red-600 text-center tabular-nums">{currentPayroll.deductibleMissingDays}</td>
+                                                    <td className="px-4 py-3 text-[11px] font-medium text-slate-600">Total missing minus forgiven days</td>
+                                                    <td className="px-4 py-3 text-xs font-bold text-red-600 text-right tabular-nums">- ₹{formatCurrency(currentPayroll.deductions.totalAttendanceDeduction)}</td>
                                                 </tr>
 
                                                 {/* NON-COUNTABLE SECTION */}
@@ -722,7 +736,7 @@ const EmployeePayrollCom = () => {
                                                 {/* TOTALS */}
                                                 <tr className="bg-slate-100">
                                                     <td className="px-4 py-3 text-xs font-black text-[#010a1f]">Total Monthly Gross</td>
-                                                    <td className="px-4 py-3 text-sm font-black text-[#010a1f] text-center">{currentPayroll.daysInMonth}</td>
+                                                    <td className="px-4 py-3 text-sm font-black text-[#010a1f] text-center">{currentPayroll.countableDays}</td>
                                                     <td className="px-4 py-3 text-[11px] font-bold text-slate-500">Per-Day Rate: ₹{formatCurrency(currentPayroll.dailyRate)}</td>
                                                     <td className="px-4 py-3 text-sm font-black text-[#010a1f] text-right tabular-nums">₹{formatCurrency(currentPayroll.grossSalary)}</td>
                                                 </tr>
@@ -747,9 +761,9 @@ const EmployeePayrollCom = () => {
                                         </div>
                                         <span className="text-slate-300 font-black hidden md:block">-</span>
                                         <div className="flex flex-col items-center flex-1 bg-red-50/50 p-2 rounded-lg border border-red-100">
-                                            <span className="text-[10px] sm:text-xs text-red-500 font-bold">Total Unpaid Deductions</span>
+                                            <span className="text-[10px] sm:text-xs text-red-500 font-bold">LOP (Leave Deductions)</span>
                                             <span className="text-sm font-black text-red-600">₹{formatCurrency(currentPayroll.deductions.totalAttendanceDeduction)}</span>
-                                            <span className="text-[9px] text-red-400 font-bold mt-0.5">({currentPayroll.totalUnpaidDays} Days)</span>
+                                            <span className="text-[9px] text-red-400 font-bold mt-0.5">({currentPayroll.deductibleMissingDays} Days)</span>
                                         </div>
                                         <span className="text-slate-300 font-black hidden md:block">-</span>
                                         <div className="flex flex-col items-center flex-1 bg-orange-50/50 p-2 rounded-lg border border-orange-100">
