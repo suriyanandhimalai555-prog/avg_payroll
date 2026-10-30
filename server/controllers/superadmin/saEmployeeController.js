@@ -102,9 +102,14 @@ export const createEmployee = async (req, res) => {
             const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
             const mailOptions = {
-                from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,
+                from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`, // Aligned with auth.user
                 to: data.email,
                 subject: 'Welcome to the Team! Action Required: Set up your account',
+                text: `Hello ${data.firstName} ${data.lastName},\n\nWe are thrilled to welcome you aboard. Your official employee profile has been successfully generated in our system.\n\nEmployee ID: ${data.employeeId}\nDesignation: ${data.designation}\nDepartment: ${data.department}\nLocation: ${data.location || data.branch} (${data.branch})\n\nTo get started and access your employee dashboard, please activate your account and set up a secure password by clicking the button below:\n\n${activationLink}\n\nThis is an automated security notification. Please do not reply to this email.`, // Plain-text alternative for deliverability
+                headers: {
+                    'X-Priority': '1 (Highest)',
+                    'X-MSMail-Priority': 'High',
+                },
                 html: `
                 <!DOCTYPE html>
                 <html>

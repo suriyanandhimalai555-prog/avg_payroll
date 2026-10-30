@@ -68,9 +68,14 @@ export const createHrUser = async (req, res) => {
             const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
             const mailOptions = {
-                from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,
+                from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`, // Aligned with auth.user
                 to: data.email,
                 subject: 'HR Portal Access - Set up your account',
+                text: `Hello ${data.firstName},\n\nYou have been granted HR Administrative access at ${data.company}. Please activate your account and set up your secure password to get started.\n\nHR ID: ${data.hrId}\nDesignation: ${data.designation || 'HR Admin'}\nDepartment: ${data.department || 'Human Resources'}\nBranch: ${data.branch}\n\nTo access your HR dashboard, activate your account by clicking the button below:\n\n${activationLink}\n\nThis is an automated security notification. Please do not reply to this email.`, // Plain-text alternative for deliverability
+                headers: {
+                    'X-Priority': '1 (Highest)',
+                    'X-MSMail-Priority': 'High',
+                },
                 html: `
                 <!DOCTYPE html>
                 <html>
