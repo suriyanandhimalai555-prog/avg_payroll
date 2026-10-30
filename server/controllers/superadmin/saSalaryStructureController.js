@@ -59,14 +59,9 @@ export const updateSalaryStructure = async (req, res) => {
             const fmt = (val) => Number(val || 0).toLocaleString('en-IN');
 
             const mailOptions = {
-                from: `"AVG Prime Tech Payroll" <${process.env.EMAIL_USER}>`, // Aligned with auth.user
+                from: `"AVG Prime Tech Payroll" <${process.env.EMAIL_USER}>`,
                 to: email,
                 subject: 'Important: Your Salary Structure has been Updated',
-                text: `Dear ${firstName} ${lastName},\n\nThis is an official notification to inform you that your salary structure and compensation breakdown have been successfully updated by the administration at ${company || 'AVG Prime Tech'}.\n\nTarget Monthly Gross: Rs. ${fmt(monthlySalary)}\nAnnual CTC: Rs. ${fmt(ctc)}\n\nYou can view the detailed breakdown of your new earnings, allowances, and statutory deductions by logging into your employee portal: ${process.env.FRONTEND_URL || 'https://avgpayroll.com'}/login\n\nThis is an automated security notification. Please do not reply to this email.`, // Plain-text alternative for deliverability
-                headers: {
-                    'X-Priority': '1 (Highest)',
-                    'X-MSMail-Priority': 'High',
-                },
                 html: `
                 <!DOCTYPE html>
                 <html>
