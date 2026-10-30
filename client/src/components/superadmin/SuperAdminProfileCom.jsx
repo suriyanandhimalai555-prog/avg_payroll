@@ -5,13 +5,12 @@ import {
     FaUserCircle, FaInfoCircle, FaCheck, FaTimes,
     FaDesktop, FaCamera, FaSave, FaEnvelope, FaPhoneAlt,
     FaShieldAlt, FaMobileAlt, FaLaptop, FaMapMarkerAlt,
-    FaCircle, FaSignOutAlt, FaUserShield
+    FaSignOutAlt, FaUserShield
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { useAuth } from '../../context/AuthContext';
 
-// Helper functions for image cropping
 const createImage = (url) =>
     new Promise((resolve, reject) => {
         const image = new Image();
@@ -55,7 +54,6 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -63,6 +61,19 @@ const getAuthConfig = () => {
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
         }
     };
+};
+
+// Time formatting helper for Last Active
+const timeAgo = (dateString) => {
+    if (!dateString) return "Active Now";
+    const seconds = Math.floor((new Date() - new Date(dateString)) / 1000);
+    let interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + " days ago";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + " hours ago";
+    interval = seconds / 60;
+    if (interval > 5) return Math.floor(interval) + " mins ago";
+    return "Active Now";
 };
 
 const SuperAdminProfileCom = () => {
@@ -90,6 +101,15 @@ const SuperAdminProfileCom = () => {
     const [zoomLevel, setZoomLevel] = useState(1);
     const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
+    const fetchSessions = async () => {
+        try {
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth/sessions`, getAuthConfig());
+            setActiveSessions(res.data || []);
+        } catch (error) {
+            console.error("Failed to load active sessions", error);
+        }
+    };
+
     useEffect(() => {
         if (user) {
             setProfileData({
@@ -100,27 +120,7 @@ const SuperAdminProfileCom = () => {
                 role: 'Super Admin'
             });
 
-            setActiveSessions([
-                {
-                    id: 1,
-                    device: 'MacBook Pro 16" - Chrome Browser',
-                    deviceType: 'laptop',
-                    ip: '192.168.1.105',
-                    location: 'Bengaluru, India',
-                    lastActive: 'Active Now',
-                    isCurrent: true
-                },
-                {
-                    id: 2,
-                    device: 'iPhone 14 Pro - Safari Browser',
-                    deviceType: 'mobile',
-                    ip: '192.168.1.202',
-                    location: 'Bengaluru, India',
-                    lastActive: '2 hours ago',
-                    isCurrent: false
-                }
-            ]);
-            setIsLoading(false);
+            fetchSessions().then(() => setIsLoading(false));
         }
     }, [user]);
 
@@ -205,10 +205,18 @@ const SuperAdminProfileCom = () => {
         }
     };
 
-    const handleRevokeSession = (sessionId) => {
-        setActiveSessions(prev => prev.filter(session => session.id !== sessionId));
-        setSuccessMsg('Remote session successfully revoked.');
-        setTimeout(() => setSuccessMsg(''), 4000);
+    const handleRevokeSession = async (sessionId) => {
+        if (!window.confirm("Are you sure you want to revoke this active session? The device will be logged out immediately.")) return;
+        
+        try {
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/auth/sessions/${sessionId}`, getAuthConfig());
+            setActiveSessions(prev => prev.filter(session => session.id !== sessionId));
+            setSuccessMsg('Remote session successfully revoked.');
+            setTimeout(() => setSuccessMsg(''), 4000);
+        } catch (error) {
+            setApiError('Failed to revoke session.');
+            setTimeout(() => setApiError(''), 4000);
+        }
     };
 
     return (
@@ -502,7 +510,7 @@ const SuperAdminProfileCom = () => {
                                                     </div>
 
                                                     <p className={`text-[10px] sm:text-xs font-bold mt-2 ml-11.5 ${session.isCurrent ? 'text-teal-600' : 'text-slate-400'}`}>
-                                                        {session.lastActive}
+                                                        {timeAgo(session.lastActive)}
                                                     </p>
                                                 </div>
 

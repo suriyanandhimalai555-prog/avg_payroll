@@ -116,8 +116,8 @@ const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) =>
         { title: 'Assigned Assets', icon: FaLaptop, path: '/employee/assets' },
         { title: 'Reimbursements', icon: FaFileInvoiceDollar, path: '/employee/reimbursements' },
         // { title: 'Loans & Advances', icon: FaHandHoldingUsd, path: '/employee/loans' },
-        { title: 'Documents', icon: FaFolderOpen, path: '/employee/documents' },
-        { title: 'Notifications', icon: FaBell, path: '/employee/notifications' },
+        // { title: 'Documents', icon: FaFolderOpen, path: '/employee/documents' },
+        // { title: 'Notifications', icon: FaBell, path: '/employee/notifications' },
         { title: 'Settings', icon: FaCogs, path: '/employee/settings' }
     ];
 

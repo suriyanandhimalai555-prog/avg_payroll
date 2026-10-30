@@ -37,6 +37,23 @@ const ensureOtpTableExists = async () => {
     `);
 };
 
+// Setup Sessions Table for Active Tracking
+const ensureSessionTableExists = async () => {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            role VARCHAR(50) NOT NULL,
+            token TEXT NOT NULL,
+            device_info VARCHAR(255),
+            device_type VARCHAR(50),
+            ip_address VARCHAR(50),
+            last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
+};
+ensureSessionTableExists();
+
 const getTableByRole = (role) => {
     if (role === 'superadmin') return 'sa_superadmins';
     if (role === 'hr') return 'sa_hr_users';
@@ -45,44 +62,7 @@ const getTableByRole = (role) => {
     return null;
 };
 
-export const activateAccount = async (req, res) => {
-    try {
-        const { token, password } = req.body ?? {};
-        const cleanToken = typeof token === 'string' ? token.replace(/^["']|["']$/g, '').trim() : '';
-
-        if (!cleanToken || !password || password.length < 8 || password.length > 128) {
-            return res.status(400).json({ message: 'A valid activation link and a password of 8–128 characters are required.' });
-        }
-
-        const identity = verifyActivationToken(cleanToken);
-        if (!identity) {
-            return res.status(400).json({ message: 'Activation link is invalid or expired. Request a new invitation.' });
-        }
-
-        const targetTable = getTableByRole(identity.role);
-        if (!targetTable || identity.role === 'superadmin') {
-            return res.status(400).json({ message: 'Invalid activation link.' });
-        }
-
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        const result = await pool.query(
-            `UPDATE ${targetTable} SET password = $1, status = 'Active' WHERE LOWER(email) = LOWER($2) AND (password IS NULL OR password = '') RETURNING email`,
-            [hashedPassword, identity.email.trim()]
-        );
-
-        if (result.rowCount !== 1) {
-            return res.status(400).json({ message: 'Activation link is invalid, already used, or the account is unavailable.' });
-        }
-
-        return res.status(200).json({ message: 'Account activated successfully.' });
-    } catch (error) {
-        console.error('Activation Error:', error.message);
-        return res.status(500).json({ message: 'Server error during activation.' });
-    }
-};
-
+// ==================== LOGIN (WITH SESSION TRACKING) ====================
 export const login = async (req, res) => {
     try {
         const { identifier, password, role } = req.body;
@@ -144,6 +124,32 @@ export const login = async (req, res) => {
             { expiresIn: '7d' } 
         );
 
+        // Capture Device Data & Insert Session
+        const ua = req.headers['user-agent'] || 'Unknown Device';
+        const ip = req.ip || req.connection.remoteAddress || 'Unknown IP';
+        const deviceType = /mobile|android|iphone|ipad/i.test(ua) ? 'mobile' : 'desktop';
+        
+        let browser = 'Web Browser';
+        if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+        else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+        else if (/safari/i.test(ua)) browser = 'Safari';
+        else if (/edg/i.test(ua)) browser = 'Edge';
+
+        let os = 'Unknown OS';
+        if (/windows/i.test(ua)) os = 'Windows';
+        else if (/mac/i.test(ua)) os = 'MacOS';
+        else if (/linux/i.test(ua)) os = 'Linux';
+        else if (/android/i.test(ua)) os = 'Android';
+        else if (/iphone|ipad/i.test(ua)) os = 'iOS';
+
+        const deviceInfo = `${os} - ${browser}`;
+
+        await pool.query(
+            `INSERT INTO user_sessions (email, role, token, device_info, device_type, ip_address, last_active) 
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [user.email, role, token, deviceInfo, deviceType, ip]
+        );
+
         res.status(200).json({
             message: 'Login successful',
             user: userPayload,
@@ -153,6 +159,100 @@ export const login = async (req, res) => {
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ message: 'Server error during login.' });
+    }
+};
+
+// ==================== SESSION TRACKING APIs ====================
+export const getActiveSessions = async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+        let token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+
+        const result = await pool.query(
+            'SELECT id, device_info, device_type, ip_address, last_active, token FROM user_sessions WHERE email = $1 ORDER BY last_active DESC', 
+            [req.user.email]
+        );
+
+        const sessions = result.rows.map(s => ({
+            id: s.id,
+            device: s.device_info,
+            deviceType: s.device_type,
+            ip: s.ip_address,
+            location: 'Estimated via IP',
+            lastActive: s.last_active,
+            isCurrent: s.token === token
+        }));
+        
+        res.status(200).json(sessions);
+    } catch (error) {
+        res.status(500).json({ message: 'Error retrieving active sessions' });
+    }
+};
+
+export const revokeSession = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await pool.query('DELETE FROM user_sessions WHERE id = $1 AND email = $2', [id, req.user.email]);
+        res.status(200).json({ message: 'Session revoked successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error revoking session' });
+    }
+};
+
+// ==================== LOGOUT (DELETE SESSION) ====================
+export const logout = async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+        let token = null;
+        if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+            token = authHeader.slice(7).trim();
+        }
+        
+        if (token) {
+            await pool.query('DELETE FROM user_sessions WHERE token = $1', [token]);
+        }
+        
+        res.status(200).json({ message: 'Logged out successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error during logout' });
+    }
+};
+
+export const activateAccount = async (req, res) => {
+    try {
+        const { token, password } = req.body ?? {};
+        const cleanToken = typeof token === 'string' ? token.replace(/^["']|["']$/g, '').trim() : '';
+
+        if (!cleanToken || !password || password.length < 8 || password.length > 128) {
+            return res.status(400).json({ message: 'A valid activation link and a password of 8–128 characters are required.' });
+        }
+
+        const identity = verifyActivationToken(cleanToken);
+        if (!identity) {
+            return res.status(400).json({ message: 'Activation link is invalid or expired. Request a new invitation.' });
+        }
+
+        const targetTable = getTableByRole(identity.role);
+        if (!targetTable || identity.role === 'superadmin') {
+            return res.status(400).json({ message: 'Invalid activation link.' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const result = await pool.query(
+            `UPDATE ${targetTable} SET password = $1, status = 'Active' WHERE LOWER(email) = LOWER($2) AND (password IS NULL OR password = '') RETURNING email`,
+            [hashedPassword, identity.email.trim()]
+        );
+
+        if (result.rowCount !== 1) {
+            return res.status(400).json({ message: 'Activation link is invalid, already used, or the account is unavailable.' });
+        }
+
+        return res.status(200).json({ message: 'Account activated successfully.' });
+    } catch (error) {
+        console.error('Activation Error:', error.message);
+        return res.status(500).json({ message: 'Server error during activation.' });
     }
 };
 
@@ -314,8 +414,4 @@ export const updateProfile = async (req, res) => {
         console.error('Update Profile Error:', error.message);
         return res.status(500).json({ message: 'Server error while updating profile.' });
     }
-};
-
-export const logout = (req, res) => {
-    res.status(200).json({ message: 'Logged out successfully' });
 };
