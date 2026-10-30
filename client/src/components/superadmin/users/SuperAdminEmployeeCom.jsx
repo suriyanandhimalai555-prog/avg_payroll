@@ -118,13 +118,11 @@ const SuperAdminEmployeeCom = () => {
         fetchEmployees();
     }, []);
 
-    const selectedCompanyObj = companies.find(c => c.company_name === formData.company);
-    const filteredBranches = branches.filter(b => b.company_id === selectedCompanyObj?.id);
-    const selectedBranchObj = filteredBranches.find(b => b.branch_name === formData.branch);
-    const filteredDepartments = departments.filter(d => d.branch_id === selectedBranchObj?.id);
-    const filteredLocations = locations.filter(l => l.branch_id === selectedBranchObj?.id);
-    const selectedDeptObj = filteredDepartments.find(d => d.department_name === formData.department);
-    const filteredDesignations = designations.filter(des => des.department_id === selectedDeptObj?.id);
+    // Filter Logic based on string names directly to prevent cross-join mismatch in production
+    const filteredBranches = branches.filter(b => b.company_name === formData.company);
+    const filteredDepartments = departments.filter(d => d.branch_name === formData.branch);
+    const filteredLocations = locations.filter(l => l.branch_name === formData.branch);
+    const filteredDesignations = designations.filter(des => des.department_name === formData.department);
     const availableShifts = shifts.filter(s => s.status === 'Active' && s.company_name === formData.company);
 
     const handleInputChange = (e) => {
@@ -522,7 +520,6 @@ const SuperAdminEmployeeCom = () => {
                         </div>
                     </div>
                     <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {/* MANUAL EMPLOYEE ID INPUT */}
                         <FieldWrapper error={errors.employeeId}>
                             <Input label={<>Employee ID <span className="text-red-500">*</span></>} name="employeeId" value={formData.employeeId} onChange={handleInputChange} placeholder="e.g. AVG-2026-001" className="font-mono" />
                         </FieldWrapper>
