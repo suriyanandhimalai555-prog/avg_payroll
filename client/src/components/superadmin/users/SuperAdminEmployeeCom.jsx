@@ -21,12 +21,21 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, '');
+    }
+    return token;
+};
+
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -118,7 +127,6 @@ const SuperAdminEmployeeCom = () => {
         fetchEmployees();
     }, []);
 
-    // Filter Logic based on string names directly to prevent cross-join mismatch in production
     const filteredBranches = branches.filter(b => b.company_name === formData.company);
     const filteredDepartments = departments.filter(d => d.branch_name === formData.branch);
     const filteredLocations = locations.filter(l => l.branch_name === formData.branch);
@@ -267,6 +275,79 @@ const SuperAdminEmployeeCom = () => {
         const searchStr = `${emp.first_name} ${emp.last_name} ${emp.employee_id} ${emp.company} ${emp.branch} ${emp.department}`.toLowerCase();
         return searchStr.includes(searchTerm.toLowerCase());
     });
+
+    if (isFetching) {
+        return (
+            <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
+                {/* Non-Sticky Header Shimmer */}
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
+                        <div className="space-y-2 w-full">
+                            <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                            <div className="h-6 sm:h-8 bg-slate-200 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                    <div className="flex gap-2.5 w-full md:w-auto">
+                        <div className="h-10 w-24 bg-slate-200 rounded-xl"></div>
+                        <div className="h-10 w-32 bg-slate-200 rounded-xl"></div>
+                    </div>
+                </div>
+
+                {/* Form Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                        <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                    </div>
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="space-y-2">
+                            <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                            <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                        </div>
+                    ))}
+                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                        <div className="h-24 bg-slate-200 rounded-xl w-full"></div>
+                    </div>
+                </div>
+
+                {/* List Table Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3 w-1/3">
+                            <div className="w-9 h-9 bg-slate-200 rounded-xl shrink-0"></div>
+                            <div className="space-y-2 w-full">
+                                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                <div className="h-2 bg-slate-200 rounded w-1/2"></div>
+                            </div>
+                        </div>
+                        <div className="w-64 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-50">
+                                <div className="flex items-center gap-3 w-1/3">
+                                    <div className="w-12 h-12 bg-slate-200 rounded-xl shrink-0"></div>
+                                    <div className="space-y-2 w-full">
+                                        <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                                    </div>
+                                </div>
+                                <div className="h-4 w-24 bg-slate-200 rounded-md"></div>
+                                <div className="h-8 w-16 bg-slate-200 rounded-full"></div>
+                                <div className="flex gap-2">
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
@@ -418,7 +499,7 @@ const SuperAdminEmployeeCom = () => {
             )}
 
             {/* ==================== STICKY HEADER ==================== */}
-            <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -705,12 +786,7 @@ const SuperAdminEmployeeCom = () => {
                 </div>
 
                 <div className="relative overflow-x-auto custom-scrollbar">
-                    {isFetching ? (
-                        <div className="p-12 text-center">
-                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
-                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading employees…</p>
-                        </div>
-                    ) : filteredEmployees.length === 0 ? (
+                    {filteredEmployees.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaUser className="text-xl text-slate-300" />

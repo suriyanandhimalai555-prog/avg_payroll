@@ -8,17 +8,15 @@ import {
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 
-// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
 const getCleanToken = () => {
     let token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (token === 'null' || token === 'undefined') return null;
     if (token) {
-        token = token.replace(/^["']|["']$/g, ''); // Sanitize stringified tokens
+        token = token.replace(/^["']|["']$/g, '');
     }
     return token;
 };
 
-// Pure Stateless Auth Config (No Cookies, No CORS preflight issues)
 const getAuthConfig = () => {
     const token = getCleanToken();
     return {
@@ -81,7 +79,6 @@ const SuperAdminOrganizationOverviewCom = () => {
         }
     };
 
-    // Guarded execution
     useEffect(() => {
         const token = getCleanToken();
         if (token) {
@@ -133,11 +130,73 @@ const SuperAdminOrganizationOverviewCom = () => {
         </div>
     );
 
+    // ==================== SHIMMER SKELETON ====================
     if (isLoading) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-                <div className="w-12 h-12 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin"></div>
-                <p className="text-slate-500 font-bold text-xs sm:text-sm uppercase tracking-wider animate-pulse">Compiling Organizational Data…</p>
+            <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
+                {/* Header Shimmer - Non-sticky */}
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
+                            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
+                            <div className="space-y-2 w-full">
+                                <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                                <div className="h-6 sm:h-8 bg-slate-200 rounded w-3/4"></div>
+                            </div>
+                        </div>
+                        <div className="h-10 w-32 bg-slate-200 rounded-2xl shrink-0"></div>
+                    </div>
+                </div>
+
+                {/* Stat Cards Grid Shimmer */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+                    {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                        <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div className="flex items-center gap-3 sm:gap-4 w-full">
+                                <div className="w-11 h-11 sm:w-12 sm:h-12 bg-slate-200 rounded-2xl shrink-0"></div>
+                                <div className="space-y-2 w-1/2">
+                                    <div className="h-3 bg-slate-200 rounded w-full"></div>
+                                    <div className="h-6 bg-slate-200 rounded w-1/2"></div>
+                                </div>
+                            </div>
+                            <div className="w-7 h-7 bg-slate-200 rounded-lg shrink-0"></div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Table Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[400px]">
+                    <div className="p-5 border-b border-slate-100 flex items-center gap-3">
+                        <div className="w-9 h-9 bg-slate-200 rounded-xl shrink-0"></div>
+                        <div className="space-y-1.5 w-1/4">
+                            <div className="h-4 bg-slate-200 rounded w-full"></div>
+                            <div className="h-2 bg-slate-200 rounded w-2/3"></div>
+                        </div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-50">
+                                <div className="flex items-center gap-3 w-1/3">
+                                    <div className="w-12 h-12 bg-slate-200 rounded-xl shrink-0"></div>
+                                    <div className="space-y-2 w-full">
+                                        <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                                    </div>
+                                </div>
+                                <div className="h-8 w-8 bg-slate-200 rounded-xl"></div>
+                                <div className="h-8 w-8 bg-slate-200 rounded-xl"></div>
+                                <div className="h-8 w-8 bg-slate-200 rounded-xl"></div>
+                                <div className="flex gap-2">
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Bottom Banner Shimmer */}
+                <div className="bg-slate-200 rounded-3xl h-32 md:h-24 w-full"></div>
             </div>
         );
     }

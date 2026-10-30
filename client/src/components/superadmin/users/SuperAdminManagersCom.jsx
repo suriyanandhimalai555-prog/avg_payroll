@@ -21,12 +21,21 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, '');
+    }
+    return token;
+};
+
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -318,12 +327,85 @@ const SuperAdminManagersCom = () => {
         { key: 'announcements', label: 'Announcements', description: 'Publish alerts to the team.' }
     ];
 
+    if (isLoading) {
+        return (
+            <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden animate-pulse">
+                {/* Header Shimmer - Non-sticky */}
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
+                        <div className="space-y-2 w-full">
+                            <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                            <div className="h-6 sm:h-8 bg-slate-200 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                    <div className="flex gap-2.5 w-full md:w-auto">
+                        <div className="h-10 w-24 bg-slate-200 rounded-xl"></div>
+                        <div className="h-10 w-32 bg-slate-200 rounded-xl"></div>
+                    </div>
+                </div>
+
+                {/* Form Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                        <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                    </div>
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="space-y-2">
+                            <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                            <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                        </div>
+                    ))}
+                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                        <div className="h-24 bg-slate-200 rounded-xl w-full"></div>
+                    </div>
+                </div>
+
+                {/* List Table Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3 w-1/3">
+                            <div className="w-9 h-9 bg-slate-200 rounded-xl shrink-0"></div>
+                            <div className="space-y-2 w-full">
+                                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                <div className="h-2 bg-slate-200 rounded w-1/2"></div>
+                            </div>
+                        </div>
+                        <div className="w-64 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-50">
+                                <div className="flex items-center gap-3 w-1/3">
+                                    <div className="w-12 h-12 bg-slate-200 rounded-xl shrink-0"></div>
+                                    <div className="space-y-2 w-full">
+                                        <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                                    </div>
+                                </div>
+                                <div className="h-4 w-24 bg-slate-200 rounded-md"></div>
+                                <div className="h-8 w-16 bg-slate-200 rounded-full"></div>
+                                <div className="flex gap-2">
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
             {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#f77704] via-orange-500 to-[#0437cc]"></div>
 
@@ -637,7 +719,7 @@ const SuperAdminManagersCom = () => {
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Basic identity & contact details</p>
                         </div>
                     </div>
-                    <div className="relative p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <FieldWrapper error={errors.firstName}>
                             <Input label={<>First Name <span className="text-red-500">*</span></>} name="firstName" value={formData.firstName} onChange={handleInputChange} />
                         </FieldWrapper>
@@ -673,7 +755,7 @@ const SuperAdminManagersCom = () => {
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Hierarchical position & reporting</p>
                         </div>
                     </div>
-                    <div className="relative p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         <FieldWrapper error={errors.company}>
                             <Select label={<>Company <span className="text-red-500">*</span></>} name="company" value={formData.company} onChange={handleInputChange}
                                 options={[{ value: '', label: 'Select Company' }, ...companies.map(c => ({ value: c.company_name, label: c.company_name }))]}
@@ -724,16 +806,16 @@ const SuperAdminManagersCom = () => {
                     <div className="relative p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
 
                         {/* Earnings */}
-                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-5 rounded-2xl border border-green-100 overflow-hidden">
+                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-4 rounded-2xl border border-green-100 overflow-hidden">
                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
                             <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-green-100">
                                 <div className="flex items-center gap-2">
-                                    <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
-                                        <FaPlusCircle className="text-green-700 text-xs" />
+                                    <span className="w-6 h-6 rounded-md bg-green-100 flex items-center justify-center">
+                                        <FaPlusCircle className="text-green-700 text-[10px]" />
                                     </span>
-                                    <h3 className="text-xs font-bold text-green-800 uppercase tracking-wider">Earnings</h3>
+                                    <h4 className="text-[11px] font-bold text-green-800 uppercase tracking-wider">Earnings</h4>
                                 </div>
-                                <span className="text-[10px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-md border border-green-200 tabular-nums">{formatCurrency(liveGross)}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border tabular-nums ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{formatCurrency(liveGross)}</span>
                             </div>
                             <div className="relative space-y-4">
                                 <FieldWrapper error={errors.basic}><Input label={<>Basic Salary (₹) <span className="text-red-500">*</span></>} type="number" name="basic" placeholder="0" value={formData.basic} onChange={handleInputChange} /></FieldWrapper>
@@ -745,14 +827,14 @@ const SuperAdminManagersCom = () => {
                         </div>
 
                         {/* Deductions */}
-                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-5 rounded-2xl border border-red-100 overflow-hidden">
+                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-4 rounded-2xl border border-red-100 overflow-hidden">
                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
                             <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-red-100">
                                 <div className="flex items-center gap-2">
-                                    <span className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
-                                        <FaMinusCircle className="text-red-600 text-xs" />
+                                    <span className="w-6 h-6 rounded-md bg-red-100 flex items-center justify-center">
+                                        <FaMinusCircle className="text-red-600 text-[10px]" />
                                     </span>
-                                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wider">Deductions</h3>
+                                    <h4 className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Deductions</h4>
                                 </div>
                                 <span className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 tabular-nums">-{formatCurrency(liveDeductions)}</span>
                             </div>
@@ -811,12 +893,7 @@ const SuperAdminManagersCom = () => {
                 </div>
 
                 <div className="relative overflow-x-auto custom-scrollbar">
-                    {isLoading ? (
-                        <div className="p-12 text-center">
-                            <div className="w-10 h-10 border-[3px] border-[#f77704]/20 border-t-[#f77704] rounded-full animate-spin mx-auto mb-3"></div>
-                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading managers…</p>
-                        </div>
-                    ) : managers.length === 0 ? (
+                    {managers.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaUserTie className="text-xl text-slate-300" />
@@ -829,7 +906,7 @@ const SuperAdminManagersCom = () => {
                                 <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
                                     <th className="px-5 py-3.5 font-bold">Manager Name</th>
                                     <th className="px-5 py-3.5 font-bold">Contact Info</th>
-                                    <th className="px-5 py-3.5 font-bold">Operational Node</th>
+                                    <th className="px-5 py-3.5 font-bold">Org Placement</th>
                                     <th className="px-5 py-3.5 font-bold text-center">Status</th>
                                     <th className="px-5 py-3.5 font-bold text-right">Actions</th>
                                 </tr>

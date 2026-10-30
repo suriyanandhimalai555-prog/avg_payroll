@@ -21,12 +21,21 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, '');
+    }
+    return token;
+};
+
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -95,15 +104,17 @@ const SuperAdminHRCom = () => {
     };
 
     useEffect(() => {
-        fetchData();
+        const token = getCleanToken();
+        if (token) {
+            fetchData();
+        } else {
+            setIsLoading(false);
+        }
     }, []);
 
-    const selectedCompanyObj = companies.find(c => c.company_name === formData.company);
-    const filteredBranches = branches.filter(b => b.company_id === selectedCompanyObj?.id);
-    const selectedBranchObj = filteredBranches.find(b => b.branch_name === formData.branch);
-    const filteredDepartments = departments.filter(d => d.branch_id === selectedBranchObj?.id);
-    const selectedDeptObj = filteredDepartments.find(d => d.department_name === formData.department);
-    const filteredDesignations = designations.filter(des => des.department_id === selectedDeptObj?.id);
+    const filteredBranches = branches.filter(b => b.company_name === formData.company);
+    const filteredDepartments = departments.filter(d => d.branch_name === formData.branch);
+    const filteredDesignations = designations.filter(des => des.department_name === formData.department);
     const availableShifts = shifts.filter(s => s.status === 'Active' && s.company_name === formData.company);
 
     const handleInputChange = (e) => {
@@ -244,6 +255,79 @@ const SuperAdminHRCom = () => {
         if (!dateString) return 'N/A';
         return new Date(dateString).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     };
+
+    if (isLoading) {
+        return (
+            <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden animate-pulse">
+                {/* Header Shimmer - Non-sticky */}
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
+                        <div className="space-y-2 w-full">
+                            <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                            <div className="h-6 sm:h-8 bg-slate-200 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                    <div className="flex gap-2.5 w-full md:w-auto">
+                        <div className="h-10 w-24 bg-slate-200 rounded-xl"></div>
+                        <div className="h-10 w-32 bg-slate-200 rounded-xl"></div>
+                    </div>
+                </div>
+
+                {/* Form Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                        <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                    </div>
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="space-y-2">
+                            <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                            <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                        </div>
+                    ))}
+                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                        <div className="h-24 bg-slate-200 rounded-xl w-full"></div>
+                    </div>
+                </div>
+
+                {/* List Table Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3 w-1/3">
+                            <div className="w-9 h-9 bg-slate-200 rounded-xl shrink-0"></div>
+                            <div className="space-y-2 w-full">
+                                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                <div className="h-2 bg-slate-200 rounded w-1/2"></div>
+                            </div>
+                        </div>
+                        <div className="w-64 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-50">
+                                <div className="flex items-center gap-3 w-1/3">
+                                    <div className="w-12 h-12 bg-slate-200 rounded-xl shrink-0"></div>
+                                    <div className="space-y-2 w-full">
+                                        <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                                    </div>
+                                </div>
+                                <div className="h-4 w-24 bg-slate-200 rounded-md"></div>
+                                <div className="h-8 w-16 bg-slate-200 rounded-full"></div>
+                                <div className="flex gap-2">
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
@@ -405,8 +489,8 @@ const SuperAdminHRCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
-            <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* ==================== NON-STICKY HEADER ==================== */}
+            <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -586,7 +670,7 @@ const SuperAdminHRCom = () => {
                                     <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
                                         <FaPlusCircle className="text-green-700 text-[10px]" />
                                     </span>
-                                    <h3 className="text-xs font-bold text-green-800 uppercase tracking-wider">Earnings</h3>
+                                    <h4 className="text-[11px] font-bold text-green-800 uppercase tracking-wider">Earnings</h4>
                                 </div>
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border tabular-nums ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{formatCurrency(liveGross)}</span>
                             </div>
@@ -670,12 +754,7 @@ const SuperAdminHRCom = () => {
                 </div>
 
                 <div className="relative overflow-x-auto custom-scrollbar">
-                    {isLoading ? (
-                        <div className="p-12 text-center">
-                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
-                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading HR personnel…</p>
-                        </div>
-                    ) : hrUsers.length === 0 ? (
+                    {hrUsers.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaUsersCog className="text-xl text-slate-300" />

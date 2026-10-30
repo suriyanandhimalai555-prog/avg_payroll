@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaUsers, FaInfoCircle, FaSearch, FaUser, FaMoneyCheckAlt,
-    FaEye, FaSitemap, FaBriefcase, FaFilter, 
-    FaIdBadge, FaTimes, FaHistory, FaClock, FaPlusCircle, FaMinusCircle, 
+    FaEye, FaSitemap, FaBriefcase, FaFilter,
+    FaIdBadge, FaTimes, FaHistory, FaClock, FaPlusCircle, FaMinusCircle,
     FaCheckCircle, FaUniversity, FaPhoneAlt, FaLaptop, FaMobileAlt, FaKey, FaBox,
     FaDownload, FaChevronDown, FaChevronUp, FaExclamationTriangle, FaSignInAlt, FaSignOutAlt, FaMapMarkerAlt, FaDesktop
 } from 'react-icons/fa';
@@ -31,7 +31,6 @@ const getAssetIconBg = (type) => {
     }
 };
 
-// Bulletproof Auth Config: Forces HttpOnly cookies across origins reliably
 const getAuthConfig = () => {
     return {
         withCredentials: true,
@@ -82,7 +81,6 @@ const SuperAdminEmployeeManagementCom = () => {
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
-            // Fix: Map directly to DB values (u.hr_id) instead of hardcoding math strings
             const hrData = (hrRes.data || []).map(u => ({
                 ...u,
                 _roleType: 'HR Admin',
@@ -127,6 +125,7 @@ const SuperAdminEmployeeManagementCom = () => {
 
     useEffect(() => {
         fetchEmployees();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // ==================== ATTENDANCE MODAL & GROUPING LOGIC ====================
@@ -134,7 +133,7 @@ const SuperAdminEmployeeManagementCom = () => {
         setSelectedEmp(emp);
         setIsAttendanceModalOpen(true);
         setLoadingAttendance(true);
-        setExpandedDates([]); 
+        setExpandedDates([]);
         try {
             const targetId = emp.employee_id || emp.hr_id || emp.email || emp._displayId;
             const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${targetId}`, getAuthConfig());
@@ -172,7 +171,7 @@ const SuperAdminEmployeeManagementCom = () => {
             const lastSession = group.sessions[group.sessions.length - 1];
             group.last_clock_out = lastSession.clock_out;
             group.is_working = !lastSession.clock_out;
-            
+
             group.late_minutes = group.sessions.reduce((acc, s) => acc + (s.late_minutes || 0), 0);
 
             let totalMins = 0;
@@ -223,7 +222,7 @@ const SuperAdminEmployeeManagementCom = () => {
     // ==================== EXCEL / CSV EXPORT LOGIC ====================
     const handleExportExcel = () => {
         if (!attendanceRecords || attendanceRecords.length === 0) return;
-        
+
         let csvContent = "Date,Session No,Clock In,Clock Out,Location In,Location Out,Device In,Device Out,Late Minutes,Total Hours,Status,EOD Update\n";
 
         groupedHistory.forEach(group => {
@@ -231,16 +230,16 @@ const SuperAdminEmployeeManagementCom = () => {
                 const date = new Date(record.date).toLocaleDateString('en-CA');
                 const clockIn = record.clock_in ? new Date(record.clock_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A';
                 const clockOut = record.clock_out ? new Date(record.clock_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'In Progress';
-                
+
                 const locIn = (record.clock_in_location || record.location_in || 'N/A').replace(/,/g, ' ');
                 const locOut = (record.clock_out_location || record.location_out || 'N/A').replace(/,/g, ' ');
                 const devIn = (record.clock_in_device || record.device_in || 'N/A').replace(/,/g, ' ');
                 const devOut = (record.clock_out_device || record.device_out || 'N/A').replace(/,/g, ' ');
-                
+
                 const lateMins = record.late_minutes || 0;
                 const totalHrs = record.total_hours || 'N/A';
                 const status = record.status || 'N/A';
-                const eod = (record.eod_update || 'N/A').replace(/,/g, ';').replace(/\n/g, ' '); 
+                const eod = (record.eod_update || 'N/A').replace(/,/g, ';').replace(/\n/g, ' ');
 
                 csvContent += `${date},${index + 1},${clockIn},${clockOut},${locIn},${locOut},${devIn},${devOut},${lateMins},${totalHrs},${status},${eod}\n`;
             });
@@ -311,6 +310,78 @@ const SuperAdminEmployeeManagementCom = () => {
     const totalHR = employees.filter(e => e._roleType === 'HR Admin').length;
     const totalManagers = employees.filter(e => e._roleType === 'Manager').length;
     const totalEmployees = employees.filter(e => e._roleType === 'Employee').length;
+
+    // ==================== SHIMMER SKELETON ====================
+    if (isLoading) {
+        return (
+            <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden relative animate-pulse">
+                {/* Header Shimmer - Non-Sticky */}
+                <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
+                        <div className="space-y-2 w-full">
+                            <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                            <div className="h-6 sm:h-8 bg-slate-200 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                    <div className="flex gap-2.5 w-full md:w-auto">
+                        <div className="h-10 w-24 bg-slate-200 rounded-xl"></div>
+                        <div className="h-10 w-32 bg-slate-200 rounded-xl"></div>
+                    </div>
+                </div>
+
+                {/* Stat Cards Grid Shimmer */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div className="space-y-2 w-2/3">
+                                <div className="h-3 bg-slate-200 rounded w-full"></div>
+                                <div className="h-6 sm:h-8 bg-slate-200 rounded w-1/2"></div>
+                            </div>
+                            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-slate-200 rounded-2xl shrink-0"></div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="bg-slate-100 rounded-2xl h-24 sm:h-20 w-full border border-slate-200"></div>
+
+                {/* Table Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3 w-1/3">
+                            <div className="w-9 h-9 bg-slate-200 rounded-xl shrink-0"></div>
+                            <div className="space-y-2 w-full">
+                                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                <div className="h-2 bg-slate-200 rounded w-1/2"></div>
+                            </div>
+                        </div>
+                        <div className="w-64 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-50">
+                                <div className="flex items-center gap-3 w-1/3">
+                                    <div className="w-10 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                                    <div className="space-y-2 w-full">
+                                        <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                                    </div>
+                                </div>
+                                <div className="h-8 w-24 bg-slate-200 rounded-md"></div>
+                                <div className="h-8 w-32 bg-slate-200 rounded-md"></div>
+                                <div className="h-6 w-16 bg-slate-200 rounded-full"></div>
+                                <div className="flex gap-2">
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden relative">
@@ -467,9 +538,9 @@ const SuperAdminEmployeeManagementCom = () => {
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
-                                <Button 
-                                    variant="outline" 
-                                    icon={FaDownload} 
+                                <Button
+                                    variant="outline"
+                                    icon={FaDownload}
                                     onClick={handleExportExcel}
                                     className="border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white text-[11px] py-1.5 px-3 rounded-lg hidden sm:flex"
                                 >
@@ -513,7 +584,7 @@ const SuperAdminEmployeeManagementCom = () => {
                                         <tbody className="divide-y divide-slate-100">
                                             {groupedHistory.map((group, i) => (
                                                 <React.Fragment key={i}>
-                                                    <tr 
+                                                    <tr
                                                         className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
                                                         onClick={() => toggleAccordion(group.dateStr)}
                                                     >
@@ -547,11 +618,10 @@ const SuperAdminEmployeeManagementCom = () => {
                                                             </p>
                                                         </td>
                                                         <td className="px-5 py-3.5 text-center">
-                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${
-                                                                group.status === 'Present' ? 'text-teal-700 bg-teal-50 border-teal-200' :
-                                                                group.status?.includes('Pending') ? 'text-orange-700 bg-orange-50 border-orange-200' :
-                                                                'text-red-700 bg-red-50 border-red-200'
-                                                            }`}>
+                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${group.status === 'Present' ? 'text-teal-700 bg-teal-50 border-teal-200' :
+                                                                    group.status?.includes('Pending') ? 'text-orange-700 bg-orange-50 border-orange-200' :
+                                                                        'text-red-700 bg-red-50 border-red-200'
+                                                                }`}>
                                                                 <span className={`w-1.5 h-1.5 rounded-full ${group.status === 'Present' ? 'bg-teal-500' : group.status?.includes('Pending') ? 'bg-orange-500' : 'bg-red-500'}`}></span>
                                                                 {group.status}
                                                             </span>
@@ -616,7 +686,7 @@ const SuperAdminEmployeeManagementCom = () => {
                                                                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Duration:</span>
                                                                                     <span className="text-sm font-bold text-[#0437cc]">{session.total_hours || 'In Progress'}</span>
                                                                                 </div>
-                                                                                
+
                                                                                 {/* Late Approval Button specifically for this session */}
                                                                                 {session.status?.includes('Pending') && (
                                                                                     <button
@@ -834,8 +904,8 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
-            <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* ==================== PAGE HEADER ==================== */}
+            <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
                 <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
@@ -951,12 +1021,7 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
 
                 <div className="relative overflow-x-auto w-full custom-scrollbar flex-1">
-                    {isLoading ? (
-                        <div className="p-12 text-center">
-                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
-                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Aggregating records…</p>
-                        </div>
-                    ) : filteredEmployees.length === 0 ? (
+                    {filteredEmployees.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaUsers className="text-xl text-slate-300" />
@@ -1003,11 +1068,9 @@ const SuperAdminEmployeeManagementCom = () => {
                                                     {emp._roleType}
                                                 </span>
                                             </div>
-                                            {/* Fix: Display accurate designation or explicitly show it's missing */}
                                             <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{emp.designation || 'Not Assigned'}</p>
                                         </td>
                                         <td className="px-5 py-4 min-w-0">
-                                            {/* Fix: Display accurate department or explicitly show it's missing */}
                                             <p className="text-xs sm:text-sm font-semibold text-slate-700 truncate">{emp.department || 'Not Assigned'}</p>
                                             <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
                                                 <FaSitemap className="text-[9px] shrink-0" />

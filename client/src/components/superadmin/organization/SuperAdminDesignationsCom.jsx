@@ -22,17 +22,15 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Token Extractor (Handles both Session & Local storage + removes stray quotes)
 const getCleanToken = () => {
     let token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (token === 'null' || token === 'undefined') return null;
     if (token) {
-        token = token.replace(/^["']|["']$/g, ''); // Sanitize stringified tokens
+        token = token.replace(/^["']|["']$/g, '');
     }
     return token;
 };
 
-// Pure Stateless Auth Config (No Cookies, No CORS preflight issues)
 const getAuthConfig = () => {
     const token = getCleanToken();
     return {
@@ -98,7 +96,6 @@ const SuperAdminDesignationsCom = () => {
         }
     };
 
-    // Guarded execution
     useEffect(() => {
         const token = getCleanToken();
         if (token) {
@@ -208,6 +205,74 @@ const SuperAdminDesignationsCom = () => {
         return matchesSearch && matchesStatus && matchesHierarchy;
     });
 
+    if (isLoading) {
+        return (
+            <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
+                {/* Non-Sticky Header Shimmer */}
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
+                        <div className="space-y-2 w-full">
+                            <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                            <div className="h-6 sm:h-8 bg-slate-200 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                    <div className="flex gap-2.5 w-full md:w-auto">
+                        <div className="h-10 w-24 bg-slate-200 rounded-xl"></div>
+                        <div className="h-10 w-32 bg-slate-200 rounded-xl"></div>
+                    </div>
+                </div>
+
+                <div className="bg-slate-100 rounded-2xl h-24 w-full border border-slate-200"></div>
+
+                {/* Form Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                        <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                    </div>
+                    {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="space-y-2">
+                            <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                            <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* List Table Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3 w-1/3">
+                            <div className="w-9 h-9 bg-slate-200 rounded-xl shrink-0"></div>
+                            <div className="space-y-2 w-full">
+                                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                <div className="h-2 bg-slate-200 rounded w-1/2"></div>
+                            </div>
+                        </div>
+                        <div className="w-64 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-50">
+                                <div className="space-y-2 flex-1 mx-4 w-1/3">
+                                    <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                                    <div className="h-3 bg-slate-200 rounded w-1/4"></div>
+                                </div>
+                                <div className="h-4 w-24 bg-slate-200 rounded-md"></div>
+                                <div className="h-8 w-16 bg-slate-200 rounded-full"></div>
+                                <div className="flex gap-2">
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative">
 
@@ -288,7 +353,7 @@ const SuperAdminDesignationsCom = () => {
                 </div>
             )}
 
-            <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -514,12 +579,7 @@ const SuperAdminDesignationsCom = () => {
                 </div>
 
                 <div className="relative overflow-x-auto">
-                    {isLoading ? (
-                        <div className="p-12 text-center">
-                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
-                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading designations…</p>
-                        </div>
-                    ) : filteredDesignations.length === 0 ? (
+                    {filteredDesignations.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaIdBadge className="text-xl text-slate-300" />
