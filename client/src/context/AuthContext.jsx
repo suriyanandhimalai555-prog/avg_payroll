@@ -23,6 +23,30 @@ axios.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
+axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && error.response.status === 401) {
+            // 401 means the token is invalid, expired, or REVOKED remotely.
+            
+            // Wipe all session traces
+            localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
+            localStorage.removeItem('avg_user');
+            sessionStorage.removeItem('avg_user');
+            localStorage.removeItem('user');
+            delete axios.defaults.headers.common['Authorization'];
+
+            // Force a hard redirect to the login screen to clear React state
+            const currentPath = window.location.pathname;
+            if (currentPath !== '/login' && !currentPath.includes('/superadmin-secure-auth') && currentPath !== '/') {
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -88,6 +112,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = async () => {
+        // Clear UI and storage instantly to prevent race conditions
         localStorage.removeItem('token');
         localStorage.removeItem('avg_user');
         localStorage.removeItem('user');
@@ -98,6 +123,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
 
         try {
+            // Tell the backend to destroy the session record
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`);
         } catch (err) {
             console.error('Logout error', err);
