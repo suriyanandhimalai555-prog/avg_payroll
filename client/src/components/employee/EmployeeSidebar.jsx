@@ -101,31 +101,25 @@ const FlyoutPanel = memo(
 
 const EmployeeSidebar = ({ isOpen, toggleMobileSidebar, isDesktopCollapsed }) => {
     const navigate = useNavigate();
-    const { logout, user } = useAuth();
+    const { logout } = useAuth();
 
     const [flyout, setFlyout] = useState(null);
     const flyoutTimeoutRef = useRef(null);
     const flyoutTitleRef = useRef(null);
 
-    const p = typeof user?.permissions === 'string'
-        ? (() => { try { return JSON.parse(user.permissions); } catch { return {}; } })()
-        : (user?.permissions || {});
-
-    const rawMenuItems = [
-        { title: 'Dashboard', icon: FaTachometerAlt, path: '/employee', show: true },
-        { title: 'My Profile', icon: FaUserEdit, path: '/employee/profile', show: true },
-        { title: 'Attendance', icon: FaCalendarCheck, path: '/employee/attendance', show: p.core?.attendance },
-        { title: 'Leave', icon: FaPlaneDeparture, path: '/employee/leave', show: p.core?.leave },
-        { title: 'Payroll', icon: FaMoneyCheckAlt, path: '/employee/payroll', show: p.finance?.payroll },
-        { title: 'Assigned Assets', icon: FaLaptop, path: '/employee/assets', show: true },
-        { title: 'Reimbursements', icon: FaFileInvoiceDollar, path: '/employee/reimbursements', show: p.finance?.reimbursements },
-        { title: 'Loans & Advances', icon: FaHandHoldingUsd, path: '/employee/loans', show: p.finance?.loans },
-        { title: 'Documents', icon: FaFolderOpen, path: '/employee/documents', show: p.core?.documents },
-        { title: 'Notifications', icon: FaBell, path: '/employee/notifications', show: p.system?.notifications },
-        { title: 'Settings', icon: FaCogs, path: '/employee/settings', show: p.system?.settings }
+    const menuItems = [
+        { title: 'Dashboard', icon: FaTachometerAlt, path: '/employee' },
+        { title: 'My Profile', icon: FaUserEdit, path: '/employee/profile' },
+        { title: 'Attendance', icon: FaCalendarCheck, path: '/employee/attendance' },
+        { title: 'Leave', icon: FaPlaneDeparture, path: '/employee/leave' },
+        { title: 'Payroll', icon: FaMoneyCheckAlt, path: '/employee/payroll' },
+        { title: 'Assigned Assets', icon: FaLaptop, path: '/employee/assets' },
+        { title: 'Reimbursements', icon: FaFileInvoiceDollar, path: '/employee/reimbursements' },
+        // { title: 'Loans & Advances', icon: FaHandHoldingUsd, path: '/employee/loans' },
+        { title: 'Documents', icon: FaFolderOpen, path: '/employee/documents' },
+        { title: 'Notifications', icon: FaBell, path: '/employee/notifications' },
+        { title: 'Settings', icon: FaCogs, path: '/employee/settings' }
     ];
-
-    const menuItems = rawMenuItems.filter(item => item.show !== false);
 
     const cancelHideFlyout = useCallback(() => {
         if (flyoutTimeoutRef.current) {
