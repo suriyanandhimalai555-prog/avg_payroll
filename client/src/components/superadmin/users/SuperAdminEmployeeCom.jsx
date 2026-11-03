@@ -73,11 +73,22 @@ const SuperAdminEmployeeCom = () => {
     const [successMsg, setSuccessMsg] = useState('');
     const [apiError, setApiError] = useState('');
 
+    // Pre-calculations to prevent Shimmer ReferenceError
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
     const liveGross = parseNum(formData.basic) + parseNum(formData.hra) + parseNum(formData.conveyance) + parseNum(formData.medical) + parseNum(formData.specialAllowance) + parseNum(formData.otherAllowances);
     const liveDeductions = parseNum(formData.epf) + parseNum(formData.esi) + parseNum(formData.healthInsurance) + parseNum(formData.pt) + parseNum(formData.tds) + parseNum(formData.leaves);
     const liveNet = liveGross - liveDeductions;
     const isGrossMatchingMonthly = liveGross === parseNum(formData.monthlySalary);
+
+    const formatCurrency = (amount) => {
+        if (amount === undefined || amount === null) return '₹0';
+        return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
 
     const fetchOrgData = async () => {
         try {
@@ -259,16 +270,6 @@ const SuperAdminEmployeeCom = () => {
     const handleView = (emp) => {
         setViewEmployee(emp);
         setIsViewModalOpen(true);
-    };
-
-    const formatCurrency = (amount) => {
-        if (amount === undefined || amount === null) return '₹0';
-        return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
-    };
-
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        return new Date(dateString).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
     const filteredEmployees = employees.filter(emp => {
@@ -498,7 +499,8 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             )}
 
-            <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* ==================== NON-STICKY HEADER ==================== */}
+            <div className="relative bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
