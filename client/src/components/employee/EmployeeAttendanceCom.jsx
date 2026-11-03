@@ -164,6 +164,7 @@ const EmployeeAttendanceCom = () => {
         return `${osName} - ${browserName}`;
     };
 
+    // FIXED: Using enableHighAccuracy: false avoids the kCLErrorLocationUnknown timeout on macOS/iOS devices without true GPS.
     const fetchLocationData = () => {
         return new Promise((resolve) => {
             if (!navigator.geolocation) {
@@ -439,10 +440,8 @@ const EmployeeAttendanceCom = () => {
         const [hourString, minute] = time24.split(':');
         let hour = parseInt(hourString, 10);
         const ampm = hour >= 12 ? 'PM' : 'AM';
-        hour = hour % 12;
-        hour = hour ? hour : 12;
-        const hourStr = hour < 10 ? '0' + hour : hour;
-        return `${hourStr}:${minute} ${ampm}`;
+        hour = hour ? (hour % 12 || 12) : 12;
+        return `${hour < 10 ? '0' + hour : hour}:${minute} ${ampm}`;
     };
 
     const getStatusStyle = (status) => {
