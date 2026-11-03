@@ -1,11 +1,9 @@
 import pool from '../../config/db.js';
 
-// New dedicated method to reliably get the exact shift for the logged-in employee
 export const getMyShiftDetails = async (req, res) => {
     try {
         const { employeeId } = req.params;
         
-        // Find the employee's assigned shift name
         const empQuery = `SELECT shift FROM sa_employees WHERE employee_id = $1`;
         const empRes = await pool.query(empQuery, [employeeId]);
         
@@ -13,11 +11,9 @@ export const getMyShiftDetails = async (req, res) => {
         
         const shiftName = empRes.rows[0].shift;
 
-        // Fetch exact shift configuration
         const shiftQuery = `SELECT * FROM sa_work_shifts WHERE shift_name = $1 AND status = 'Active' LIMIT 1`;
         const shiftRes = await pool.query(shiftQuery, [shiftName]);
 
-        // Fallback to the first active shift if a specific match isn't found
         if (shiftRes.rows.length === 0) {
             const defaultShift = await pool.query(`SELECT * FROM sa_work_shifts WHERE status = 'Active' ORDER BY id ASC LIMIT 1`);
             if (defaultShift.rows.length > 0) {
@@ -51,7 +47,7 @@ export const getAttendanceHistory = async (req, res) => {
 
 export const clockIn = async (req, res) => {
     try {
-        const { employeeId, todayDate, locationData, deviceInfo } = req.body;
+        const { employeeId, todayDate, locationData, deviceInfo, lateReason } = req.body;
         const now = new Date();
 
         const doubleCheckQuery = `
@@ -101,7 +97,7 @@ export const clockIn = async (req, res) => {
                     if (now.getTime() >= fivePM.getTime()) {
                         return res.status(400).json({ message: 'It is past 5:00 PM. Flexible shift check-ins are not allowed at this time. You have been marked as Absent.' });
                     }
-                } else {
+                } else if (shift.shift_type === 'Fixed' || shift.shift_type === 'Development Fixed') {
                     if (shift.start_time) {
                         let [sHrs, sMins] = shift.start_time.split(':').map(Number);
                         
@@ -114,9 +110,20 @@ export const clockIn = async (req, res) => {
                         const graceMs = (shift.grace_time || shift.grace_period || 0) * 60000;
                         const allowedTimeMs = expectedTime.getTime() + graceMs;
 
+                        // 1:00 PM Lockout Check
+                        const onePM = new Date(now);
+                        onePM.setHours(13, 0, 0, 0);
+                        if (now.getTime() >= onePM.getTime()) {
+                            return res.status(400).json({ message: 'It is past 1:00 PM. You are marked as Absent for the whole day.' });
+                        }
+
+                        // Late / Grace Time Check
                         if (now.getTime() > allowedTimeMs) {
+                            if (!lateReason) {
+                                return res.status(428).json({ message: 'LATE_REASON_REQUIRED' });
+                            }
                             lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);
-                            status = 'Late (Pending Approval)';
+                            status = 'Half Day Absent (Pending Approval)';
                         }
                     }
                 }
@@ -126,11 +133,11 @@ export const clockIn = async (req, res) => {
         }
 
         const insertQuery = `
-            INSERT INTO emp_attendance (employee_id, date, clock_in, clock_in_location, clock_in_device, late_minutes, status)
-            VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6) RETURNING *;
+            INSERT INTO emp_attendance (employee_id, date, clock_in, clock_in_location, clock_in_device, late_minutes, status, late_reason)
+            VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7) RETURNING *;
         `;
 
-        const result = await pool.query(insertQuery, [employeeId, todayDate, locationData, deviceInfo, lateMinutes, status]);
+        const result = await pool.query(insertQuery, [employeeId, todayDate, locationData, deviceInfo, lateMinutes, status, lateReason || null]);
         res.status(201).json({ message: 'Clocked in successfully', record: result.rows[0] });
     } catch (error) {
         console.error('Clock In Error:', error);

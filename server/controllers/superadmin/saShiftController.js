@@ -8,8 +8,8 @@ export const createShift = async (req, res) => {
             return res.status(400).json({ message: "Missing required shift or organizational details." });
         }
 
-        if (data.shiftType === 'Fixed' && (!data.startTime || !data.endTime)) {
-            return res.status(400).json({ message: "Fixed shifts require a Start and End time." });
+        if ((data.shiftType === 'Fixed' || data.shiftType === 'Development Fixed') && (!data.startTime || !data.endTime)) {
+            return res.status(400).json({ message: `Fixed shifts require a Start and End time.` });
         }
 
         const insertQuery = `

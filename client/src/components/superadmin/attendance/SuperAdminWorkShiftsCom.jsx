@@ -23,12 +23,21 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) {
+        token = token.replace(/^["']|["']$/g, '');
+    }
+    return token;
+};
+
 const getAuthConfig = () => {
+    const token = getCleanToken();
     return {
         headers: {
             'Content-Type': 'application/json',
-            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
     };
 };
@@ -42,11 +51,11 @@ const SuperAdminWorkShiftsCom = () => {
         departmentId: '',
         shiftName: '',
         shiftType: 'Fixed',
-        startTime: '09:20',
+        startTime: '09:30',
         endTime: '17:00',
         breakStart: '',
         breakEnd: '',
-        graceTime: 5,
+        graceTime: 10,
         requiredHours: 8,
         status: 'Active'
     };
@@ -130,7 +139,7 @@ const SuperAdminWorkShiftsCom = () => {
             if (value === 'Flexible') {
                 updates.startTime = ''; updates.endTime = ''; updates.breakStart = ''; updates.breakEnd = ''; updates.graceTime = 0;
             } else {
-                updates.startTime = '09:20'; updates.endTime = '17:00'; updates.graceTime = 5;
+                updates.startTime = '09:30'; updates.endTime = '17:00'; updates.graceTime = 10;
             }
         }
 
@@ -172,9 +181,9 @@ const SuperAdminWorkShiftsCom = () => {
         if (!formData.companyId) newErrors.companyId = 'Company is required';
         if (!formData.shiftName) newErrors.shiftName = 'Shift name is required';
 
-        if (formData.shiftType === 'Fixed') {
-            if (!formData.startTime) newErrors.startTime = 'Start time required for fixed shifts';
-            if (!formData.endTime) newErrors.endTime = 'End time required for fixed shifts';
+        if (formData.shiftType === 'Fixed' || formData.shiftType === 'Development Fixed') {
+            if (!formData.startTime) newErrors.startTime = `Start time required for ${formData.shiftType} shifts`;
+            if (!formData.endTime) newErrors.endTime = `End time required for ${formData.shiftType} shifts`;
 
             if ((formData.breakStart && !formData.breakEnd) || (!formData.breakStart && formData.breakEnd)) {
                 newErrors.breakStart = 'Both Break Start and End times are required if applying a break.';
@@ -277,6 +286,90 @@ const SuperAdminWorkShiftsCom = () => {
         return `${hourStr}:${minute} ${ampm}`;
     };
 
+    const formatDecimalHoursToTime = (decimalHours) => {
+        const parsed = parseFloat(decimalHours) || 0;
+        const hrs = Math.floor(parsed);
+        const mins = Math.round((parsed - hrs) * 60);
+        if (mins === 0) return `${hrs} Hrs`;
+        return `${hrs}h ${mins}m`;
+    };
+
+    const parsedHoursForUI = parseFloat(calculateTotalHours()) || 0;
+    const displayHrs = Math.floor(parsedHoursForUI);
+    const displayMins = Math.round((parsedHoursForUI - displayHrs) * 60);
+
+    if (isLoading) {
+        return (
+            <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
+                {/* Non-Sticky Header Shimmer */}
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
+                        <div className="space-y-2 w-full">
+                            <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                            <div className="h-6 sm:h-8 bg-slate-200 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                    <div className="flex gap-2.5 w-full md:w-auto">
+                        <div className="h-10 w-24 bg-slate-200 rounded-xl"></div>
+                        <div className="h-10 w-32 bg-slate-200 rounded-xl"></div>
+                    </div>
+                </div>
+
+                {/* Form Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
+                        <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                    </div>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="space-y-2">
+                            <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                            <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* List Table Shimmer */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3 w-1/3">
+                            <div className="w-9 h-9 bg-slate-200 rounded-xl shrink-0"></div>
+                            <div className="space-y-2 w-full">
+                                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                <div className="h-2 bg-slate-200 rounded w-1/2"></div>
+                            </div>
+                        </div>
+                        <div className="w-64 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-50">
+                                <div className="space-y-2 flex-1 mx-4 w-1/4">
+                                    <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                                </div>
+                                <div className="flex items-center gap-3 w-1/4">
+                                    <div className="w-10 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                                    <div className="space-y-2 w-full">
+                                        <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                                    </div>
+                                </div>
+                                <div className="h-4 w-24 bg-slate-200 rounded-md"></div>
+                                <div className="h-8 w-16 bg-slate-200 rounded-full"></div>
+                                <div className="flex gap-2">
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
@@ -360,7 +453,9 @@ const SuperAdminWorkShiftsCom = () => {
                                 <div className="bg-gradient-to-br from-[#0437cc] to-[#1f56d6] rounded-2xl p-3.5 shadow-lg shadow-[#0437cc]/25 overflow-hidden relative">
                                     <div className="absolute -top-6 -right-6 w-20 h-20 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
                                     <p className="relative text-[10px] font-bold text-white/80 uppercase tracking-wider mb-1">Total Hours</p>
-                                    <p className="relative text-base sm:text-lg font-black text-white tabular-nums">{viewShift.total_working_hours} Hrs</p>
+                                    <p className="relative text-base sm:text-lg font-black text-white tabular-nums">
+                                        {formatDecimalHoursToTime(viewShift.total_working_hours)}
+                                    </p>
                                 </div>
                                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
@@ -378,8 +473,8 @@ const SuperAdminWorkShiftsCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
-            <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* ==================== NON-STICKY HEADER ==================== */}
+            <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -450,7 +545,7 @@ const SuperAdminWorkShiftsCom = () => {
                 <div className="relative min-w-0">
                     <p className="text-sm font-bold text-[#010a1f]">Fixed vs. Flexible Rules</p>
                     <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                        Use <strong className="text-[#010a1f]">Fixed Shifts</strong> for standard general hours (e.g., 09:20 AM - 05:00 PM) where <strong className="text-[#010a1f]">Grace Time</strong> applies before marking employees late. Use <strong className="text-[#010a1f]">Flexible Shifts</strong> for roles (like Developers) where clock-in time is open, and only total hours completed (e.g., 8 Hours) matters.
+                        Use <strong className="text-[#010a1f]">Fixed Shifts</strong> for standard general hours (e.g., 09:30 AM - 05:00 PM) where <strong className="text-[#010a1f]">Grace Time</strong> applies before marking employees late. Use <strong className="text-[#010a1f]">Flexible Shifts</strong> for roles (like Developers) where clock-in time is open, and only total hours completed (e.g., 8 Hours) matters.
                     </p>
                 </div>
             </div>
@@ -550,7 +645,8 @@ const SuperAdminWorkShiftsCom = () => {
                                         value={formData.shiftType}
                                         onChange={handleInputChange}
                                         options={[
-                                            { value: 'Fixed', label: 'Fixed Time (e.g., 09:20 - 05:00)' },
+                                            { value: 'Fixed', label: 'Fixed Time (e.g., 09:30 - 05:00)' },
+                                            { value: 'Development Fixed', label: 'Development Fixed (e.g., 09:30 - 05:00)' },
                                             { value: 'Flexible', label: 'Flexible / Anytime Login' }
                                         ]}
                                     />
@@ -584,7 +680,7 @@ const SuperAdminWorkShiftsCom = () => {
                         {/* Rules + Calculation */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-                            {formData.shiftType === 'Fixed' ? (
+                            {formData.shiftType === 'Fixed' || formData.shiftType === 'Development Fixed' ? (
                                 <>
                                     {/* Working Hours */}
                                     <div className="lg:col-span-1 relative bg-gradient-to-br from-green-50/70 to-white p-5 rounded-2xl border border-green-100 overflow-hidden">
@@ -647,17 +743,39 @@ const SuperAdminWorkShiftsCom = () => {
                                 </div>
                             )}
 
-                            {/* Calculation Output */}
+                            {/* Calculation Output (Cleans Decimal into HH:MM naturally) */}
                             <div className="lg:col-span-1 relative bg-gradient-to-br from-[#0437cc] to-[#1f56d6] rounded-2xl p-6 flex flex-col justify-center items-center text-center shadow-lg shadow-[#0437cc]/25 overflow-hidden">
                                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
                                 <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
 
-                                <p className="relative text-[10px] font-bold text-white/80 uppercase tracking-[0.15em] mb-2">Net Working Hours</p>
-                                <p className="relative text-4xl sm:text-5xl font-black text-white tabular-nums leading-none">
-                                    {calculateTotalHours() || '0.00'}
+                                <p className="relative text-[10px] font-bold text-white/80 uppercase tracking-[0.15em] mb-2">Net Working Time</p>
+                                <div className="relative flex items-end gap-1.5 mt-1">
+                                    {formData.shiftType === 'Flexible' ? (
+                                        <>
+                                            <p className="text-4xl sm:text-5xl font-black text-white tabular-nums leading-none">
+                                                {displayHrs}
+                                            </p>
+                                            <span className="text-lg font-bold text-white/70 mb-1">Hrs</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-baseline">
+                                                <span className="text-4xl sm:text-5xl font-black text-white tabular-nums leading-none">{displayHrs}</span>
+                                                <span className="text-lg font-bold text-white/70 mx-1 mb-1">h</span>
+                                            </div>
+                                            {displayMins > 0 && (
+                                                <div className="flex items-baseline">
+                                                    <span className="text-4xl sm:text-5xl font-black text-white tabular-nums leading-none">{String(displayMins).padStart(2, '0')}</span>
+                                                    <span className="text-lg font-bold text-white/70 ml-1 mb-1">m</span>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                                
+                                <p className="relative text-xs text-white/70 font-bold mt-3 tracking-wider">
+                                    {formData.shiftType === 'Flexible' ? 'TARGET PER DAY' : 'AUTO-CALCULATED TARGET'}
                                 </p>
-                                <p className="relative text-xs text-white/70 font-bold mt-1 tracking-wider">HOURS / DAY</p>
-                                <p className="relative text-[10px] text-white/60 mt-3 font-medium">Auto-calculated target</p>
                             </div>
                         </div>
                     </div>

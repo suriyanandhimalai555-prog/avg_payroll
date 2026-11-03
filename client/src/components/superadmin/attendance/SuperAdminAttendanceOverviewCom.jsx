@@ -6,14 +6,13 @@ import {
     FaUserCheck, FaUserTimes, FaUserClock, FaLaptopHouse, FaHistory,
     FaBuilding, FaSitemap, FaClock, FaEye, FaTimes, FaDesktop,
     FaMobileAlt, FaMapMarkerAlt, FaMoneyBillWave, FaUmbrellaBeach, FaExclamationCircle,
-    FaFileExcel, FaDownload, FaUsers
+    FaFileExcel, FaDownload, FaUsers, FaCheckCircle, FaTimesCircle
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Select from '../../../components/common/Select';
 import Input from '../../../components/common/Input';
 import { useAuth } from '../../../context/AuthContext';
 
-// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -31,6 +30,7 @@ const SuperAdminAttendanceOverviewCom = () => {
     const [apiError, setApiError] = useState('');
 
     const [viewLog, setViewLog] = useState(null);
+    const [isActionLoading, setIsActionLoading] = useState(null); // stores the ID being approved/rejected
 
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
@@ -63,75 +63,16 @@ const SuperAdminAttendanceOverviewCom = () => {
         setApiError('');
 
         try {
-            const empRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }));
-            const employees = empRes.data || [];
-
-            let records = [];
-            let metricsData = { present: 0, absent: 0, pendingApproval: 0, onLeave: 0, wfh: 0, total: employees.length };
-
-            try {
-                const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-attendance/overview`, {
-                    params: { date: filterDate },
-                    ...getAuthConfig()
-                });
-                records = response.data.records || [];
-                if (response.data.metrics) metricsData = response.data.metrics;
-            } catch (err) {
-                // If API fails or is not built yet, fallback to mock generation based on live employee data
-                records = employees.map((emp, index) => {
-                    const isPresent = index % 3 !== 0;
-                    const isWfh = index % 5 === 0;
-
-                    let status = isPresent ? (isWfh ? 'WFH' : 'Present') : 'Absent';
-
-                    if (status === 'Absent' && index % 2 !== 0) status = 'Absent (Pending Approval)';
-                    if (index % 7 === 0) status = 'On Leave';
-
-                    if (status === 'Present') metricsData.present++;
-                    if (status === 'Absent') metricsData.absent++;
-                    if (status === 'Absent (Pending Approval)') metricsData.pendingApproval++;
-                    if (status === 'On Leave') metricsData.onLeave++;
-                    if (status === 'WFH') metricsData.wfh++;
-
-                    const baseSalary = parseFloat(emp.basic_salary) || 0;
-                    const dailyRate = baseSalary / 30;
-                    const hourlyRate = dailyRate / 8;
-
-                    const hoursWorked = isPresent ? (8 - (index % 3)) : 0;
-                    const calculatedDailyPay = hoursWorked * hourlyRate;
-
-                    return {
-                        id: emp.id,
-                        employee_id: emp.employee_id,
-                        first_name: emp.first_name || emp.firstName,
-                        last_name: emp.last_name || emp.lastName,
-                        company: emp.company,
-                        branch: emp.branch,
-                        department: emp.department,
-                        location: emp.location,
-                        shift: emp.shift,
-                        status: status,
-                        first_clock_in: isPresent ? new Date().setHours(9, 15, 0) : null,
-                        last_clock_out: isPresent ? (index % 2 === 0 ? new Date().setHours(17, 30, 0) : null) : null,
-                        is_working: isPresent && index % 2 !== 0,
-                        total_hours: isPresent ? `${hoursWorked}:00 Hrs` : '0:00 Hrs',
-                        calculated_pay: calculatedDailyPay,
-                        daily_logs: isPresent ? [{
-                            clock_in: new Date().setHours(9, 15, 0),
-                            clock_out: index % 2 === 0 ? new Date().setHours(17, 30, 0) : null,
-                            late_minutes: index % 4 === 0 ? 15 : 0,
-                            clock_in_device: 'Windows 11 - Chrome',
-                            clock_in_location: 'Office Internal Network'
-                        }] : []
-                    };
-                });
-            }
-
-            setAttendanceData(records);
-            setMetrics(metricsData);
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-attendance/overview`, {
+                params: { date: filterDate },
+                ...getAuthConfig()
+            });
+            setAttendanceData(response.data.records || []);
+            setMetrics(response.data.metrics || { present: 0, absent: 0, pendingApproval: 0, onLeave: 0, wfh: 0, total: 0 });
         } catch (error) {
             console.error('Failed to load attendance data', error);
             setApiError('Failed to load attendance records. Please check your connection.');
+            setAttendanceData([]);
         } finally {
             setIsLoading(false);
         }
@@ -149,6 +90,26 @@ const SuperAdminAttendanceOverviewCom = () => {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterDate, user]);
+
+    const handleAction = async (action, recordId) => {
+        setIsActionLoading(recordId);
+        try {
+            if (action === 'approve') {
+                await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-attendance/approve/${recordId}`, {}, getAuthConfig());
+                setSuccessMsg('Late request approved successfully.');
+            } else {
+                await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-attendance/reject/${recordId}`, getAuthConfig());
+                setSuccessMsg('Late request rejected and removed.');
+            }
+            setViewLog(null);
+            fetchAttendanceData();
+            setTimeout(() => setSuccessMsg(''), 4000);
+        } catch (error) {
+            alert('Failed to process request. Please try again.');
+        } finally {
+            setIsActionLoading(null);
+        }
+    };
 
     const handleCompanyChange = (e) => {
         setFilterCompany(e.target.value);
@@ -370,7 +331,24 @@ const SuperAdminAttendanceOverviewCom = () => {
                                             <span className="font-bold text-[#010a1f] bg-slate-100 px-3 py-1 rounded-lg text-[10px] sm:text-xs uppercase tracking-wider">
                                                 Session {idx + 1}
                                             </span>
-                                            {log.late_minutes > 0 ? (
+                                            {log.status?.includes('Pending Approval') ? (
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleAction('approve', log.id)}
+                                                        disabled={isActionLoading === log.id}
+                                                        className="inline-flex items-center gap-1.5 text-[10px] bg-green-500 hover:bg-green-600 text-white font-bold px-3 py-1 rounded-full shadow-md shadow-green-500/20 transition-colors disabled:opacity-50"
+                                                    >
+                                                        <FaCheckCircle /> {isActionLoading === log.id ? '...' : 'Approve Late In'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleAction('reject', log.id)}
+                                                        disabled={isActionLoading === log.id}
+                                                        className="inline-flex items-center gap-1.5 text-[10px] bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1 rounded-full shadow-md shadow-red-500/20 transition-colors disabled:opacity-50"
+                                                    >
+                                                        <FaTimesCircle /> {isActionLoading === log.id ? '...' : 'Reject'}
+                                                    </button>
+                                                </div>
+                                            ) : log.late_minutes > 0 ? (
                                                 <span className="inline-flex items-center gap-1.5 text-[10px] bg-red-50 border border-red-200 text-red-700 font-bold px-2.5 py-1 rounded-full">
                                                     <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
                                                     Late {log.late_minutes} Mins
@@ -382,6 +360,16 @@ const SuperAdminAttendanceOverviewCom = () => {
                                                 </span>
                                             )}
                                         </div>
+                                        
+                                        {log.late_reason && (
+                                            <div className="mt-2 mb-4 flex items-start gap-2 bg-orange-50 border border-orange-100 p-3 rounded-xl shadow-sm relative">
+                                                <FaExclamationCircle className="text-orange-500 text-xs shrink-0 mt-0.5" />
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider">Late Check-in Reason</p>
+                                                    <p className="text-xs text-orange-900 font-medium break-words mt-1 leading-relaxed">"{log.late_reason}"</p>
+                                                </div>
+                                            </div>
+                                        )}
 
                                         <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
 
@@ -508,7 +496,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                 <div className="relative min-w-0">
                     <p className="text-sm font-bold text-[#010a1f]">Real-Time Salary & Exception Tracking</p>
                     <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                        This module intercepts raw employee data and live attendance logs. Employees checking in after the <strong className="text-[#010a1f]">1 PM cutoff</strong> automatically flag as <strong className="text-orange-700">Absent (Pending Approval)</strong>. Estimated daily pay is prorated based on worked hours. <strong className="text-[#010a1f]">Excel export</strong> contains both overall data and per-company sheets.
+                        This module intercepts raw employee data and live attendance logs. Employees checking in late via grace violations automatically flag as <strong className="text-orange-700">Absent (Pending Approval)</strong> until approved. Estimated daily pay is prorated based on worked hours.
                     </p>
                 </div>
             </div>
@@ -730,7 +718,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                                             </div>
                                         </td>
                                         <td className="px-5 py-4 text-right">
-                                            {record.status === 'Absent' || record.status === 'On Leave' || record.status === 'Absent (Pending Approval)' ? (
+                                            {record.status === 'Absent' || record.status === 'On Leave' ? (
                                                 <span className="text-sm font-bold text-slate-300">—</span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-black text-green-700 bg-green-50 px-2.5 py-1 rounded-lg border border-green-200 whitespace-nowrap tabular-nums">

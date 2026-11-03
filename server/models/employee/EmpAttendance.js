@@ -16,6 +16,7 @@ const initializeEmpAttendanceModel = async () => {
             total_hours VARCHAR(20),
             status VARCHAR(50) DEFAULT 'Present',
             project_details TEXT,
+            late_reason TEXT,
             eod_update TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -28,6 +29,7 @@ const initializeEmpAttendanceModel = async () => {
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS clock_out_device TEXT;
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS late_minutes INT DEFAULT 0;
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS project_details TEXT;
+        ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS late_reason TEXT;
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS eod_update TEXT;
     `;
 

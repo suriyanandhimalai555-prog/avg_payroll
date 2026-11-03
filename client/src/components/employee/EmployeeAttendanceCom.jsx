@@ -42,12 +42,17 @@ const EmployeeAttendanceCom = () => {
     const countdownRef = useRef(null);
     const [completedMsToday, setCompletedMsToday] = useState(0);
 
+    // EOD & Late Reason Modals
     const [isEodModalOpen, setIsEodModalOpen] = useState(false);
     const [eodInput, setEodInput] = useState('');
     const [isSubmittingEod, setIsSubmittingEod] = useState(false);
+    
     const [isEditEodModalOpen, setIsEditEodModalOpen] = useState(false);
     const [editingRecordId, setEditingRecordId] = useState(null);
     const [editEodInput, setEditEodInput] = useState('');
+
+    const [isLateModalOpen, setIsLateModalOpen] = useState(false);
+    const [lateReasonInput, setLateReasonInput] = useState('');
 
     const fetchAttendanceData = async () => {
         if (!user || !user.employee_id || !localStorage.getItem('token')) {
@@ -69,13 +74,10 @@ const EmployeeAttendanceCom = () => {
             const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
             setFullHistory(fetchedHistory);
             
-            // Filter out 'WEEKLY_OFF' so they aren't confused with paid company holidays
             const actualHolidays = (holRes.data || []).filter(h => h.status !== 'Draft' && h.type !== 'WEEKLY_OFF');
             setHolidays(actualHolidays);
             
-            // Fetch Approved Leaves
             setLeaveRequests((leaveRes.data || []).filter(req => req.status === 'Approved'));
-            
             setShiftDetails(shiftRes.data); 
 
             const profile = profRes.data || {};
@@ -95,7 +97,7 @@ const EmployeeAttendanceCom = () => {
 
             let previousMs = 0;
             todays.forEach(log => {
-                if (log.clock_out && log.total_hours) {
+                if (log.clock_out && log.total_hours && log.total_hours !== 'Missed Checkout') {
                     const [h, m] = log.total_hours.replace(' Hrs', '').split(':').map(Number);
                     if (!isNaN(h) && !isNaN(m)) {
                         previousMs += (h * 3600000) + (m * 60000);
@@ -111,7 +113,6 @@ const EmployeeAttendanceCom = () => {
         }
     };
 
-    // Guarded execution
     useEffect(() => {
         if (user && user.employee_id) {
             fetchAttendanceData();
@@ -164,39 +165,39 @@ const EmployeeAttendanceCom = () => {
     };
 
     const fetchLocationData = () => {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             if (!navigator.geolocation) {
-                reject('Geolocation is not supported by your browser.');
+                resolve('Location Unavailable (Browser unsupported)');
                 return;
             }
+            
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
                     const { latitude, longitude } = position.coords;
                     try {
                         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
                         const data = await response.json();
-                        resolve(`${data.display_name} (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`);
+                        if (data && data.display_name) {
+                            resolve(`${data.display_name} (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`);
+                        } else {
+                            resolve(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`);
+                        }
                     } catch (err) {
                         resolve(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`);
                     }
                 },
-                () => {
-                    reject('Location access is strictly required to punch in/out.');
+                (error) => {
+                    console.warn("Geolocation failed (kCLErrorLocationUnknown or Denied):", error.message);
+                    resolve('Location Unavailable (Check Device Settings)');
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
             );
         });
     };
 
-    const handleCheckIn = async () => {
+    const handleCheckIn = async (providedLateReason = null) => {
         if (isActionLoading) return;
         const now = new Date();
-        const currentHour = now.getHours();
-
-        if (shiftDetails?.shift_type === 'Flexible' && currentHour >= 17) {
-            alert(`It is currently past 5:00 PM.\n\nFlexible shifts do not allow new logins this late into the day.\nYou will be marked as Absent for today.`);
-            return;
-        }
 
         setIsActionLoading(true);
         try {
@@ -208,14 +209,29 @@ const EmployeeAttendanceCom = () => {
                 employeeId: user.employee_id,
                 todayDate: todayDate,
                 locationData: locationData,
-                deviceInfo: deviceData
+                deviceInfo: deviceData,
+                lateReason: providedLateReason
             }, getAuthConfig());
+            
+            setIsLateModalOpen(false);
+            setLateReasonInput('');
             await fetchAttendanceData();
         } catch (error) {
-            alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
+            if (error.response?.status === 428 && error.response?.data?.message === 'LATE_REASON_REQUIRED') {
+                setIsLateModalOpen(true);
+            } else {
+                alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
+            }
         } finally {
             setIsActionLoading(false);
         }
+    };
+
+    const submitLateCheckIn = () => {
+        if (!lateReasonInput.trim()) {
+            return alert("Please provide a reason for clocking in late.");
+        }
+        handleCheckIn(lateReasonInput);
     };
 
     const initiateCheckOut = () => setIsEodModalOpen(true);
@@ -324,7 +340,6 @@ const EmployeeAttendanceCom = () => {
             const sessions = fullHistory.filter(r => new Date(r.date).toLocaleDateString('en-CA') === dateStr);
             const holidayRecord = holidays.find(h => new Date(h.holiday_date).toLocaleDateString('en-CA') === dateStr);
             
-            // Check for Approved Leave
             const approvedLeave = leaveRequests.find(req => {
                 const start = new Date(req.from_date).toLocaleDateString('en-CA');
                 const end = new Date(req.to_date).toLocaleDateString('en-CA');
@@ -364,7 +379,8 @@ const EmployeeAttendanceCom = () => {
             let leaveName = null;
 
             if (sessions.length > 0) {
-                status = late_minutes > 0 ? 'Late' : 'Present';
+                const sStatus = sessions[0].status || 'Present';
+                status = sStatus;
             } else if (approvedLeave) {
                 status = 'Leave';
                 leaveName = approvedLeave.leave_type;
@@ -423,27 +439,31 @@ const EmployeeAttendanceCom = () => {
         const [hourString, minute] = time24.split(':');
         let hour = parseInt(hourString, 10);
         const ampm = hour >= 12 ? 'PM' : 'AM';
-        hour = hour ? (hour % 12 || 12) : 12;
-        return `${hour < 10 ? '0' + hour : hour}:${minute} ${ampm}`;
+        hour = hour % 12;
+        hour = hour ? hour : 12;
+        const hourStr = hour < 10 ? '0' + hour : hour;
+        return `${hourStr}:${minute} ${ampm}`;
     };
 
     const getStatusStyle = (status) => {
         if (status === 'Present') return 'text-teal-700 bg-teal-50 border-teal-200';
         if (status === 'Late') return 'text-orange-700 bg-orange-50 border-orange-200';
-        if (status === 'Absent') return 'text-red-700 bg-red-50 border-red-200';
+        if (status?.includes('Absent')) return 'text-red-700 bg-red-50 border-red-200';
         if (status === 'Week Off') return 'text-purple-700 bg-purple-50 border-purple-200';
         if (status === 'Holiday') return 'text-[#0437cc] bg-blue-50 border-blue-200';
         if (status === 'Leave') return 'text-pink-700 bg-pink-50 border-pink-200';
+        if (status?.includes('Pending Approval')) return 'text-orange-700 bg-orange-50 border-orange-200';
         return 'text-slate-600 bg-slate-50 border-slate-200';
     };
 
     const getStatusDot = (status) => {
         if (status === 'Present') return 'bg-teal-500';
         if (status === 'Late') return 'bg-orange-500';
-        if (status === 'Absent') return 'bg-red-500';
+        if (status?.includes('Absent')) return 'bg-red-500';
         if (status === 'Week Off') return 'bg-purple-500';
         if (status === 'Holiday') return 'bg-[#0437cc]';
         if (status === 'Leave') return 'bg-pink-500';
+        if (status?.includes('Pending Approval')) return 'bg-orange-500';
         return 'bg-slate-500';
     };
 
@@ -545,6 +565,49 @@ const EmployeeAttendanceCom = () => {
                     }
                 `}
             </style>
+
+            {/* ==================== LATE REASON MODAL ==================== */}
+            {isLateModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-400"></div>
+
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-orange-50 to-amber-50/50">
+                            <div className="flex items-center gap-3">
+                                <span className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                                    <FaExclamationTriangle className="text-orange-600 text-sm" />
+                                </span>
+                                <div>
+                                    <h2 className="text-sm sm:text-base font-bold text-orange-700">Late Login Detected</h2>
+                                    <p className="text-[10px] text-orange-500 font-medium">Please provide a reason to clock in</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsLateModalOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 sm:p-6">
+                            <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                <p className="text-xs text-slate-600 mb-2 leading-relaxed">You are clocking in past your allowed grace time. <strong>Your status will be marked as "Half Day Absent (Pending Approval)".</strong> Please provide a valid reason for the delay to notify your manager/HR.</p>
+                            </div>
+
+                            <textarea
+                                value={lateReasonInput}
+                                onChange={(e) => setLateReasonInput(e.target.value)}
+                                placeholder="State your reason (e.g., Traffic, Medical emergency, Pre-approved late check-in)..."
+                                className="w-full h-28 p-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none text-slate-800 shadow-sm transition-all"
+                            ></textarea>
+
+                            <div className="pt-4">
+                                <Button variant="primary" fullWidth onClick={submitLateCheckIn} disabled={isActionLoading || !lateReasonInput.trim()} className="py-3 bg-[#f77704] hover:bg-[#e06603] shadow-lg shadow-orange-500/25 text-sm rounded-xl">
+                                    {isActionLoading ? 'Processing...' : 'Submit Reason & Clock In'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ==================== EOD CHECKOUT MODAL ==================== */}
             {isEodModalOpen && (
@@ -664,7 +727,7 @@ const EmployeeAttendanceCom = () => {
                         <Button
                             variant="outline"
                             icon={FaSignInAlt}
-                            onClick={handleCheckIn}
+                            onClick={() => handleCheckIn(null)}
                             disabled={isClockedIn || isActionLoading}
                             className={`w-full sm:w-auto shadow-sm text-sm py-2.5 rounded-xl transition-all ${isClockedIn ? 'border-slate-200 text-slate-400 bg-slate-50' : 'border-green-500 text-green-600 hover:bg-green-500 hover:text-white'}`}
                         >
@@ -1041,6 +1104,18 @@ const EmployeeAttendanceCom = () => {
                                                                             <span className="absolute -top-2.5 left-3 bg-white border border-slate-200 text-[#010a1f] px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
                                                                                 Session {sIdx + 1}
                                                                             </span>
+                                                                            
+                                                                            {/* Display Late Reason if exists */}
+                                                                            {session.late_reason && (
+                                                                                <div className="mt-4 mb-2 flex items-start gap-2 bg-orange-50 border border-orange-100 p-2.5 rounded-lg">
+                                                                                    <FaExclamationTriangle className="text-orange-500 text-xs shrink-0 mt-0.5" />
+                                                                                    <div>
+                                                                                        <p className="text-[9px] font-bold text-orange-700 uppercase tracking-wider">Late Reason</p>
+                                                                                        <p className="text-xs text-orange-900 font-medium break-words mt-0.5">"{session.late_reason}"</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+
                                                                             <div className="mt-2 space-y-2.5">
                                                                                 {session.clock_out ? (
                                                                                     <div className="group">

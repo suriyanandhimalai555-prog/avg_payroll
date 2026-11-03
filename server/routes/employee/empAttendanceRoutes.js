@@ -8,7 +8,7 @@ router.post('/check-in', authenticateToken, clockIn);
 router.put('/check-out', authenticateToken, clockOut);
 router.put('/eod-update', authenticateToken, updateEodDetails);
 router.put('/approve/:recordId', authenticateToken, approveAttendance);
-router.get('/shift/:employeeId', authenticateToken, getMyShiftDetails); // NEW
+router.get('/shift/:employeeId', authenticateToken, getMyShiftDetails);
 router.get('/:employeeId', authenticateToken, getAttendanceHistory);
 
 export default router;

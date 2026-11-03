@@ -26,19 +26,24 @@ export const getPayrollData = async (req, res) => {
         const allowed = await canAccessEmployeePayroll(req, employeeId);
         if (!allowed) return res.status(403).json({ message: 'You are not authorized to access this payroll.' });
 
-        // 1. Fetch Salary Config AND Shift Info
+        // 1. Fetch Salary Config AND Shift Info accurately joined
         const empQuery = `
-            SELECT first_name, last_name, employee_id, department, designation, shift,
-                   basic_salary, hra, conveyance, medical, special_allowance, other_allowances,
-                   epf, esi, health_insurance, pt, tds 
-            FROM sa_employees WHERE employee_id = $1 LIMIT 1
+            SELECT e.first_name, e.last_name, e.employee_id, e.department, e.designation, e.shift,
+                   e.basic_salary, e.hra, e.conveyance, e.medical, e.special_allowance, e.other_allowances,
+                   e.epf, e.esi, e.health_insurance, e.pt, e.tds,
+                   s.shift_type
+            FROM sa_employees e
+            LEFT JOIN sa_work_shifts s ON e.shift = s.shift_name
+            WHERE e.employee_id = $1 LIMIT 1
         `;
         const empRes = await pool.query(empQuery, [employeeId]);
         if (empRes.rows.length === 0) return res.status(404).json({ message: "Employee not found." });
         const emp = empRes.rows[0];
 
-        // Shift Configuration
-        const isFlexibleShift = emp.shift?.toLowerCase().includes('flex');
+        // Shift Configuration Logic
+        // "Development Fixed" and "Flexible" both get 2 grace days. ONLY "Fixed" gets 0.
+        const shiftType = emp.shift_type || 'Fixed';
+        const isFlexibleShift = shiftType === 'Flexible' || shiftType === 'Development Fixed';
         const allowedUnpaidGraceDays = isFlexibleShift ? 2 : 0;
 
         // 2. Fetch Raw Ecosystem Data 
