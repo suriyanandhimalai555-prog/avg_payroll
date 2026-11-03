@@ -164,7 +164,6 @@ const EmployeeAttendanceCom = () => {
         return `${osName} - ${browserName}`;
     };
 
-    // FIXED: Using enableHighAccuracy: false avoids the kCLErrorLocationUnknown timeout on macOS/iOS devices without true GPS.
     const fetchLocationData = () => {
         return new Promise((resolve) => {
             if (!navigator.geolocation) {
