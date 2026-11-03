@@ -305,7 +305,7 @@ const EmployeePayrollCom = () => {
                 { label: 'EPF Deduction', amount: record.deductions.epf },
                 { label: 'ESI Deduction', amount: record.deductions.esi },
                 { label: 'Professional Tax', amount: record.deductions.pt },
-                { label: 'TDS Deduction', amount: record.deductions.tds },
+                { label: 'TDS Deduction', amount: record.deductions.healthInsurance }, 
                 { label: 'Health Insurance', amount: record.deductions.healthInsurance }
             ].filter(d => d.amount > 0);
 

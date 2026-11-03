@@ -498,7 +498,6 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
             <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
