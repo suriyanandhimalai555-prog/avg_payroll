@@ -73,7 +73,6 @@ const SuperAdminEmployeeCom = () => {
     const [successMsg, setSuccessMsg] = useState('');
     const [apiError, setApiError] = useState('');
 
-    // Pre-calculations to prevent Shimmer ReferenceError
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
     const liveGross = parseNum(formData.basic) + parseNum(formData.hra) + parseNum(formData.conveyance) + parseNum(formData.medical) + parseNum(formData.specialAllowance) + parseNum(formData.otherAllowances);
     const liveDeductions = parseNum(formData.epf) + parseNum(formData.esi) + parseNum(formData.healthInsurance) + parseNum(formData.pt) + parseNum(formData.tds) + parseNum(formData.leaves);
@@ -142,6 +141,7 @@ const SuperAdminEmployeeCom = () => {
     const filteredDepartments = departments.filter(d => d.branch_name === formData.branch);
     const filteredLocations = locations.filter(l => l.branch_name === formData.branch);
     const filteredDesignations = designations.filter(des => des.department_name === formData.department);
+    // Explicitly sync shift names with dynamic DB pulls
     const availableShifts = shifts.filter(s => s.status === 'Active' && s.company_name === formData.company);
 
     const handleInputChange = (e) => {
