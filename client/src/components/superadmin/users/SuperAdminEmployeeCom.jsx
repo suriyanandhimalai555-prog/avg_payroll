@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
+import * as XLSX from 'xlsx';
 import {
-    FaUserPlus, FaUser, FaBriefcase, FaMoneyCheckAlt,
+    FaUserPlus, FaUser, FaBriefcase, FaMoneyCheckAlt, FaInfoCircle,
     FaUniversity, FaTimes, FaCheck, FaListUl, FaEnvelope, FaPhoneAlt,
-    FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle
+    FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle,
+    FaUpload, FaFileExcel, FaDownload, FaCloudUploadAlt, FaExclamationCircle,
+    FaBuilding, FaChevronDown, FaChevronUp, FaExclamationTriangle
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -40,6 +43,54 @@ const getAuthConfig = () => {
     };
 };
 
+// Reusable Custom Modal for Alerts/Confirmations
+const ActionModal = ({ isOpen, type, title, message, onConfirm, onCancel }) => {
+    if (!isOpen) return null;
+
+    const isAlert = type === 'alert';
+    const isDestructive = type === 'delete';
+
+    return (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col my-auto border border-slate-100">
+                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${isDestructive ? 'from-red-500 to-orange-400' : 'from-[#0437cc] to-[#1f56d6]'}`}></div>
+
+                <div className="p-6 pt-8 text-center space-y-4">
+                    <div className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center shadow-sm ${isDestructive ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-blue-50 text-[#0437cc] border border-blue-100'}`}>
+                        {isDestructive ? <FaTrash className="text-xl" /> : <FaExclamationTriangle className="text-xl" />}
+                    </div>
+                    
+                    <div>
+                        <h2 className="text-lg font-bold text-[#010a1f] mb-1">{title}</h2>
+                        <p className="text-sm text-slate-500 leading-relaxed">{message}</p>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                        {!isAlert && (
+                            <Button 
+                                variant="ghost" 
+                                fullWidth 
+                                onClick={onCancel}
+                                className="text-slate-500 hover:bg-slate-100 rounded-xl"
+                            >
+                                Cancel
+                            </Button>
+                        )}
+                        <Button 
+                            variant={isDestructive ? 'danger' : 'primary'} 
+                            fullWidth 
+                            onClick={onConfirm}
+                            className={`rounded-xl shadow-lg ${isDestructive ? 'shadow-red-500/25' : 'shadow-[#0437cc]/25'}`}
+                        >
+                            {isAlert ? 'Okay' : 'Confirm'}
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const SuperAdminEmployeeCom = () => {
     const INITIAL_FORM_STATE = {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '', address: '',
@@ -66,9 +117,21 @@ const SuperAdminEmployeeCom = () => {
     const [viewEmployee, setViewEmployee] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
+    // Modal Control State
+    const [modalConfig, setModalConfig] = useState({ isOpen: false, type: 'alert', title: '', message: '', onConfirm: null });
+
+    // Bulk Upload States
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadResults, setUploadResults] = useState(null);
+    const fileInputRef = useRef(null);
+
+    // Employee Selection & Accordion States
     const [employees, setEmployees] = useState([]);
     const [isFetching, setIsFetching] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [expandedBranches, setExpandedBranches] = useState([]);
 
     const [successMsg, setSuccessMsg] = useState('');
     const [apiError, setApiError] = useState('');
@@ -87,6 +150,30 @@ const SuperAdminEmployeeCom = () => {
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         return new Date(dateString).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+
+    const showAlert = (title, message) => {
+        setModalConfig({
+            isOpen: true,
+            type: 'alert',
+            title,
+            message,
+            onConfirm: () => setModalConfig({ ...modalConfig, isOpen: false })
+        });
+    };
+
+    const showConfirm = (title, message, onConfirmAction) => {
+        setModalConfig({
+            isOpen: true,
+            type: 'delete',
+            title,
+            message,
+            onConfirm: () => {
+                onConfirmAction();
+                setModalConfig({ ...modalConfig, isOpen: false });
+            },
+            onCancel: () => setModalConfig({ ...modalConfig, isOpen: false })
+        });
     };
 
     const fetchOrgData = async () => {
@@ -110,8 +197,6 @@ const SuperAdminEmployeeCom = () => {
             console.error('Error fetching org data:', error);
             if (error.response?.status === 401) {
                 setApiError('Session expired or unauthorized. Please log in again.');
-            } else {
-                setApiError('Failed to establish connection with the server.');
             }
         }
     };
@@ -141,7 +226,6 @@ const SuperAdminEmployeeCom = () => {
     const filteredDepartments = departments.filter(d => d.branch_name === formData.branch);
     const filteredLocations = locations.filter(l => l.branch_name === formData.branch);
     const filteredDesignations = designations.filter(des => des.department_name === formData.department);
-    // Explicitly sync shift names with dynamic DB pulls
     const availableShifts = shifts.filter(s => s.status === 'Active' && s.company_name === formData.company);
 
     const handleInputChange = (e) => {
@@ -255,15 +339,70 @@ const SuperAdminEmployeeCom = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this employee? This action cannot be undone.")) return;
+    const executeDelete = async (id) => {
         try {
             await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-employees/${id}`, getAuthConfig());
             fetchEmployees();
+            setSelectedIds(prev => prev.filter(empId => empId !== id));
             setSuccessMsg('Employee deleted successfully.');
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (error) {
-            alert('Failed to delete employee. Check authorization.');
+            showAlert('Deletion Failed', 'Failed to delete employee. Please check authorization or linked records.');
+        }
+    };
+
+    const handleDelete = (id) => {
+        showConfirm(
+            'Delete Employee?', 
+            'Are you sure you want to delete this employee? This action is permanent and cannot be undone.',
+            () => executeDelete(id)
+        );
+    };
+
+    const executeBulkDelete = async () => {
+        try {
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/bulk-delete`, { ids: selectedIds }, getAuthConfig());
+            fetchEmployees();
+            setSelectedIds([]);
+            setSuccessMsg(`Successfully deleted ${selectedIds.length} employees.`);
+            setTimeout(() => setSuccessMsg(''), 3000);
+        } catch (error) {
+            showAlert('Bulk Deletion Failed', error.response?.data?.message || 'Failed to bulk delete employees.');
+        }
+    };
+
+    const handleBulkDelete = () => {
+        showConfirm(
+            'Bulk Delete Selected?',
+            `Are you sure you want to permanently delete ${selectedIds.length} selected employees?`,
+            () => executeBulkDelete()
+        );
+    };
+
+    const handleBranchDelete = (branchKey, branchEmployees) => {
+        showConfirm(
+            'Delete Entire Branch?',
+            `Are you sure you want to permanently delete ALL ${branchEmployees.length} employees in this branch?`,
+            () => {
+                const idsToDelete = branchEmployees.map(e => e.id);
+                setSelectedIds(idsToDelete);
+                // We briefly set the ids and immediately call the bulk delete execution
+                setTimeout(() => {
+                    executeBulkDeleteTrigger(idsToDelete);
+                }, 100);
+            }
+        );
+    };
+
+    const executeBulkDeleteTrigger = async (idsToDel) => {
+        try {
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/bulk-delete`, { ids: idsToDel }, getAuthConfig());
+            fetchEmployees();
+            setSelectedIds([]);
+            setSuccessMsg(`Successfully deleted ${idsToDel.length} employees from the branch.`);
+            setTimeout(() => setSuccessMsg(''), 3000);
+        } catch (error) {
+            showAlert('Branch Deletion Failed', error.response?.data?.message || 'Failed to delete branch employees.');
         }
     };
 
@@ -272,15 +411,112 @@ const SuperAdminEmployeeCom = () => {
         setIsViewModalOpen(true);
     };
 
+    // ==================== BULK UPLOAD LOGIC ====================
+    const handleDownloadSample = () => {
+        const sampleData = [{
+            firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', phone: '9876543210',
+            dob: '1990-01-01', gender: 'Male', address: '123 Main St', employeeId: 'EMP-001',
+            joiningDate: '2026-01-01', company: 'AVG Prime Tech', branch: 'Head Office', department: 'IT',
+            designation: 'Developer', manager: 'Jane', empType: 'Full-Time', location: 'Head Office',
+            shift: 'General Shift', status: 'Active', ctc: 500000, monthlySalary: 40000,
+            basic: 20000, hra: 10000, conveyance: 2000, medical: 1500, specialAllowance: 6500,
+            otherAllowances: 0, epf: 1800, esi: 0, healthInsurance: 500, pt: 200, tds: 1000,
+            leaves: 0, uanNo: '100000000000', bankName: 'HDFC', accountHolder: 'John Doe',
+            accountNumber: '1234567890', ifsc: 'HDFC0001234'
+        }];
+        const ws = XLSX.utils.json_to_sheet(sampleData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Sample");
+        XLSX.writeFile(wb, "Employee_Bulk_Upload_Sample.xlsx");
+    };
+
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        setUploadResults(null);
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const bstr = evt.target.result;
+                const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = XLSX.utils.sheet_to_json(ws);
+
+                if (data.length === 0) {
+                    showAlert("Upload Failed", "Uploaded file is empty.");
+                    setIsUploading(false);
+                    return;
+                }
+
+                const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/bulk`, { employees: data }, getAuthConfig());
+
+                setUploadResults({
+                    success: response.data.successCount,
+                    errors: response.data.errors
+                });
+
+                fetchEmployees();
+                if (response.data.successCount > 0) {
+                    setSuccessMsg(`Successfully imported ${response.data.successCount} employees.`);
+                    setTimeout(() => setSuccessMsg(''), 5000);
+                }
+            } catch (error) {
+                console.error("Bulk Upload Error:", error);
+                setUploadResults({
+                    success: 0,
+                    errors: [error.response?.data?.message || 'Failed to process file. Check format.']
+                });
+            } finally {
+                setIsUploading(false);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+            }
+        };
+        reader.readAsBinaryString(file);
+    };
+
+    // Derived Groupings
     const filteredEmployees = employees.filter(emp => {
         const searchStr = `${emp.first_name} ${emp.last_name} ${emp.employee_id} ${emp.company} ${emp.branch} ${emp.department}`.toLowerCase();
         return searchStr.includes(searchTerm.toLowerCase());
     });
 
+    const groupedEmployees = useMemo(() => {
+        const groups = {};
+        filteredEmployees.forEach(emp => {
+            const comp = emp.company || 'Unassigned Company';
+            const br = emp.branch || 'Unassigned Branch';
+            if (!groups[comp]) groups[comp] = {};
+            if (!groups[comp][br]) groups[comp][br] = [];
+            groups[comp][br].push(emp);
+        });
+        return groups;
+    }, [filteredEmployees]);
+
+    // Selection Handlers
+    const toggleEmployeeSelection = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(empId => empId !== id) : [...prev, id]);
+    };
+
+    const toggleBranchSelection = (branchEmployees, isSelected) => {
+        const branchIds = branchEmployees.map(emp => emp.id);
+        if (isSelected) {
+            setSelectedIds(prev => [...new Set([...prev, ...branchIds])]);
+        } else {
+            setSelectedIds(prev => prev.filter(id => !branchIds.includes(id)));
+        }
+    };
+
+    const toggleBranchAccordion = (branchKey) => {
+        setExpandedBranches(prev => prev.includes(branchKey) ? prev.filter(k => k !== branchKey) : [...prev, branchKey]);
+    };
+
     if (isFetching) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
-                {/* Non-Sticky Header Shimmer */}
                 <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
                         <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
@@ -295,7 +531,6 @@ const SuperAdminEmployeeCom = () => {
                     </div>
                 </div>
 
-                {/* Form Shimmer */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <div className="md:col-span-2 lg:col-span-3 space-y-2">
                         <div className="h-4 bg-slate-200 rounded w-1/6"></div>
@@ -307,44 +542,6 @@ const SuperAdminEmployeeCom = () => {
                             <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
                         </div>
                     ))}
-                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
-                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
-                        <div className="h-24 bg-slate-200 rounded-xl w-full"></div>
-                    </div>
-                </div>
-
-                {/* List Table Shimmer */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
-                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-3 w-1/3">
-                            <div className="w-9 h-9 bg-slate-200 rounded-xl shrink-0"></div>
-                            <div className="space-y-2 w-full">
-                                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                                <div className="h-2 bg-slate-200 rounded w-1/2"></div>
-                            </div>
-                        </div>
-                        <div className="w-64 h-10 bg-slate-200 rounded-xl shrink-0"></div>
-                    </div>
-                    <div className="p-5 space-y-4">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-50">
-                                <div className="flex items-center gap-3 w-1/3">
-                                    <div className="w-12 h-12 bg-slate-200 rounded-xl shrink-0"></div>
-                                    <div className="space-y-2 w-full">
-                                        <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                                    </div>
-                                </div>
-                                <div className="h-4 w-24 bg-slate-200 rounded-md"></div>
-                                <div className="h-8 w-16 bg-slate-200 rounded-full"></div>
-                                <div className="flex gap-2">
-                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
-                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
-                                    <div className="w-8 h-8 bg-slate-200 rounded-lg"></div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             </div>
         );
@@ -352,8 +549,103 @@ const SuperAdminEmployeeCom = () => {
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
+            
+            {/* Unified Action Modal for Alerts & Confirms */}
+            <ActionModal 
+                isOpen={modalConfig.isOpen}
+                type={modalConfig.type}
+                title={modalConfig.title}
+                message={modalConfig.message}
+                onConfirm={modalConfig.onConfirm}
+                onCancel={modalConfig.onCancel}
+            />
 
-            {/* ==================== VIEW MODAL ==================== */}
+            {/* ==================== BULK UPLOAD MODAL ==================== */}
+            {isBulkModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-green-500 to-[#0437cc]"></div>
+
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-green-50 to-emerald-50/40 shrink-0 sticky top-0 z-10 backdrop-blur-sm">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-green-100">
+                                    <FaFileExcel className="text-green-600 text-sm" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Bulk Employee Upload</h2>
+                                    <p className="text-[10px] text-slate-500 font-medium truncate">Import multiple records via Excel</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsBulkModalOpen(false)}
+                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                            >
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+                            
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative overflow-hidden">
+                                <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#0437cc]/5 rounded-full blur-2xl pointer-events-none"></div>
+                                <h3 className="text-xs font-bold text-[#010a1f] mb-3 uppercase tracking-wider flex items-center gap-2">
+                                    <FaInfoCircle className="text-[#0437cc]" /> Instructions
+                                </h3>
+                                <ol className="list-decimal pl-4 text-xs text-slate-600 space-y-2 marker:font-bold marker:text-[#0437cc]">
+                                    <li>Download the sample Excel template using the button below.</li>
+                                    <li>Fill in the employee details accurately without modifying the column headers.</li>
+                                    <li>Ensure critical fields like <strong>Email</strong> and <strong>Employee ID</strong> are unique to prevent duplication errors.</li>
+                                    <li>Save the file as <code>.xlsx</code> or <code>.csv</code> and upload it here.</li>
+                                </ol>
+                                <div className="mt-4 pt-4 border-t border-slate-200">
+                                    <Button variant="outline" icon={FaDownload} onClick={handleDownloadSample} className="text-xs py-2 rounded-xl text-green-700 border-green-200 hover:bg-green-50">
+                                        Download Sample Excel
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 hover:bg-slate-100 hover:border-[#0437cc]/40 transition-all group relative cursor-pointer" onClick={() => fileInputRef.current.click()}>
+                                <input
+                                    type="file"
+                                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                                    className="hidden"
+                                    ref={fileInputRef}
+                                    onChange={handleFileUpload}
+                                />
+                                <div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                    {isUploading ? (
+                                        <div className="w-8 h-8 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin"></div>
+                                    ) : (
+                                        <FaCloudUploadAlt className="text-3xl text-slate-400 group-hover:text-[#0437cc] transition-colors" />
+                                    )}
+                                </div>
+                                <h4 className="text-sm font-bold text-[#010a1f] mb-1">{isUploading ? 'Processing & Sending Emails...' : 'Click or Drag file to upload'}</h4>
+                                <p className="text-xs text-slate-500">Supports .XLSX and .CSV formats</p>
+                            </div>
+
+                            {uploadResults && (
+                                <div className={`p-4 rounded-xl border ${uploadResults.errors.length > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        {uploadResults.errors.length > 0 ? <FaExclamationCircle className="text-red-500" /> : <FaCheck className="text-green-500" />}
+                                        <h3 className={`text-xs font-bold ${uploadResults.errors.length > 0 ? 'text-red-800' : 'text-green-800'}`}>
+                                            Import Completed: {uploadResults.success} inserted successfully.
+                                        </h3>
+                                    </div>
+                                    {uploadResults.errors.length > 0 && (
+                                        <ul className="list-disc pl-5 text-[11px] text-red-600 space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                                            {uploadResults.errors.map((err, i) => (
+                                                <li key={i}>{err}</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ==================== VIEW DOSSIER MODAL ==================== */}
             {isViewModalOpen && viewEmployee && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -378,8 +670,6 @@ const SuperAdminEmployeeCom = () => {
                         </div>
 
                         <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5 sm:space-y-6">
-
-                            {/* Profile Banner */}
                             <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 overflow-hidden">
                                 <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -405,7 +695,6 @@ const SuperAdminEmployeeCom = () => {
                                 </div>
                             </div>
 
-                            {/* Info Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {[
                                     { label: 'Company & Branch', value: `${viewEmployee.company} — ${viewEmployee.branch}` },
@@ -431,7 +720,6 @@ const SuperAdminEmployeeCom = () => {
                                 </div>
                             </div>
 
-                            {/* Salary Breakdown */}
                             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
                                 <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-200">
                                     <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shadow-sm">
@@ -441,8 +729,6 @@ const SuperAdminEmployeeCom = () => {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-
-                                    {/* Earnings */}
                                     <div className="relative bg-gradient-to-br from-green-50/80 to-white p-4 rounded-2xl border border-green-100 overflow-hidden">
                                         <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
                                         <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-green-100">
@@ -468,7 +754,6 @@ const SuperAdminEmployeeCom = () => {
                                         </div>
                                     </div>
 
-                                    {/* Deductions */}
                                     <div className="relative bg-gradient-to-br from-red-50/80 to-white p-4 rounded-2xl border border-red-100 overflow-hidden">
                                         <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
                                         <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-red-100">
@@ -499,7 +784,7 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             )}
 
-            {/* ==================== NON-STICKY HEADER ==================== */}
+            {/* ==================== HEADER SECTION ==================== */}
             <div className="relative bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
@@ -529,6 +814,16 @@ const SuperAdminEmployeeCom = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
+                        {!isEditing && (
+                            <Button 
+                                variant="outline" 
+                                icon={FaUpload} 
+                                onClick={() => setIsBulkModalOpen(true)} 
+                                className="w-full sm:w-auto border-green-600 text-green-700 hover:bg-green-600 hover:text-white rounded-xl text-xs sm:text-sm py-2"
+                            >
+                                Bulk Upload
+                            </Button>
+                        )}
                         {isEditing ? (
                             <Button variant="ghost" icon={FaTimes} onClick={cancelEdit} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Cancel</Button>
                         ) : (
@@ -561,8 +856,6 @@ const SuperAdminEmployeeCom = () => {
 
             {/* ==================== FORM ==================== */}
             <form className="space-y-5 sm:space-y-6" onSubmit={handleSubmit}>
-
-                {/* 1. Identity */}
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
                     <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
@@ -589,7 +882,6 @@ const SuperAdminEmployeeCom = () => {
                     </div>
                 </div>
 
-                {/* 2. Placement */}
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
                     <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
@@ -605,39 +897,32 @@ const SuperAdminEmployeeCom = () => {
                         <FieldWrapper error={errors.employeeId}>
                             <Input label={<>Employee ID <span className="text-red-500">*</span></>} name="employeeId" value={formData.employeeId} onChange={handleInputChange} placeholder="e.g. AVG-2026-001" className="font-mono" />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.joiningDate}><Input label={<>Joining Date <span className="text-red-500">*</span></>} type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} /></FieldWrapper>
-
                         <FieldWrapper error={errors.company}>
                             <Select label={<>Company <span className="text-red-500">*</span></>} name="company" value={formData.company} onChange={handleInputChange}
                                 options={[{ value: '', label: 'Select Company' }, ...companies.map(c => ({ value: c.company_name, label: c.company_name }))]}
                             />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.branch}>
                             <Select label={<>Branch <span className="text-red-500">*</span></>} name="branch" value={formData.branch} onChange={handleInputChange} disabled={!formData.company}
                                 options={[{ value: '', label: 'Select Branch' }, ...filteredBranches.map(b => ({ value: b.branch_name, label: b.branch_name }))]}
                             />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.department}>
                             <Select label={<>Department <span className="text-red-500">*</span></>} name="department" value={formData.department} onChange={handleInputChange} disabled={!formData.branch}
                                 options={[{ value: '', label: 'Select Department' }, ...filteredDepartments.map(d => ({ value: d.department_name, label: d.department_name }))]}
                             />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.location}>
                             <Select label={<>Location <span className="text-red-500">*</span></>} name="location" value={formData.location} onChange={handleInputChange} disabled={!formData.branch}
                                 options={[{ value: '', label: 'Select Location' }, ...filteredLocations.map(l => ({ value: l.location_name, label: l.location_name }))]}
                             />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.designation}>
                             <Select label={<>Designation <span className="text-red-500">*</span></>} name="designation" value={formData.designation} onChange={handleInputChange} disabled={!formData.department}
                                 options={[{ value: '', label: 'Select Designation' }, ...filteredDesignations.map(d => ({ value: d.designation_name, label: d.designation_name }))]}
                             />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.shift}>
                             <Select
                                 label={<>Assigned Work Shift <span className="text-red-500">*</span></>}
@@ -651,22 +936,18 @@ const SuperAdminEmployeeCom = () => {
                                 ]}
                             />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.manager}>
                             <Input label="Reporting Manager (Optional)" name="manager" placeholder="e.g., John Doe" value={formData.manager} onChange={handleInputChange} />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.empType}>
                             <Select label={<>Employment Type <span className="text-red-500">*</span></>} name="empType" value={formData.empType} onChange={handleInputChange} options={[{ value: '', label: 'Select' }, { value: 'Full Time', label: 'Full Time' }, { value: 'Contract', label: 'Contract' }]} />
                         </FieldWrapper>
-
                         <FieldWrapper error={errors.status}>
                             <Select label={<>Account Status <span className="text-red-500">*</span></>} name="status" value={formData.status} onChange={handleInputChange} options={[{ value: 'Pending Activation', label: 'Pending Activation' }, { value: 'Active', label: 'Active' }, { value: 'Suspended', label: 'Suspended' }, { value: 'Inactive', label: 'Inactive' }]} />
                         </FieldWrapper>
                     </div>
                 </div>
 
-                {/* 3. Salary Configuration */}
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-emerald-100/40 rounded-full blur-3xl pointer-events-none"></div>
                     <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -686,8 +967,6 @@ const SuperAdminEmployeeCom = () => {
                     </div>
 
                     <div className="relative p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-
-                        {/* Earnings */}
                         <div className="relative bg-gradient-to-br from-green-50/80 to-white p-5 rounded-2xl border border-green-100 overflow-hidden">
                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
                             <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-green-100">
@@ -710,8 +989,6 @@ const SuperAdminEmployeeCom = () => {
                                 <FieldWrapper error={errors.otherAllowances}><Input label={<>Other Allowances (₹) <span className="text-red-500">*</span></>} type="number" name="otherAllowances" placeholder="0" value={formData.otherAllowances} onChange={handleInputChange} /></FieldWrapper>
                             </div>
                         </div>
-
-                        {/* Deductions */}
                         <div className="relative bg-gradient-to-br from-red-50/80 to-white p-5 rounded-2xl border border-red-100 overflow-hidden">
                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
                             <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-red-100">
@@ -735,7 +1012,6 @@ const SuperAdminEmployeeCom = () => {
                     </div>
                 </div>
 
-                {/* 4. Bank Information */}
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-100/40 rounded-full blur-3xl pointer-events-none"></div>
                     <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
@@ -757,8 +1033,8 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             </form>
 
-            {/* ==================== EMPLOYEES LIST ==================== */}
-            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* ==================== EMPLOYEES LIST WITH ACCORDION ==================== */}
+            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-10">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
                 <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -786,10 +1062,24 @@ const SuperAdminEmployeeCom = () => {
                     </div>
                 </div>
 
-                <div className="relative overflow-x-auto custom-scrollbar">
+                <div className="p-5">
+                    {/* Bulk Delete Bar */}
+                    {selectedIds.length > 0 && (
+                        <div className="bg-red-50 border border-red-200 p-3 sm:px-4 flex flex-col sm:flex-row justify-between items-center rounded-xl mb-5 gap-3 animate-in fade-in zoom-in-95">
+                            <span className="text-xs sm:text-sm font-bold text-red-700 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                                {selectedIds.length} Employees Selected
+                            </span>
+                            <div className="flex gap-2">
+                                <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])} className="text-slate-500 hover:bg-slate-200">Cancel</Button>
+                                <Button variant="danger" size="sm" icon={FaTrash} onClick={handleBulkDelete}>Delete Selected</Button>
+                            </div>
+                        </div>
+                    )}
+
                     {filteredEmployees.length === 0 ? (
-                        <div className="p-12 text-center">
-                            <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                        <div className="py-12 text-center border border-slate-100 rounded-2xl bg-slate-50/50">
+                            <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center mx-auto mb-3">
                                 <FaUser className="text-xl text-slate-300" />
                             </div>
                             <p className="text-xs sm:text-sm font-semibold text-slate-400">
@@ -797,67 +1087,151 @@ const SuperAdminEmployeeCom = () => {
                             </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[820px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-3.5 font-bold">Employee Details</th>
-                                    <th className="px-5 py-3.5 font-bold">Org Placement</th>
-                                    <th className="px-5 py-3.5 font-bold">Joined On</th>
-                                    <th className="px-5 py-3.5 font-bold text-center">Status</th>
-                                    <th className="px-5 py-3.5 font-bold text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredEmployees.map((emp, i) => (
-                                    <tr key={i} className={`transition-colors group ${isEditing && editEmployeeId === emp.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60'}`}>
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
-                                                    {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
+                        <div className="space-y-6">
+                            {Object.keys(groupedEmployees).map(company => (
+                                <div key={company} className="relative">
+                                    <h3 className="text-sm sm:text-base font-black text-[#010a1f] mb-3 pb-2 border-b border-slate-200 sticky top-0 bg-white z-10 pt-2">
+                                        {company}
+                                    </h3>
+                                    
+                                    <div className="space-y-4">
+                                        {Object.keys(groupedEmployees[company]).map(branch => {
+                                            const branchEmployees = groupedEmployees[company][branch];
+                                            const branchKey = `${company}_${branch}`;
+                                            const isExpanded = expandedBranches.includes(branchKey);
+                                            
+                                            // Determine Checkbox State
+                                            const branchIds = branchEmployees.map(e => e.id);
+                                            const isAllSelected = branchIds.every(id => selectedIds.includes(id));
+                                            const isPartiallySelected = branchIds.some(id => selectedIds.includes(id)) && !isAllSelected;
+
+                                            return (
+                                                <div key={branchKey} className={`border rounded-2xl overflow-hidden transition-all duration-300 ${isExpanded ? 'border-[#0437cc]/30 shadow-md shadow-[#0437cc]/5' : 'border-slate-200 hover:border-slate-300'}`}>
+                                                    
+                                                    {/* Branch Header Row */}
+                                                    <div className={`px-4 py-3 flex flex-row items-center justify-between gap-3 transition-colors ${isExpanded ? 'bg-gradient-to-r from-blue-50/80 to-indigo-50/40' : 'bg-slate-50/70 hover:bg-slate-50'}`}>
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isAllSelected}
+                                                                ref={input => {
+                                                                    if (input) input.indeterminate = isPartiallySelected;
+                                                                }}
+                                                                onChange={(e) => toggleBranchSelection(branchEmployees, e.target.checked)}
+                                                                className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
+                                                            />
+                                                            <div 
+                                                                className="flex items-center gap-2 cursor-pointer min-w-0" 
+                                                                onClick={() => toggleBranchAccordion(branchKey)}
+                                                            >
+                                                                <span className="text-xs sm:text-sm font-bold text-slate-800 truncate">{branch}</span>
+                                                                <span className="text-[10px] font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-full shrink-0 shadow-sm">
+                                                                    {branchEmployees.length} Staff
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleBranchDelete(branchKey, branchEmployees);
+                                                                }}
+                                                                className="w-7 h-7 rounded-lg inline-flex items-center justify-center bg-white text-slate-400 hover:text-red-500 hover:border-red-200 border border-slate-200 transition-all shadow-sm"
+                                                                title="Delete Entire Branch"
+                                                            >
+                                                                <FaTrash size={10} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => toggleBranchAccordion(branchKey)}
+                                                                className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all shadow-sm border ${isExpanded ? 'bg-[#0437cc] text-white border-[#0437cc]' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
+                                                            >
+                                                                {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Branch Content (Employees Table) */}
+                                                    {isExpanded && (
+                                                        <div className="overflow-x-auto bg-white border-t border-slate-100 custom-scrollbar">
+                                                            <table className="w-full text-left border-collapse min-w-[820px]">
+                                                                <thead>
+                                                                    <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/40">
+                                                                        <th className="px-4 py-2.5 w-10 text-center"></th>
+                                                                        <th className="px-4 py-2.5 font-bold">Employee Details</th>
+                                                                        <th className="px-4 py-2.5 font-bold">Designation & Dept</th>
+                                                                        <th className="px-4 py-2.5 font-bold">Joined On</th>
+                                                                        <th className="px-4 py-2.5 font-bold text-center">Status</th>
+                                                                        <th className="px-4 py-2.5 font-bold text-right">Actions</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-50">
+                                                                    {branchEmployees.map((emp) => (
+                                                                        <tr key={emp.id} className={`transition-colors group ${selectedIds.includes(emp.id) ? 'bg-blue-50/40' : (isEditing && editEmployeeId === emp.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60')}`}>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                <input 
+                                                                                    type="checkbox" 
+                                                                                    checked={selectedIds.includes(emp.id)}
+                                                                                    onChange={() => toggleEmployeeSelection(emp.id)}
+                                                                                    className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
+                                                                                />
+                                                                            </td>
+                                                                            <td className="px-4 py-3">
+                                                                                <div className="flex items-center gap-3 min-w-0">
+                                                                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs shrink-0">
+                                                                                        {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
+                                                                                    </div>
+                                                                                    <div className="min-w-0">
+                                                                                        <p className="text-xs font-bold text-slate-800 truncate">{emp.first_name} {emp.last_name}</p>
+                                                                                        <span className="inline-block mt-0.5 text-[9px] font-mono font-bold text-slate-500 tracking-wide">
+                                                                                            {emp.employee_id}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 min-w-0">
+                                                                                <p className="text-xs font-bold text-slate-700 truncate">{emp.designation}</p>
+                                                                                <p className="text-[10px] font-semibold text-slate-500 mt-0.5 truncate">{emp.department}</p>
+                                                                            </td>
+                                                                            <td className="px-4 py-3">
+                                                                                <p className="text-[11px] font-semibold text-slate-600 whitespace-nowrap">{formatDate(emp.joining_date)}</p>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold border whitespace-nowrap ${emp.status === 'Active'
+                                                                                    ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                                                                    : emp.status === 'Pending Activation'
+                                                                                        ? 'text-orange-700 bg-orange-50 border-orange-200'
+                                                                                        : 'text-red-700 bg-red-50 border-red-200'
+                                                                                    }`}>
+                                                                                    <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500' : emp.status === 'Pending Activation' ? 'bg-orange-500' : 'bg-red-500'}`}></span>
+                                                                                    {emp.status}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                <div className="flex gap-1 justify-end">
+                                                                                    <button onClick={() => handleView(emp)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50 bg-white border border-slate-100 shadow-sm" title="View Dossier">
+                                                                                        <FaEye className="text-[10px]" />
+                                                                                    </button>
+                                                                                    <button onClick={() => handleEdit(emp)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50 bg-white border border-slate-100 shadow-sm" title="Edit Employee">
+                                                                                        <FaEdit className="text-[10px]" />
+                                                                                    </button>
+                                                                                    <button onClick={() => handleDelete(emp.id)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 bg-white border border-slate-100 shadow-sm" title="Delete Employee">
+                                                                                        <FaTrash className="text-[10px]" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{emp.first_name} {emp.last_name}</p>
-                                                    <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
-                                                        {emp.employee_id}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4 min-w-0">
-                                            <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{emp.designation}</p>
-                                            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mt-0.5 truncate">{emp.department} <span className="text-slate-300 mx-0.5">•</span> {emp.branch}</p>
-                                        </td>
-                                        <td className="px-5 py-4">
-                                            <p className="text-xs sm:text-sm font-semibold text-[#010a1f] whitespace-nowrap">{formatDate(emp.joining_date)}</p>
-                                        </td>
-                                        <td className="px-5 py-4 text-center">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${emp.status === 'Active'
-                                                ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                : emp.status === 'Pending Activation'
-                                                    ? 'text-orange-700 bg-orange-50 border-orange-200'
-                                                    : 'text-red-700 bg-red-50 border-red-200'
-                                                }`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500' : emp.status === 'Pending Activation' ? 'bg-orange-500' : 'bg-red-500'}`}></span>
-                                                {emp.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-5 py-4 text-right">
-                                            <div className="flex gap-1 justify-end">
-                                                <button onClick={() => handleView(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50" title="View Dossier">
-                                                    <FaEye className="text-xs" />
-                                                </button>
-                                                <button onClick={() => handleEdit(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50" title="Edit Employee">
-                                                    <FaEdit className="text-xs" />
-                                                </button>
-                                                <button onClick={() => handleDelete(emp.id)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50" title="Delete Employee">
-                                                    <FaTrash className="text-xs" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </div>
             </div>
