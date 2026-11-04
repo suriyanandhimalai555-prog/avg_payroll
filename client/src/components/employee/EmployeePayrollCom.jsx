@@ -652,7 +652,7 @@ const EmployeePayrollCom = () => {
                                         </div>
                                         <div>
                                             <p className={`text-xs font-bold ${currentPayroll.isFlexibleShift ? 'text-green-800' : 'text-orange-800'}`}>
-                                                Shift Type: {currentPayroll.shiftType} {currentPayroll.isFlexibleShift ? '' : 'Shift'}
+                                                Shift Type: {currentPayroll.shiftType} {currentPayroll.isFlexibleShift && currentPayroll.shiftType !== 'Flexible' ? '' : 'Shift'}
                                             </p>
                                             <p className={`text-[10px] mt-0.5 ${currentPayroll.isFlexibleShift ? 'text-green-700' : 'text-orange-700'}`}>
                                                 {currentPayroll.isFlexibleShift 
