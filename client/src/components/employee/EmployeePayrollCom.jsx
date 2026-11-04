@@ -641,7 +641,6 @@ const EmployeePayrollCom = () => {
                                     <p className="text-[10px] text-slate-400 mt-2 italic">* The daily amount is calculated by dividing each monthly amount by {currentPayroll.countableDays} countable working days.</p>
                                 </div>
 
-                                {/* 2. Detailed Attendance Breakdown */}
                                 <div>
                                     <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">2. Attendance & LOP Breakdown</h3>
                                     
