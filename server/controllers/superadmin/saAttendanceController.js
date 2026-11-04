@@ -173,6 +173,47 @@ export const getAttendanceOverview = async (req, res) => {
     }
 };
 
+// NEW ENDPOINT: Fetches raw historical logs for the logs table
+export const getAttendanceHistoryLogs = async (req, res) => {
+    try {
+        const { start_date, end_date, company, branch, department } = req.query;
+        
+        if (!start_date || !end_date) {
+            return res.status(400).json({ message: "Start date and end date are required." });
+        }
+
+        let query = `
+            SELECT a.* 
+            FROM emp_attendance a
+            JOIN sa_employees e ON a.employee_id = e.employee_id
+            WHERE a.date >= $1 AND a.date <= $2
+        `;
+        const params = [start_date, end_date];
+        let paramIndex = 3;
+
+        if (company && company !== 'All') {
+            query += ` AND e.company = $${paramIndex++}`;
+            params.push(company);
+        }
+        if (branch && branch !== 'All') {
+            query += ` AND e.branch = $${paramIndex++}`;
+            params.push(branch);
+        }
+        if (department && department !== 'All') {
+            query += ` AND e.department = $${paramIndex++}`;
+            params.push(department);
+        }
+
+        query += ` ORDER BY a.date DESC, a.clock_in ASC`;
+
+        const result = await pool.query(query, params);
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('History Logs Error:', error);
+        res.status(500).json({ message: 'Error fetching historical attendance logs.' });
+    }
+};
+
 export const adminApproveAttendance = async (req, res) => {
     try {
         const { recordId } = req.params;
@@ -195,7 +236,6 @@ export const adminApproveAttendance = async (req, res) => {
 export const adminRejectAttendance = async (req, res) => {
     try {
         const { recordId } = req.params;
-        // Delete the rejected clock-in attempt
         const deleteQuery = `DELETE FROM emp_attendance WHERE id = $1 RETURNING id`;
         const result = await pool.query(deleteQuery, [recordId]);
 

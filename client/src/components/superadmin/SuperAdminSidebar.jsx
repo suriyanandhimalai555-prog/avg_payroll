@@ -45,7 +45,8 @@ const menuItems = [
         title: 'Attendance Management', icon: FaCalendarCheck,
         subItems: [
             { name: 'Attendance Overview', path: '/superadmin/attendance/overview' },
-            { name: 'Work Shifts', path: '/superadmin/attendance/shifts' }
+            { name: 'Work Shifts', path: '/superadmin/attendance/shifts' },
+            { name: 'Attendance Logs', path: '/superadmin/attendance/logs' }
         ]
     },
     {
