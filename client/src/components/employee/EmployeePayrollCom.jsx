@@ -305,7 +305,7 @@ const EmployeePayrollCom = () => {
                 { label: 'EPF Deduction', amount: record.deductions.epf },
                 { label: 'ESI Deduction', amount: record.deductions.esi },
                 { label: 'Professional Tax', amount: record.deductions.pt },
-                { label: 'TDS Deduction', amount: record.deductions.healthInsurance }, 
+                { label: 'TDS Deduction', amount: record.deductions.tds }, 
                 { label: 'Health Insurance', amount: record.deductions.healthInsurance }
             ].filter(d => d.amount > 0);
 
@@ -652,7 +652,7 @@ const EmployeePayrollCom = () => {
                                         </div>
                                         <div>
                                             <p className={`text-xs font-bold ${currentPayroll.isFlexibleShift ? 'text-green-800' : 'text-orange-800'}`}>
-                                                Shift Type: {currentPayroll.isFlexibleShift ? 'Flexible / Dev Fixed Shift' : 'Fixed Shift'}
+                                                Shift Type: {currentPayroll.shiftType} {currentPayroll.isFlexibleShift ? '' : 'Shift'}
                                             </p>
                                             <p className={`text-[10px] mt-0.5 ${currentPayroll.isFlexibleShift ? 'text-green-700' : 'text-orange-700'}`}>
                                                 {currentPayroll.isFlexibleShift 
@@ -700,7 +700,7 @@ const EmployeePayrollCom = () => {
                                                     <tr className="hover:bg-green-50/60 bg-green-50/30">
                                                         <td className="px-4 py-3 text-xs font-bold text-green-700 flex items-center gap-2"><FaCheckCircle className="text-green-500" /> Shift Grace Period</td>
                                                         <td className="px-4 py-3 text-sm font-bold text-[#010a1f] text-center tabular-nums">{currentPayroll.forgivenDays}</td>
-                                                        <td className="px-4 py-3 text-[11px] font-bold text-green-700">Forgiven Absences (Flex/Dev Shift)</td>
+                                                        <td className="px-4 py-3 text-[11px] font-bold text-green-700">Forgiven Absences</td>
                                                         <td className="px-4 py-3 text-xs font-bold text-green-600 text-right tabular-nums">+ ₹{formatCurrency(currentPayroll.forgivenDays * currentPayroll.dailyRate)}</td>
                                                     </tr>
                                                 )}

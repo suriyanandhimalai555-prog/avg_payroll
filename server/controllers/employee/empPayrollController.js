@@ -184,6 +184,7 @@ export const getPayrollData = async (req, res) => {
                 rawMissingDays,
                 forgivenDays,
                 deductibleMissingDays,
+                shiftType,
                 isFlexibleShift,
                 allowedUnpaidGraceDays,
                 totalPaidDays: presentCount + paidLeaveCount + holidayCount + projectedDays + forgivenDays,
