@@ -5,13 +5,11 @@ import {
     FaClock, FaCalendarDay, FaHistory, FaCalendarAlt,
     FaSignOutAlt, FaSignInAlt, FaTasks, FaFingerprint,
     FaBusinessTime, FaWalking, FaExclamationTriangle,
-    FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp, FaTimes, FaCheck, FaEdit, FaFilter,
-    FaUmbrellaBeach, FaPlaneDeparture
+    FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp, FaTimes, FaCheck, FaEdit, FaFilter, FaUmbrellaBeach
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
-// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -535,6 +533,11 @@ const EmployeeAttendanceCom = () => {
         );
     }
 
+    // Safety checks for shift details to gracefully handle string matching
+    const shiftTypeStr = shiftDetails?.shift_type ? shiftDetails.shift_type.trim() : 'Fixed';
+    const isFlexibleUI = shiftTypeStr === 'Flexible';
+    const isDevFixedUI = shiftTypeStr === 'Development Fixed';
+
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
             <style>
@@ -786,20 +789,20 @@ const EmployeeAttendanceCom = () => {
 
                             {/* ============ SHIFT RULES CARD ============ */}
                             {shiftDetails && (
-                                <div className={`relative p-4 rounded-2xl border mb-5 overflow-hidden ${shiftDetails.shift_type === 'Flexible'
+                                <div className={`relative p-4 rounded-2xl border mb-5 overflow-hidden ${isFlexibleUI
                                     ? 'bg-gradient-to-br from-green-50 to-emerald-50/50 border-green-100'
                                     : 'bg-gradient-to-br from-blue-50 to-indigo-50/40 border-blue-100'
                                     }`}>
-                                    <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl pointer-events-none ${shiftDetails.shift_type === 'Flexible' ? 'bg-green-200/40' : 'bg-blue-200/40'}`}></div>
+                                    <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl pointer-events-none ${isFlexibleUI ? 'bg-green-200/40' : 'bg-blue-200/40'}`}></div>
 
                                     <div className="relative flex justify-between items-start mb-2.5 gap-2">
                                         <h3 className="text-[13px] font-bold text-[#010a1f] truncate">{shiftDetails.shift_name}</h3>
-                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0 ${shiftDetails.shift_type === 'Flexible' ? 'bg-green-200 text-green-800' : 'bg-blue-200 text-blue-800'}`}>
-                                            {shiftDetails.shift_type || 'Fixed'}
+                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0 ${isFlexibleUI ? 'bg-green-200 text-green-800' : 'bg-blue-200 text-blue-800'}`}>
+                                            {shiftTypeStr}
                                         </span>
                                     </div>
 
-                                    {shiftDetails.shift_type === 'Flexible' ? (
+                                    {isFlexibleUI ? (
                                         <p className="relative text-[11px] text-green-700 font-semibold flex items-center gap-1.5">
                                             <FaFingerprint className="shrink-0 text-xs" /> Target: Complete {targetHours} Hrs
                                         </p>
@@ -1098,55 +1101,59 @@ const EmployeeAttendanceCom = () => {
                                                             <div className="p-4 space-y-3 bg-white border-t border-slate-100">
                                                                 {group.sessions.length > 0 ? (
                                                                     group.sessions.map((session, sIdx) => (
-                                                                        <div key={sIdx} className="relative bg-gradient-to-br from-slate-50 to-white border border-slate-200 p-4 rounded-xl shadow-sm mt-3">
-                                                                            <span className="absolute -top-2.5 left-3 bg-white border border-slate-200 text-[#010a1f] px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                                                                        <div key={sIdx} className="relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm mt-3 hover:shadow-md transition-shadow">
+                                                                            <span className="absolute -top-2.5 left-3 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
                                                                                 Session {sIdx + 1}
                                                                             </span>
-                                                                            
-                                                                            {/* Display Late Reason if exists */}
-                                                                            {session.late_reason && (
-                                                                                <div className="mt-4 mb-2 flex items-start gap-2 bg-orange-50 border border-orange-100 p-2.5 rounded-lg">
-                                                                                    <FaExclamationTriangle className="text-orange-500 text-xs shrink-0 mt-0.5" />
-                                                                                    <div>
-                                                                                        <p className="text-[9px] font-bold text-orange-700 uppercase tracking-wider">Late Reason</p>
-                                                                                        <p className="text-xs text-orange-900 font-medium break-words mt-0.5">"{session.late_reason}"</p>
-                                                                                    </div>
+
+                                                                            <div className="mt-2 grid grid-cols-2 gap-3">
+                                                                                <div className="min-w-0">
+                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                                                                                        <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center">
+                                                                                            <FaSignInAlt className="text-green-500 text-[8px]" />
+                                                                                        </span>
+                                                                                        In
+                                                                                    </p>
+                                                                                    <p className="text-xs font-bold text-slate-700 truncate">{formatTime(session.clock_in)}</p>
+                                                                                    <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_in_location || session.location_in}>
+                                                                                        <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_in_location || session.location_in || 'No Location'}
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                        <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_in_device || session.device_in || 'No Device'}
+                                                                                    </p>
+                                                                                </div>
+                                                                                <div className="min-w-0 border-l border-slate-100 pl-3">
+                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                                                                                        <span className="w-5 h-5 rounded-md bg-red-50 flex items-center justify-center">
+                                                                                            <FaSignOutAlt className="text-red-400 text-[8px]" />
+                                                                                        </span>
+                                                                                        Out
+                                                                                    </p>
+                                                                                    <p className="text-xs font-bold text-slate-700 truncate">
+                                                                                        {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>Working</span>}
+                                                                                    </p>
+                                                                                    {session.clock_out && (
+                                                                                        <>
+                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location || session.location_out}>
+                                                                                                <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || session.location_out || 'No Location'}
+                                                                                            </p>
+                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                                <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || session.device_out || 'No Device'}
+                                                                                            </p>
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                            {session.total_hours && (
+                                                                                <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
+                                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Duration</span>
+                                                                                    <span className="text-sm font-bold text-[#0437cc]">{session.total_hours}</span>
                                                                                 </div>
                                                                             )}
-
-                                                                            <div className="mt-2 space-y-2.5">
-                                                                                {session.clock_out ? (
-                                                                                    <div className="group">
-                                                                                        <div className="flex justify-between items-start mb-2">
-                                                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                                                                                <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center">
-                                                                                                    <FaCheck className="text-green-500 text-[8px]" />
-                                                                                                </span>
-                                                                                                End of Day Update
-                                                                                            </p>
-                                                                                            <button
-                                                                                                onClick={(e) => { e.stopPropagation(); openEditEodModal(session); }}
-                                                                                                className="text-slate-400 hover:text-[#0437cc] opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity bg-white p-1.5 rounded-lg shadow-sm border border-slate-200 shrink-0 hover:border-[#0437cc]/30"
-                                                                                                title="Edit Log"
-                                                                                            >
-                                                                                                <FaEdit size={10} />
-                                                                                            </button>
-                                                                                        </div>
-                                                                                        <p className="text-xs text-slate-700 leading-relaxed bg-white p-3 rounded-xl border border-slate-200 whitespace-pre-wrap shadow-sm">
-                                                                                            {session.eod_update || <span className="text-slate-400 italic">No EOD update provided. Click edit to add notes.</span>}
-                                                                                        </p>
-                                                                                    </div>
-                                                                                ) : (
-                                                                                    <div className="flex items-center gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
-                                                                                        <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                                                                                        <p className="text-[11px] text-blue-700 font-semibold">Session is currently active. EOD update will be logged upon clock out.</p>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
                                                                         </div>
                                                                     ))
                                                                 ) : (
-                                                                    <div className="text-center py-4">
+                                                                    <div className="col-span-2 text-center py-6">
                                                                         <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-2 border border-slate-100">
                                                                             {group.status === 'Holiday' || group.status === 'Week Off' || group.status === 'Leave' ? (
                                                                                 <FaUmbrellaBeach className="text-purple-400" />

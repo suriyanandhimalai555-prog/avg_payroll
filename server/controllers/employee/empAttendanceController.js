@@ -9,9 +9,10 @@ export const getMyShiftDetails = async (req, res) => {
         
         if (empRes.rows.length === 0) return res.status(404).json({ message: "Employee not found." });
         
-        const shiftName = empRes.rows[0].shift;
+        const shiftName = empRes.rows[0].shift || '';
 
-        const shiftQuery = `SELECT * FROM sa_work_shifts WHERE shift_name = $1 AND status = 'Active' LIMIT 1`;
+        // FIXED: Using LOWER(TRIM()) to guarantee a match even if there are accidental spaces in the production DB
+        const shiftQuery = `SELECT * FROM sa_work_shifts WHERE LOWER(TRIM(shift_name)) = LOWER(TRIM($1)) AND status = 'Active' LIMIT 1`;
         const shiftRes = await pool.query(shiftQuery, [shiftName]);
 
         if (shiftRes.rows.length === 0) {
@@ -81,23 +82,25 @@ export const clockIn = async (req, res) => {
         let status = 'Present';
         
         try {
+            // FIXED: Added LOWER(TRIM()) on the JOIN so the grace logic correctly triggers for Development Fixed
             const shiftQuery = `
                 SELECT s.* FROM sa_work_shifts s
-                JOIN sa_employees e ON s.shift_name = e.shift
+                JOIN sa_employees e ON LOWER(TRIM(s.shift_name)) = LOWER(TRIM(e.shift))
                 WHERE e.employee_id = $1;
             `;
             const shiftRes = await pool.query(shiftQuery, [employeeId]);
 
             if (shiftRes.rows.length > 0) {
                 const shift = shiftRes.rows[0];
+                const shiftType = (shift.shift_type || 'Fixed').trim();
 
-                if (shift.shift_type === 'Flexible') {
+                if (shiftType === 'Flexible') {
                     const fivePM = new Date(now);
                     fivePM.setHours(17, 0, 0, 0); 
                     if (now.getTime() >= fivePM.getTime()) {
                         return res.status(400).json({ message: 'It is past 5:00 PM. Flexible shift check-ins are not allowed at this time. You have been marked as Absent.' });
                     }
-                } else if (shift.shift_type === 'Fixed' || shift.shift_type === 'Development Fixed') {
+                } else if (shiftType === 'Fixed' || shiftType === 'Development Fixed') {
                     if (shift.start_time) {
                         let [sHrs, sMins] = shift.start_time.split(':').map(Number);
                         
