@@ -77,7 +77,8 @@ const menuItems = [
             { name: 'Payroll Settings', path: '/superadmin/settings/payroll' },
             { name: 'Tax Settings', path: '/superadmin/settings/tax' },
             { name: 'Notification Settings', path: '/superadmin/settings/notifications' },
-            { name: 'System Settings', path: '/superadmin/settings/system' }
+            { name: 'System Settings', path: '/superadmin/settings/system' },
+            { name: 'App Settings', path: '/superadmin/settings/app-version' }
         ]
     },
     { title: 'Audit Logs', icon: FaHistory, path: '/superadmin/audit-logs' },

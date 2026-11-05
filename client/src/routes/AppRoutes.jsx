@@ -53,6 +53,7 @@ import SuperAdminPayrollSettings from '../pages/superadmin/settings/SuperAdminPa
 import SuperAdminTaxSettings from '../pages/superadmin/settings/SuperAdminTaxSettings';
 import SuperAdminNotificationSettings from '../pages/superadmin/settings/SuperAdminNotificationSettings';
 import SuperAdminSystemSettings from '../pages/superadmin/settings/SuperAdminSystemSettings';
+import SuperAdminAppSettings from '../pages/superadmin/settings/SuperAdminAppSettings';
 
 import SuperAdminAuditLogs from '../pages/superadmin/SuperAdminAuditLogs';
 import SuperAdminProfile from '../pages/superadmin/SuperAdminProfile';
@@ -168,6 +169,7 @@ const AppRoutes = () => {
                 <Route path="settings/tax" element={<SuperAdminTaxSettings />} />
                 <Route path="settings/notifications" element={<SuperAdminNotificationSettings />} />
                 <Route path="settings/system" element={<SuperAdminSystemSettings />} />
+                <Route path="settings/app-version" element={<SuperAdminAppSettings />} />
 
                 <Route path="audit-logs" element={<SuperAdminAuditLogs />} />
                 <Route path="profile" element={<SuperAdminProfile />} />
