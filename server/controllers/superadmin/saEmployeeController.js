@@ -1,7 +1,7 @@
 import pool from '../../config/db.js';
-import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import { createActivationToken } from '../../utils/activationToken.js';
+import { sendMicrosoftEmail, isMicrosoftGraphConfigured } from '../../services/microsoftGraphService.js';
 
 dotenv.config();
 
@@ -10,118 +10,154 @@ const parseNum = (val) => (val !== undefined && val !== null && val !== '' && !i
 // Helper to reliably parse both string dates and raw Excel numeric date serials
 const parseExcelDate = (val) => {
     if (!val) return null;
-    
+
     if (typeof val === 'number') {
         const date = new Date(Math.round((val - 25569) * 86400 * 1000));
         return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
     }
-    
+
     const date = new Date(val);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
 };
 
-// Mail template generator to keep code DRY
+// Outlook-safe, table-based HTML email generator
 const generateWelcomeEmailHtml = (data, activationLink) => {
     return `
-    <!DOCTYPE html>
-    <html>
+    <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+    <html xmlns="http://www.w3.org/1999/xhtml">
     <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Welcome to AVG Payroll</title>
+        <style type="text/css">
+            body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+            table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+            img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+            body { margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        </style>
     </head>
-    <body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f7f6; padding: 40px 10px;">
+    <body style="margin: 0; padding: 0; background-color: #f4f7f6;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f7f6; padding: 40px 10px;">
             <tr>
                 <td align="center">
-                    <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(1, 10, 31, 0.06);">
+                    <!-- Main Card -->
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0;">
+                        <!-- Top Border -->
                         <tr>
-                            <td height="6" style="background: linear-gradient(90deg, #0437cc 0%, #f77704 100%);"></td>
+                            <td height="6" style="background-color: #0437cc; border-top-left-radius: 8px; border-top-right-radius: 8px;"></td>
                         </tr>
+                        
+                        <!-- Header Row -->
                         <tr>
-                            <td style="background-color: #ffffff; padding: 25px 30px; border-bottom: 1px solid #f1f5f9;">
-                                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                            <td style="padding: 20px 30px; border-bottom: 1px solid #e2e8f0;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                     <tr>
                                         <td align="left" valign="middle">
-                                            <table border="0" cellspacing="0" cellpadding="0">
+                                            <table border="0" cellpadding="0" cellspacing="0">
                                                 <tr>
-                                                    <td valign="middle" style="padding-right: 12px;">
-                                                        <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                    <td valign="middle" style="padding-right: 10px;">
+                                                        <img src="https://avgpayroll.com/logo.jpg" alt="AVG" width="40" height="40" style="display: block; border-radius: 4px;">
                                                     </td>
-                                                    <td valign="middle">
-                                                        <span style="font-size: 22px; font-weight: 800; color: #010a1f; letter-spacing: -0.5px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                                                            AVG <span style="color: #f77704;">Payroll</span>
-                                                        </span>
+                                                    <td valign="middle" style="font-size: 20px; font-weight: bold; color: #010a1f; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                        AVG <span style="color: #f77704;">Payroll</span>
                                                     </td>
                                                 </tr>
                                             </table>
                                         </td>
-                                        <td align="right" valign="middle">
-                                            <span style="display: inline-block; padding: 6px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
-                                                Welcome
-                                            </span>
+                                        <td align="right" valign="middle" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">
+                                            <span style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 5px 10px; border-radius: 12px;">Welcome</span>
                                         </td>
                                     </tr>
                                 </table>
                             </td>
                         </tr>
+
+                        <!-- Banner Section -->
                         <tr>
-                            <td style="background: linear-gradient(135deg, #0437cc 0%, #1f56d6 100%); padding: 40px 30px; text-align: center;">
-                                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Welcome to ${data.company}!</h1>
-                                <p style="color: #bfdbfe; margin: 10px 0 0 0; font-size: 14px; font-weight: 500;">Let's get your account set up</p>
+                            <td align="center" style="background-color: #0437cc; padding: 40px 20px;">
+                                <h1 style="color: #ffffff; font-size: 22px; font-weight: bold; margin: 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                    Welcome to ${data.company}!
+                                </h1>
+                                <p style="color: #bfdbfe; font-size: 14px; margin: 8px 0 0 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                    Let's get your account set up
+                                </p>
                             </td>
                         </tr>
+
+                        <!-- Main Content -->
                         <tr>
                             <td style="padding: 40px 30px;">
-                                <h2 style="color: #010a1f; margin: 0 0 15px 0; font-size: 18px; font-weight: 700;">Hello ${data.firstName || data.first_name || data['First Name']},</h2>
-                                <p style="color: #475569; line-height: 1.6; font-size: 15px; margin: 0 0 30px 0;">
+                                <h2 style="color: #010a1f; font-size: 18px; font-weight: bold; margin: 0 0 15px 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                    Hello ${data.firstName || data.first_name || data['First Name']},
+                                </h2>
+                                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                     We are thrilled to welcome you aboard. Your official employee profile has been successfully generated in our system. Here is a quick summary of your profile:
                                 </p>
-                                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 30px;">
+
+                                <!-- Details Grid (Table based for Outlook) -->
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 30px;">
                                     <tr>
-                                        <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
-                                            <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Employee ID</p>
-                                            <p style="margin: 5px 0 0 0; color: #0437cc; font-size: 16px; font-weight: 800; font-family: monospace;">${data.employeeId || data.employee_id || data['Employee ID']}</p>
+                                        <!-- Box 1 -->
+                                        <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
+                                            <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Employee ID</p>
+                                            <p style="margin: 4px 0 0 0; color: #0437cc; font-size: 15px; font-weight: bold; font-family: 'Courier New', Courier, monospace;">
+                                                ${data.employeeId || data.employee_id || data['Employee ID']}
+                                            </p>
                                         </td>
                                         <td width="4%"></td>
-                                        <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
-                                            <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Designation</p>
-                                            <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.designation || data.Designation || 'Staff'}</p>
+                                        <!-- Box 2 -->
+                                        <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
+                                            <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Designation</p>
+                                            <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                ${data.designation || data.Designation || 'Staff'}
+                                            </p>
                                         </td>
                                     </tr>
                                     <tr><td height="10" colspan="3"></td></tr>
                                     <tr>
-                                        <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
-                                            <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Department</p>
-                                            <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.department || data.Department || 'General'}</p>
+                                        <!-- Box 3 -->
+                                        <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
+                                            <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Department</p>
+                                            <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                ${data.department || data.Department || 'General'}
+                                            </p>
                                         </td>
                                         <td width="4%"></td>
-                                        <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
-                                            <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Location</p>
-                                            <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.location || data.Location || data.branch || data.Branch} <span style="color:#64748b; font-weight: 500; font-size: 12px;">(${data.branch || data.Branch})</span></p>
+                                        <!-- Box 4 -->
+                                        <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
+                                            <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Location</p>
+                                            <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                ${data.location || data.Location || data.branch || data.Branch} 
+                                                <span style="color: #64748b; font-size: 11px; font-weight: normal;">(${data.branch || data.Branch})</span>
+                                            </p>
                                         </td>
                                     </tr>
                                 </table>
-                                <p style="color: #475569; line-height: 1.6; font-size: 15px; margin: 0 0 35px 0; text-align: center;">
-                                    To get started and access your employee dashboard, please activate your account and set up a secure password by clicking the button below.
+
+                                <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; text-align: center; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                    To get started and access your employee dashboard, please activate your account and set up a secure password.
                                 </p>
-                                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+
+                                <!-- Call to Action Button -->
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                     <tr>
                                         <td align="center">
-                                            <a href="${activationLink}" style="display: inline-block; padding: 16px 45px; background: linear-gradient(135deg, #f77704 0%, #ea580c 100%); color: #ffffff; text-decoration: none; font-weight: 700; border-radius: 8px; font-size: 15px; box-shadow: 0 4px 12px rgba(247, 119, 4, 0.3);">
+                                            <a href="${activationLink}" style="display: inline-block; padding: 14px 35px; background-color: #f77704; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: bold; border-radius: 6px; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                                 Activate My Account
                                             </a>
                                         </td>
                                     </tr>
                                 </table>
+
                             </td>
                         </tr>
+
+                        <!-- Footer -->
                         <tr>
-                            <td style="background-color: #f8fafc; padding: 25px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-                                <p style="margin: 0 0 5px 0; color: #64748b; font-size: 12px; font-weight: 500;">
+                            <td align="center" style="background-color: #f8fafc; padding: 20px; border-top: 1px solid #e2e8f0;">
+                                <p style="margin: 0 0 5px 0; color: #64748b; font-size: 12px; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                     This is an automated security notification. Please do not reply to this email.
                                 </p>
-                                <p style="margin: 0; color: #94a3b8; font-size: 11px;">
+                                <p style="margin: 0; color: #94a3b8; font-size: 11px; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                     &copy; ${new Date().getFullYear()} AVG Prime Tech. All rights reserved.
                                 </p>
                             </td>
@@ -166,7 +202,7 @@ export const createEmployee = async (req, res) => {
             parseExcelDate(data.dob) || null,
             data.gender || 'Other',
             data.address || 'N/A',
-            data.employeeId, 
+            data.employeeId,
             parseExcelDate(data.joiningDate || data.joining_date) || new Date().toISOString().split('T')[0],
             data.company,
             data.branch,
@@ -202,40 +238,31 @@ export const createEmployee = async (req, res) => {
         const result = await pool.query(insertQuery, values);
         const newEmployee = result.rows[0];
 
-        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-            console.warn('Production Warning: Missing SMTP credentials. Skipping email dispatch.');
+        if (!isMicrosoftGraphConfigured()) {
+            console.warn('Production Warning: Missing Microsoft Graph API credentials. Skipping email dispatch.');
             return res.status(201).json({
-                message: `Employee created successfully with ID: ${data.employeeId}, but the activation email was skipped.`,
+                message: `Employee created successfully with ID: ${data.employeeId}, but the activation email was skipped due to missing OAuth credentials.`,
                 employee: newEmployee
             });
         }
 
         try {
-            const transporter = nodemailer.createTransport({
-                host: 'smtp.hostinger.com',
-                port: 465,
-                secure: true,
-                auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-            });
-
             const activationToken = createActivationToken(data.email, 'employee');
             const isProd = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
             const fallbackUrl = isProd ? 'https://avgpayroll.com' : 'http://localhost:5173';
             const frontendBaseUrl = process.env.FRONTEND_URL || fallbackUrl;
             const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
-            const mailOptions = {
-                from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,
+            await sendMicrosoftEmail({
                 to: data.email,
                 subject: 'Welcome to the Team! Action Required: Set up your account',
                 html: generateWelcomeEmailHtml(data, activationLink)
-            };
+            });
 
-            await transporter.sendMail(mailOptions);
-            res.status(201).json({ message: 'Employee created and email sent successfully.', employee: newEmployee });
+            res.status(201).json({ message: 'Employee created and email sent successfully via Microsoft Graph.', employee: newEmployee });
 
         } catch (emailError) {
-            console.error('SMTP Email Error:', emailError);
+            console.error('Microsoft Graph Email Error:', emailError.message);
             res.status(201).json({
                 message: `Employee created successfully with ID: ${data.employeeId}, but the activation email failed to send.`,
                 employee: newEmployee
@@ -400,17 +427,7 @@ export const bulkUploadEmployees = async (req, res) => {
 
         let successCount = 0;
         let errorList = [];
-        
-        let transporter = null;
-        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-            transporter = nodemailer.createTransport({
-                host: 'smtp.hostinger.com',
-                port: 465,
-                secure: true,
-                auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-            });
-        }
-        
+
         const isProd = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
         const fallbackUrl = isProd ? 'https://avgpayroll.com' : 'http://localhost:5173';
         const frontendBaseUrl = process.env.FRONTEND_URL || fallbackUrl;
@@ -450,7 +467,7 @@ export const bulkUploadEmployees = async (req, res) => {
                     parseExcelDate(data.dob || data.DOB) || null,
                     data.gender || data.Gender || 'Other',
                     data.address || data.Address || 'N/A',
-                    employeeId, 
+                    employeeId,
                     parseExcelDate(data.joiningDate || data.joining_date || data['Joining Date']) || new Date().toISOString().split('T')[0],
                     company,
                     data.branch || data.Branch || 'Head Office',
@@ -486,19 +503,18 @@ export const bulkUploadEmployees = async (req, res) => {
                 await pool.query(insertQuery, values);
                 successCount++;
 
-                if (transporter) {
+                if (isMicrosoftGraphConfigured()) {
                     try {
                         const activationToken = createActivationToken(email, 'employee');
                         const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
-                        const mailOptions = {
-                            from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,
+
+                        await sendMicrosoftEmail({
                             to: email,
                             subject: 'Welcome to the Team! Action Required: Set up your account',
                             html: generateWelcomeEmailHtml(data, activationLink)
-                        };
-                        await transporter.sendMail(mailOptions);
+                        });
                     } catch (mailErr) {
-                        console.error('Bulk Email Error for', email, ':', mailErr);
+                        console.error('Bulk Email Error for', email, ':', mailErr.message);
                         errorList.push(`Row ${index + 2}: Inserted successfully but failed to send activation email.`);
                     }
                 }

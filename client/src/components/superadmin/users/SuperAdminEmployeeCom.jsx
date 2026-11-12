@@ -59,7 +59,7 @@ const ActionModal = ({ isOpen, type, title, message, onConfirm, onCancel }) => {
                     <div className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center shadow-sm ${isDestructive ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-blue-50 text-[#0437cc] border border-blue-100'}`}>
                         {isDestructive ? <FaTrash className="text-xl" /> : <FaExclamationTriangle className="text-xl" />}
                     </div>
-                    
+
                     <div>
                         <h2 className="text-lg font-bold text-[#010a1f] mb-1">{title}</h2>
                         <p className="text-sm text-slate-500 leading-relaxed">{message}</p>
@@ -67,18 +67,18 @@ const ActionModal = ({ isOpen, type, title, message, onConfirm, onCancel }) => {
 
                     <div className="flex gap-3 pt-4">
                         {!isAlert && (
-                            <Button 
-                                variant="ghost" 
-                                fullWidth 
+                            <Button
+                                variant="ghost"
+                                fullWidth
                                 onClick={onCancel}
                                 className="text-slate-500 hover:bg-slate-100 rounded-xl"
                             >
                                 Cancel
                             </Button>
                         )}
-                        <Button 
-                            variant={isDestructive ? 'danger' : 'primary'} 
-                            fullWidth 
+                        <Button
+                            variant={isDestructive ? 'danger' : 'primary'}
+                            fullWidth
                             onClick={onConfirm}
                             className={`rounded-xl shadow-lg ${isDestructive ? 'shadow-red-500/25' : 'shadow-[#0437cc]/25'}`}
                         >
@@ -94,7 +94,7 @@ const ActionModal = ({ isOpen, type, title, message, onConfirm, onCancel }) => {
 const SuperAdminEmployeeCom = () => {
     const INITIAL_FORM_STATE = {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '', address: '',
-        employeeId: '', joiningDate: '', 
+        employeeId: '', joiningDate: '',
         company: '', branch: '', department: '', designation: '', manager: '', empType: '', location: '', shift: '', status: 'Pending Activation',
         ctc: '', monthlySalary: '', basic: '', hra: '', conveyance: '', medical: '', specialAllowance: '', otherAllowances: '',
         epf: '', esi: '', healthInsurance: '', pt: '', tds: '', leaves: '',
@@ -353,7 +353,7 @@ const SuperAdminEmployeeCom = () => {
 
     const handleDelete = (id) => {
         showConfirm(
-            'Delete Employee?', 
+            'Delete Employee?',
             'Are you sure you want to delete this employee? This action is permanent and cannot be undone.',
             () => executeDelete(id)
         );
@@ -549,9 +549,9 @@ const SuperAdminEmployeeCom = () => {
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
-            
+
             {/* Unified Action Modal for Alerts & Confirms */}
-            <ActionModal 
+            <ActionModal
                 isOpen={modalConfig.isOpen}
                 type={modalConfig.type}
                 title={modalConfig.title}
@@ -585,7 +585,7 @@ const SuperAdminEmployeeCom = () => {
                         </div>
 
                         <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
-                            
+
                             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative overflow-hidden">
                                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#0437cc]/5 rounded-full blur-2xl pointer-events-none"></div>
                                 <h3 className="text-xs font-bold text-[#010a1f] mb-3 uppercase tracking-wider flex items-center gap-2">
@@ -815,10 +815,10 @@ const SuperAdminEmployeeCom = () => {
 
                     <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
                         {!isEditing && (
-                            <Button 
-                                variant="outline" 
-                                icon={FaUpload} 
-                                onClick={() => setIsBulkModalOpen(true)} 
+                            <Button
+                                variant="outline"
+                                icon={FaUpload}
+                                onClick={() => setIsBulkModalOpen(true)}
                                 className="w-full sm:w-auto border-green-600 text-green-700 hover:bg-green-600 hover:text-white rounded-xl text-xs sm:text-sm py-2"
                             >
                                 Bulk Upload
@@ -950,20 +950,18 @@ const SuperAdminEmployeeCom = () => {
 
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-emerald-100/40 rounded-full blur-3xl pointer-events-none"></div>
-                    <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-emerald-500/20">
-                                <FaMoneyCheckAlt className="text-sm" />
-                            </span>
-                            <div className="min-w-0">
-                                <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Salary Configuration</h2>
-                                <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Monthly earnings and deductions</p>
-                            </div>
+                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-emerald-500/20">
+                            <FaMoneyCheckAlt className="text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Salary Configuration</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Monthly earnings and deductions</p>
                         </div>
-                        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm shrink-0">
-                            <span className="text-[10px] sm:text-xs font-bold text-emerald-700 uppercase tracking-wider">Live Net Pay:</span>
-                            <span className="text-base sm:text-lg font-black text-green-700 tabular-nums">{formatCurrency(liveNet)}</span>
-                        </div>
+                    </div>
+                    <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm shrink-0 m-5 mb-0">
+                        <span className="text-[10px] sm:text-xs font-bold text-emerald-700 uppercase tracking-wider">Live Net Pay:</span>
+                        <span className="text-base sm:text-lg font-black text-green-700 tabular-nums">{formatCurrency(liveNet)}</span>
                     </div>
 
                     <div className="relative p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
@@ -1093,13 +1091,13 @@ const SuperAdminEmployeeCom = () => {
                                     <h3 className="text-sm sm:text-base font-black text-[#010a1f] mb-3 pb-2 border-b border-slate-200 sticky top-0 bg-white z-10 pt-2">
                                         {company}
                                     </h3>
-                                    
+
                                     <div className="space-y-4">
                                         {Object.keys(groupedEmployees[company]).map(branch => {
                                             const branchEmployees = groupedEmployees[company][branch];
                                             const branchKey = `${company}_${branch}`;
                                             const isExpanded = expandedBranches.includes(branchKey);
-                                            
+
                                             // Determine Checkbox State
                                             const branchIds = branchEmployees.map(e => e.id);
                                             const isAllSelected = branchIds.every(id => selectedIds.includes(id));
@@ -1107,12 +1105,12 @@ const SuperAdminEmployeeCom = () => {
 
                                             return (
                                                 <div key={branchKey} className={`border rounded-2xl overflow-hidden transition-all duration-300 ${isExpanded ? 'border-[#0437cc]/30 shadow-md shadow-[#0437cc]/5' : 'border-slate-200 hover:border-slate-300'}`}>
-                                                    
+
                                                     {/* Branch Header Row */}
                                                     <div className={`px-4 py-3 flex flex-row items-center justify-between gap-3 transition-colors ${isExpanded ? 'bg-gradient-to-r from-blue-50/80 to-indigo-50/40' : 'bg-slate-50/70 hover:bg-slate-50'}`}>
                                                         <div className="flex items-center gap-3 min-w-0">
-                                                            <input 
-                                                                type="checkbox" 
+                                                            <input
+                                                                type="checkbox"
                                                                 checked={isAllSelected}
                                                                 ref={input => {
                                                                     if (input) input.indeterminate = isPartiallySelected;
@@ -1120,8 +1118,8 @@ const SuperAdminEmployeeCom = () => {
                                                                 onChange={(e) => toggleBranchSelection(branchEmployees, e.target.checked)}
                                                                 className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
                                                             />
-                                                            <div 
-                                                                className="flex items-center gap-2 cursor-pointer min-w-0" 
+                                                            <div
+                                                                className="flex items-center gap-2 cursor-pointer min-w-0"
                                                                 onClick={() => toggleBranchAccordion(branchKey)}
                                                             >
                                                                 <span className="text-xs sm:text-sm font-bold text-slate-800 truncate">{branch}</span>
@@ -1131,7 +1129,7 @@ const SuperAdminEmployeeCom = () => {
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-2 shrink-0">
-                                                            <button 
+                                                            <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     handleBranchDelete(branchKey, branchEmployees);
@@ -1141,7 +1139,7 @@ const SuperAdminEmployeeCom = () => {
                                                             >
                                                                 <FaTrash size={10} />
                                                             </button>
-                                                            <button 
+                                                            <button
                                                                 onClick={() => toggleBranchAccordion(branchKey)}
                                                                 className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all shadow-sm border ${isExpanded ? 'bg-[#0437cc] text-white border-[#0437cc]' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
                                                             >
@@ -1149,6 +1147,9 @@ const SuperAdminEmployeeCom = () => {
                                                             </button>
                                                         </div>
                                                     </div>
+
+                                                    {/* Hidden button to bridge the branch delete logic with the existing bulk delete flow securely */}
+                                                    <button id="hidden-bulk-delete-trigger" className="hidden" onClick={handleBulkDelete}></button>
 
                                                     {/* Branch Content (Employees Table) */}
                                                     {isExpanded && (
@@ -1168,8 +1169,8 @@ const SuperAdminEmployeeCom = () => {
                                                                     {branchEmployees.map((emp) => (
                                                                         <tr key={emp.id} className={`transition-colors group ${selectedIds.includes(emp.id) ? 'bg-blue-50/40' : (isEditing && editEmployeeId === emp.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60')}`}>
                                                                             <td className="px-4 py-3 text-center">
-                                                                                <input 
-                                                                                    type="checkbox" 
+                                                                                <input
+                                                                                    type="checkbox"
                                                                                     checked={selectedIds.includes(emp.id)}
                                                                                     onChange={() => toggleEmployeeSelection(emp.id)}
                                                                                     className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"

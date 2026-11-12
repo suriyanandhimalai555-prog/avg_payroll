@@ -1,7 +1,7 @@
 import pool from '../../config/db.js';
-import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import { createActivationToken } from '../../utils/activationToken.js';
+import { sendMicrosoftEmail, isMicrosoftGraphConfigured } from '../../services/microsoftGraphService.js';
 
 dotenv.config();
 
@@ -40,25 +40,15 @@ export const createHrUser = async (req, res) => {
         const result = await pool.query(insertQuery, values);
         const newHrUser = result.rows[0];
 
-        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-            console.warn('Production Warning: Missing SMTP credentials. Skipping email dispatch.');
+        if (!isMicrosoftGraphConfigured()) {
+            console.warn('Production Warning: Missing Microsoft Graph API credentials. Skipping email dispatch.');
             return res.status(201).json({
-                message: `HR User created successfully with ID: ${data.hrId}, but the activation email was skipped because SMTP credentials are not configured in this environment.`,
+                message: `HR User created successfully with ID: ${data.hrId}, but the activation email was skipped because Microsoft OAuth credentials are not configured in this environment.`,
                 user: newHrUser
             });
         }
 
         try {
-            const transporter = nodemailer.createTransport({
-                host: 'smtp.hostinger.com',
-                port: 465,
-                secure: true,
-                auth: {
-                    user: process.env.EMAIL_USER,
-                    pass: process.env.EMAIL_PASS,
-                },
-            });
-
             const activationToken = createActivationToken(data.email, 'hr');
             
             const isProd = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
@@ -67,152 +57,164 @@ export const createHrUser = async (req, res) => {
 
             const activationLink = `${frontendBaseUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
 
-            const mailOptions = {
-                from: `"AVG Prime Tech" <${process.env.EMAIL_USER}>`,
-                to: data.email,
-                subject: 'HR Portal Access - Set up your account',
-                html: `
-                <!DOCTYPE html>
-                <html>
+            const htmlContent = `
+                <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+                <html xmlns="http://www.w3.org/1999/xhtml">
                 <head>
-                    <meta charset="utf-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Welcome HR</title>
+                    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+                    <title>Welcome to AVG Payroll</title>
+                    <style type="text/css">
+                        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+                        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+                        img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+                        body { margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+                    </style>
                 </head>
-                <body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
-                    
-                    <!-- Outer Wrapper -->
-                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f7f6; padding: 40px 10px;">
+                <body style="margin: 0; padding: 0; background-color: #f4f7f6;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f7f6; padding: 40px 10px;">
                         <tr>
                             <td align="center">
-                                <!-- Main Container -->
-                                <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(1, 10, 31, 0.06);">
-                                    
-                                    <!-- Top Accent Bar -->
+                                <!-- Main Card -->
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                    <!-- Top Border -->
                                     <tr>
-                                        <td height="6" style="background: linear-gradient(90deg, #0437cc 0%, #f77704 100%);"></td>
+                                        <td height="6" style="background-color: #0437cc; border-top-left-radius: 8px; border-top-right-radius: 8px;"></td>
                                     </tr>
-
-                                    <!-- Header / Logo Row -->
+                                    
+                                    <!-- Header Row -->
                                     <tr>
-                                        <td style="background-color: #ffffff; padding: 25px 30px; border-bottom: 1px solid #f1f5f9;">
-                                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                        <td style="padding: 20px 30px; border-bottom: 1px solid #e2e8f0;">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                                 <tr>
                                                     <td align="left" valign="middle">
-                                                        <table border="0" cellspacing="0" cellpadding="0">
+                                                        <table border="0" cellpadding="0" cellspacing="0">
                                                             <tr>
-                                                                <td valign="middle" style="padding-right: 12px;">
-                                                                    <img src="https://avgpayroll.com/logo.jpg" alt="AVG Payroll" style="height: 45px; width: auto; display: block; border-radius: 6px;">
+                                                                <td valign="middle" style="padding-right: 10px;">
+                                                                    <img src="https://avgpayroll.com/logo.jpg" alt="AVG" width="40" height="40" style="display: block; border-radius: 4px;">
                                                                 </td>
-                                                                <td valign="middle">
-                                                                    <span style="font-size: 22px; font-weight: 800; color: #010a1f; letter-spacing: -0.5px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                                                                        AVG <span style="color: #f77704;">Payroll</span>
-                                                                    </span>
+                                                                <td valign="middle" style="font-size: 20px; font-weight: bold; color: #010a1f; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                                    AVG <span style="color: #f77704;">Payroll</span>
                                                                 </td>
                                                             </tr>
                                                         </table>
                                                     </td>
-                                                    <td align="right" valign="middle">
-                                                        <span style="display: inline-block; padding: 6px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
-                                                            HR Admin
-                                                        </span>
+                                                    <td align="right" valign="middle" style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">
+                                                        <span style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 5px 10px; border-radius: 12px;">HR Admin</span>
                                                     </td>
                                                 </tr>
                                             </table>
                                         </td>
                                     </tr>
 
-                                    <!-- Hero Banner -->
+                                    <!-- Banner Section -->
                                     <tr>
-                                        <td style="background: linear-gradient(135deg, #0437cc 0%, #1f56d6 100%); padding: 40px 30px; text-align: center;">
-                                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Welcome to HR Management</h1>
-                                            <p style="color: #bfdbfe; margin: 10px 0 0 0; font-size: 14px; font-weight: 500;">Your administrative access is ready</p>
+                                        <td align="center" style="background-color: #0437cc; padding: 40px 20px;">
+                                            <h1 style="color: #ffffff; font-size: 22px; font-weight: bold; margin: 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                Welcome to HR Management
+                                            </h1>
+                                            <p style="color: #bfdbfe; font-size: 14px; margin: 8px 0 0 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                Your administrative access is ready
+                                            </p>
                                         </td>
                                     </tr>
 
-                                    <!-- Content Body -->
+                                    <!-- Main Content -->
                                     <tr>
                                         <td style="padding: 40px 30px;">
-                                            <h2 style="color: #010a1f; margin: 0 0 15px 0; font-size: 18px; font-weight: 700;">Hello ${data.firstName},</h2>
-                                            
-                                            <p style="color: #475569; line-height: 1.6; font-size: 15px; margin: 0 0 30px 0;">
+                                            <h2 style="color: #010a1f; font-size: 18px; font-weight: bold; margin: 0 0 15px 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                Hello ${data.firstName},
+                                            </h2>
+                                            <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                                 You have been granted HR Administrative access at <strong>${data.company}</strong>. Please activate your account and set up your secure password to get started.
                                             </p>
 
-                                            <!-- Detail Cards Grid -->
-                                            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 30px;">
-                                                <!-- Row 1: HR ID & Designation -->
+                                            <!-- Details Grid (Table based for Outlook) -->
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 30px;">
                                                 <tr>
-                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
-                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">HR ID</p>
-                                                        <p style="margin: 5px 0 0 0; color: #0437cc; font-size: 16px; font-weight: 800; font-family: monospace;">${data.hrId}</p>
+                                                    <!-- Box 1 -->
+                                                    <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">HR ID</p>
+                                                        <p style="margin: 4px 0 0 0; color: #0437cc; font-size: 15px; font-weight: bold; font-family: 'Courier New', Courier, monospace;">
+                                                            ${data.hrId}
+                                                        </p>
                                                     </td>
                                                     <td width="4%"></td>
-                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
-                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Designation</p>
-                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.designation || 'HR Admin'}</p>
+                                                    <!-- Box 2 -->
+                                                    <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Designation</p>
+                                                        <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                            ${data.designation || 'HR Admin'}
+                                                        </p>
                                                     </td>
                                                 </tr>
-                                                <!-- Spacer -->
                                                 <tr><td height="10" colspan="3"></td></tr>
-                                                <!-- Row 2: Department & Branch -->
                                                 <tr>
-                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
-                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Department</p>
-                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.department || 'Human Resources'}</p>
+                                                    <!-- Box 3 -->
+                                                    <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Department</p>
+                                                        <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                            ${data.department || 'Human Resources'}
+                                                        </p>
                                                     </td>
                                                     <td width="4%"></td>
-                                                    <td width="48%" align="left" style="background-color: #f8fafc; padding: 15px 20px; border-radius: 10px; border: 1px solid #e2e8f0; vertical-align: top;">
-                                                        <p style="margin: 0; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Branch</p>
-                                                        <p style="margin: 5px 0 0 0; color: #010a1f; font-size: 14px; font-weight: 700; word-break: break-word;">${data.branch}</p>
+                                                    <!-- Box 4 -->
+                                                    <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
+                                                        <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Branch</p>
+                                                        <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
+                                                            ${data.branch}
+                                                        </p>
                                                     </td>
                                                 </tr>
                                             </table>
 
-                                            <p style="color: #475569; line-height: 1.6; font-size: 15px; margin: 0 0 35px 0; text-align: center;">
+                                            <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; text-align: center; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                                 To access your HR dashboard, activate your account by clicking the button below.
                                             </p>
 
-                                            <!-- CTA Button -->
-                                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                            <!-- Call to Action Button -->
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                                 <tr>
                                                     <td align="center">
-                                                        <a href="${activationLink}" style="display: inline-block; padding: 16px 45px; background: linear-gradient(135deg, #f77704 0%, #ea580c 100%); color: #ffffff; text-decoration: none; font-weight: 700; border-radius: 8px; font-size: 15px; box-shadow: 0 4px 12px rgba(247, 119, 4, 0.3);">
+                                                        <a href="${activationLink}" style="display: inline-block; padding: 14px 35px; background-color: #f77704; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: bold; border-radius: 6px; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                                             Activate HR Account
                                                         </a>
                                                     </td>
                                                 </tr>
                                             </table>
+
                                         </td>
                                     </tr>
 
                                     <!-- Footer -->
                                     <tr>
-                                        <td style="background-color: #f8fafc; padding: 25px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-                                            <p style="margin: 0 0 5px 0; color: #64748b; font-size: 12px; font-weight: 500;">
+                                        <td align="center" style="background-color: #f8fafc; padding: 20px; border-top: 1px solid #e2e8f0;">
+                                            <p style="margin: 0 0 5px 0; color: #64748b; font-size: 12px; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                                 This is an automated security notification. Please do not reply to this email.
                                             </p>
-                                            <p style="margin: 0; color: #94a3b8; font-size: 11px;">
+                                            <p style="margin: 0; color: #94a3b8; font-size: 11px; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                                 &copy; ${new Date().getFullYear()} AVG Prime Tech. All rights reserved.
                                             </p>
                                         </td>
                                     </tr>
-
                                 </table>
                             </td>
                         </tr>
                     </table>
                 </body>
                 </html>
-                `
-            };
+            `;
 
-            await transporter.sendMail(mailOptions);
-            res.status(201).json({ message: 'HR user created and email sent successfully.', user: newHrUser });
+            await sendMicrosoftEmail({
+                to: data.email,
+                subject: 'HR Portal Access - Set up your account',
+                html: htmlContent
+            });
+            
+            res.status(201).json({ message: 'HR user created and email sent successfully via Microsoft Graph.', user: newHrUser });
         } catch (emailError) {
-            console.error('SMTP Email Error:', emailError);
+            console.error('Microsoft Graph Email Error:', emailError.message);
             res.status(201).json({
-                message: `HR user created successfully with ID: ${data.hrId}, but the activation email failed to send. Check SMTP settings.`,
+                message: `HR user created successfully with ID: ${data.hrId}, but the activation email failed to send. Check Azure settings.`,
                 user: newHrUser
             });
         }

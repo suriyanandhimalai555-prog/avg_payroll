@@ -1,10 +1,10 @@
 import pool from '../config/db.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import { verifyActivationToken } from '../utils/activationToken.js';
 import rateLimit from 'express-rate-limit';
+import { sendMicrosoftEmail, isMicrosoftGraphConfigured } from '../services/microsoftGraphService.js';
 
 dotenv.config();
 
@@ -14,16 +14,6 @@ export const loginRateLimiter = rateLimit({
     message: { message: 'Too many login attempts. Please wait 30 seconds before trying again.' },
     standardHeaders: true, 
     legacyHeaders: false, 
-});
-
-const transporter = nodemailer.createTransport({
-    host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
 });
 
 const ensureOtpTableExists = async () => {
@@ -280,14 +270,32 @@ export const requestOtp = async (req, res) => {
             ON CONFLICT (email) DO UPDATE SET otp = EXCLUDED.otp, expiry = EXCLUDED.expiry, verified = false
         `, [safeEmail, otp, expiry]);
 
-        const mailOptions = {
-            from: `"AVG Portal Security" <${process.env.EMAIL_USER}>`,
+        if (!isMicrosoftGraphConfigured()) {
+            return res.status(500).json({ message: 'Email service is not configured properly.' });
+        }
+
+        const htmlContent = `
+            <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                <div style="background-color: #0437cc; padding: 20px; text-align: center;">
+                    <h2 style="color: #ffffff; margin: 0;">Password Reset Request</h2>
+                </div>
+                <div style="padding: 30px; background-color: #ffffff; text-align: center;">
+                    <p style="color: #475569; font-size: 16px;">Hello ${userRes.rows[0].fname},</p>
+                    <p style="color: #475569; font-size: 16px;">Your One-Time Password (OTP) to reset your account password is:</p>
+                    <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #f77704;">
+                        ${otp}
+                    </div>
+                    <p style="color: #94a3b8; font-size: 12px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+                </div>
+            </div>
+        `;
+
+        await sendMicrosoftEmail({
             to: safeEmail,
             subject: 'Password Reset OTP - AVG Portal',
-            html: `<div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;"><div style="background-color: #0437cc; padding: 20px; text-align: center;"><h2 style="color: #ffffff; margin: 0;">Password Reset Request</h2></div><div style="padding: 30px; background-color: #ffffff; text-align: center;"><p style="color: #475569; font-size: 16px;">Hello ${userRes.rows[0].fname},</p><p style="color: #475569; font-size: 16px;">Your One-Time Password (OTP) to reset your account password is:</p><div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #f77704;">${otp}</div><p style="color: #94a3b8; font-size: 12px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p></div></div>`
-        };
+            html: htmlContent
+        });
 
-        await transporter.sendMail(mailOptions);
         res.status(200).json({ message: 'OTP sent successfully to your email.' });
     } catch (error) {
         console.error('OTP Request Error:', error);
