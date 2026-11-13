@@ -108,8 +108,13 @@ export const clockIn = async (req, res) => {
                         const expectedTime = new Date(now);
                         expectedTime.setHours(sHrs, sMins, 0, 0);
 
-                        const graceMs = (shift.grace_time || shift.grace_period || 0) * 60000;
+                        // Safely parse grace time, fallback to 15 minutes if undefined
+                        const graceValue = parseInt(shift.grace_time || shift.grace_period || 15, 10);
+                        const graceMs = (isNaN(graceValue) ? 15 : graceValue) * 60000;
                         const allowedTimeMs = expectedTime.getTime() + graceMs;
+                        
+                        // Debugging logs to help verify timezone logic
+                        console.log(`[Late Check] Expected: ${expectedTime.toLocaleTimeString()} | Allowed Until: ${new Date(allowedTimeMs).toLocaleTimeString()} | Actual: ${now.toLocaleTimeString()}`);
 
                         // 1:00 PM Lockout Check
                         const onePM = new Date(now);
@@ -120,7 +125,7 @@ export const clockIn = async (req, res) => {
 
                         // Late / Grace Time Check
                         if (now.getTime() > allowedTimeMs) {
-                            if (!lateReason) {
+                            if (!lateReason || lateReason.trim() === '') {
                                 return res.status(428).json({ message: 'LATE_REASON_REQUIRED' });
                             }
                             lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);

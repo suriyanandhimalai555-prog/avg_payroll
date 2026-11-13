@@ -1125,20 +1125,20 @@ const EmployeeAttendanceCom = () => {
                                                                                             <FaSignOutAlt className="text-red-400 text-[8px]" />
                                                                                         </span>
                                                                                         Out
+                                                                                        <p className="text-xs font-bold text-slate-700 truncate">
+                                                                                            {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>Working</span>}
+                                                                                        </p>
+                                                                                        {session.clock_out && (
+                                                                                            <>
+                                                                                                <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location || session.location_out}>
+                                                                                                    <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || session.location_out || 'No Location'}
+                                                                                                </p>
+                                                                                                <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                                    <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || session.device_out || 'No Device'}
+                                                                                                </p>
+                                                                                            </>
+                                                                                        )}
                                                                                     </p>
-                                                                                    <p className="text-xs font-bold text-slate-700 truncate">
-                                                                                        {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>Working</span>}
-                                                                                    </p>
-                                                                                    {session.clock_out && (
-                                                                                        <>
-                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location || session.location_out}>
-                                                                                                <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || session.location_out || 'No Location'}
-                                                                                            </p>
-                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
-                                                                                                <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || session.device_out || 'No Device'}
-                                                                                            </p>
-                                                                                        </>
-                                                                                    )}
                                                                                 </div>
                                                                             </div>
                                                                             {session.total_hours && (
@@ -1360,8 +1360,7 @@ const EmployeeAttendanceCom = () => {
                                                                                 No punches recorded for this day.
                                                                             </p>
                                                                         </div>
-                                                                    )
-                                                                    }
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                         </tr>
