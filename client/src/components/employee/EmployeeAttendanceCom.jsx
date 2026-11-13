@@ -19,6 +19,14 @@ const getAuthConfig = () => {
     };
 };
 
+// Extremely robust date string extractor to prevent browser timezone shifting bugs (forces local YYYY-MM-DD)
+const getSafeDateStr = (dateVal) => {
+    if (!dateVal) return '';
+    if (typeof dateVal === 'string' && dateVal.includes('T')) return dateVal.split('T')[0];
+    const d = new Date(dateVal);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+};
+
 const EmployeeAttendanceCom = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('today');
@@ -86,11 +94,8 @@ const EmployeeAttendanceCom = () => {
                 setJoiningDate(jd);
             }
 
-            const todayDateStr = new Date().toLocaleDateString('en-CA');
-            const todays = fetchedHistory.filter(record => {
-                const recordDateStr = new Date(record.date).toLocaleDateString('en-CA');
-                return recordDateStr === todayDateStr;
-            });
+            const todayDateStr = getSafeDateStr(new Date());
+            const todays = fetchedHistory.filter(record => getSafeDateStr(record.date) === todayDateStr);
             setTodayLogs(todays);
 
             let previousMs = 0;
@@ -121,7 +126,8 @@ const EmployeeAttendanceCom = () => {
     const latestRecord = todayLogs.length > 0 ? todayLogs[0] : null;
     const activeSession = fullHistory.find(r => r.clock_in && !r.clock_out);
     const isClockedIn = !!activeSession;
-    const isPendingOldCheckout = isClockedIn && new Date(activeSession.date).toLocaleDateString('en-CA') !== new Date().toLocaleDateString('en-CA');
+    const activeSessionDateStr = activeSession ? getSafeDateStr(activeSession.date) : null;
+    const isPendingOldCheckout = isClockedIn && activeSessionDateStr !== getSafeDateStr(new Date());
     const hasWorkedToday = todayLogs.length > 0;
     
     const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8) : 8;
@@ -201,7 +207,7 @@ const EmployeeAttendanceCom = () => {
         try {
             const locationData = await fetchLocationData();
             const deviceData = getDeviceInfo();
-            const todayDate = now.toLocaleDateString('en-CA');
+            const todayDate = getSafeDateStr(now);
 
             await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
                 employeeId: user.employee_id,
@@ -244,7 +250,7 @@ const EmployeeAttendanceCom = () => {
             const locationData = await fetchLocationData();
             const deviceData = getDeviceInfo();
             const recordToClose = activeSession;
-            const targetDate = new Date(recordToClose.date).toLocaleDateString('en-CA');
+            const targetDate = getSafeDateStr(recordToClose.date);
 
             await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
                 employeeId: user.employee_id,
@@ -334,13 +340,13 @@ const EmployeeAttendanceCom = () => {
         }
 
         const displayData = dateArray.map(dateObj => {
-            const dateStr = dateObj.toLocaleDateString('en-CA');
-            const sessions = fullHistory.filter(r => new Date(r.date).toLocaleDateString('en-CA') === dateStr);
-            const holidayRecord = holidays.find(h => new Date(h.holiday_date).toLocaleDateString('en-CA') === dateStr);
+            const dateStr = getSafeDateStr(dateObj);
+            const sessions = fullHistory.filter(r => getSafeDateStr(r.date) === dateStr);
+            const holidayRecord = holidays.find(h => getSafeDateStr(h.holiday_date) === dateStr);
             
             const approvedLeave = leaveRequests.find(req => {
-                const start = new Date(req.from_date).toLocaleDateString('en-CA');
-                const end = new Date(req.to_date).toLocaleDateString('en-CA');
+                const start = getSafeDateStr(req.from_date);
+                const end = getSafeDateStr(req.to_date);
                 return dateStr >= start && dateStr <= end;
             });
 
@@ -533,10 +539,8 @@ const EmployeeAttendanceCom = () => {
         );
     }
 
-    // Safety checks for shift details to gracefully handle string matching
     const shiftTypeStr = shiftDetails?.shift_type ? shiftDetails.shift_type.trim() : 'Fixed';
     const isFlexibleUI = shiftTypeStr === 'Flexible';
-    const isDevFixedUI = shiftTypeStr === 'Development Fixed';
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
@@ -550,20 +554,13 @@ const EmployeeAttendanceCom = () => {
                         0% { transform: rotate(0deg); }
                         100% { transform: rotate(360deg); }
                     }
-                    @keyframes digitFade {
-                        0% { opacity: 0.6; transform: translateY(2px); }
-                        100% { opacity: 1; transform: translateY(0); }
-                    }
                     @keyframes liveGlow {
                         0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
                         50% { box-shadow: 0 0 0 12px rgba(34,197,94,0); }
                     }
                     .premium-clock-icon { animation: premiumPulse 2.5s ease-in-out infinite; }
                     .live-glow { animation: liveGlow 2s ease-in-out infinite; }
-                    .digital-font {
-                        font-variant-numeric: tabular-nums;
-                        letter-spacing: -0.02em;
-                    }
+                    .digital-font { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
                 `}
             </style>
 
@@ -1145,9 +1142,26 @@ const EmployeeAttendanceCom = () => {
                                                                                 </div>
                                                                             </div>
                                                                             {session.total_hours && (
-                                                                                <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
-                                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Duration</span>
-                                                                                    <span className="text-sm font-bold text-[#0437cc]">{session.total_hours}</span>
+                                                                                <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-3">
+                                                                                    <div className="flex justify-between items-center">
+                                                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Duration</span>
+                                                                                        <span className="text-sm font-bold text-[#0437cc]">{session.total_hours}</span>
+                                                                                    </div>
+                                                                                    {session.clock_out && (
+                                                                                        <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl shadow-sm">
+                                                                                            <div className="flex justify-between items-center mb-2.5 pb-2 border-b border-slate-200/60">
+                                                                                                <span className="text-[10px] font-bold text-[#010a1f] uppercase tracking-wider flex items-center gap-1.5">
+                                                                                                    <FaTasks className="text-[#0437cc] text-xs" /> End of Day Report
+                                                                                                </span>
+                                                                                                <button onClick={(e) => { e.stopPropagation(); openEditEodModal(session); }} className="text-[#0437cc] hover:text-blue-800 text-[10px] font-bold flex items-center gap-1 transition-colors">
+                                                                                                    <FaEdit /> Edit Report
+                                                                                                </button>
+                                                                                            </div>
+                                                                                            <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                                                                                {session.eod_update || <span className="text-slate-400 italic">No EOD report submitted.</span>}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                    )}
                                                                                 </div>
                                                                             )}
                                                                         </div>
@@ -1309,9 +1323,26 @@ const EmployeeAttendanceCom = () => {
                                                                                     </div>
                                                                                 </div>
                                                                                 {session.total_hours && (
-                                                                                    <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
-                                                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Duration</span>
-                                                                                        <span className="text-sm font-bold text-[#0437cc]">{session.total_hours}</span>
+                                                                                    <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-3">
+                                                                                        <div className="flex justify-between items-center">
+                                                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Duration</span>
+                                                                                            <span className="text-sm font-bold text-[#0437cc]">{session.total_hours}</span>
+                                                                                        </div>
+                                                                                        {session.clock_out && (
+                                                                                            <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl shadow-sm">
+                                                                                                <div className="flex justify-between items-center mb-2.5 pb-2 border-b border-slate-200/60">
+                                                                                                    <span className="text-[10px] font-bold text-[#010a1f] uppercase tracking-wider flex items-center gap-1.5">
+                                                                                                        <FaTasks className="text-[#0437cc] text-xs" /> End of Day Report
+                                                                                                    </span>
+                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditEodModal(session); }} className="text-[#0437cc] hover:text-blue-800 text-[10px] font-bold flex items-center gap-1 transition-colors">
+                                                                                                        <FaEdit /> Edit Report
+                                                                                                    </button>
+                                                                                                </div>
+                                                                                                <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                                                                                    {session.eod_update || <span className="text-slate-400 italic">No EOD report submitted.</span>}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                        )}
                                                                                     </div>
                                                                                 )}
                                                                             </div>

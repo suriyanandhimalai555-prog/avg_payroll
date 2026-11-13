@@ -11,7 +11,6 @@ export const getMyShiftDetails = async (req, res) => {
         
         const shiftName = empRes.rows[0].shift || '';
 
-        // FIXED: Using LOWER(TRIM()) to guarantee a match even if there are accidental spaces in the production DB
         const shiftQuery = `SELECT * FROM sa_work_shifts WHERE LOWER(TRIM(shift_name)) = LOWER(TRIM($1)) AND status = 'Active' LIMIT 1`;
         const shiftRes = await pool.query(shiftQuery, [shiftName]);
 
@@ -82,7 +81,6 @@ export const clockIn = async (req, res) => {
         let status = 'Present';
         
         try {
-            // FIXED: Added LOWER(TRIM()) on the JOIN so the grace logic correctly triggers for Development Fixed
             const shiftQuery = `
                 SELECT s.* FROM sa_work_shifts s
                 JOIN sa_employees e ON LOWER(TRIM(s.shift_name)) = LOWER(TRIM(e.shift))
@@ -160,7 +158,7 @@ export const clockOut = async (req, res) => {
         const activeSession = await pool.query(findQuery, [employeeId, todayDate]);
 
         if (activeSession.rows.length === 0) {
-            return res.status(400).json({ message: 'No active clock-in session found for today.' });
+            return res.status(400).json({ message: 'No active clock-in session found for this date.' });
         }
 
         const recordId = activeSession.rows[0].id;
