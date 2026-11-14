@@ -70,12 +70,41 @@ const getMicrosoftAccessToken = async () => {
     return cachedAccessToken;
 };
 
-export const sendMicrosoftEmail = async ({ to, subject, html }) => {
+// Updated to accept an array of attachments
+export const sendMicrosoftEmail = async ({ to, subject, html, attachments = [] }) => {
     if (!to || !subject || !html) {
         throw new Error('Recipient, subject and HTML content are required.');
     }
 
     const accessToken = await getMicrosoftAccessToken();
+
+    const messagePayload = {
+        message: {
+            subject,
+            body: {
+                contentType: 'HTML',
+                content: html
+            },
+            toRecipients: [
+                {
+                    emailAddress: {
+                        address: to
+                    }
+                }
+            ]
+        },
+        saveToSentItems: true
+    };
+
+    // Append attachments if provided
+    if (attachments && attachments.length > 0) {
+        messagePayload.message.attachments = attachments.map(att => ({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            name: att.name,
+            contentType: att.contentType,
+            contentBytes: att.contentBytes
+        }));
+    }
 
     const response = await fetch(GRAPH_SEND_MAIL_URL, {
         method: 'POST',
@@ -83,23 +112,7 @@ export const sendMicrosoftEmail = async ({ to, subject, html }) => {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            message: {
-                subject,
-                body: {
-                    contentType: 'HTML',
-                    content: html
-                },
-                toRecipients: [
-                    {
-                        emailAddress: {
-                            address: to
-                        }
-                    }
-                ]
-            },
-            saveToSentItems: true
-        })
+        body: JSON.stringify(messagePayload)
     });
 
     if (!response.ok) {
@@ -114,6 +127,5 @@ export const sendMicrosoftEmail = async ({ to, subject, html }) => {
         );
     }
 
-    // Graph normally responds with HTTP 202 Accepted.
     return { success: true };
 };
