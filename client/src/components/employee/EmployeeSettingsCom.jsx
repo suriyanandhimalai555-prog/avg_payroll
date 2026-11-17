@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FaUserCog, FaKey, FaBell, FaShieldAlt, FaSignOutAlt, FaMapMarkerAlt,
-    FaLock, FaDesktop, FaMobileAlt, FaCheckCircle, FaEnvelope, FaUserTie, FaBuilding, FaSpinner
+    FaLock, FaDesktop, FaMobileAlt, FaCheckCircle, FaEnvelope, FaUserTie, FaBuilding, FaSpinner, FaTrash, FaExclamationTriangle, FaTimes
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -10,7 +10,6 @@ import ToggleSwitch from '../../components/common/ToggleSwitch';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -39,6 +38,12 @@ const EmployeeSettingsCom = () => {
 
     const [sessions, setSessions] = useState([]);
     const [isRevoking, setIsRevoking] = useState(false);
+    
+    // Delete Account State
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [deletePassword, setDeletePassword] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState('');
 
     useEffect(() => {
         if (!user) return;
@@ -102,27 +107,15 @@ const EmployeeSettingsCom = () => {
         e.preventDefault();
 
         if (passwords.new !== passwords.confirm) {
-            return setStatus({
-                loading: false,
-                success: '',
-                error: 'New passwords do not match.'
-            });
+            return setStatus({ loading: false, success: '', error: 'New passwords do not match.' });
         }
-
         if (passwords.new.length < 12 || passwords.new.length > 128) {
-            return setStatus({
-                loading: false,
-                success: '',
-                error: 'Your new password must be between 12 and 128 characters.'
-            });
+            return setStatus({ loading: false, success: '', error: 'Your new password must be between 12 and 128 characters.' });
         }
 
         setStatus({ loading: true, error: '', success: '' });
         try {
-            if (!localStorage.getItem('token')) {
-                throw new Error('Your session has expired. Please sign in again.');
-            }
-
+            if (!localStorage.getItem('token')) throw new Error('Your session has expired. Please sign in again.');
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/change-password`, {
                 currentPassword: passwords.current,
                 newPassword: passwords.new
@@ -168,9 +161,7 @@ const EmployeeSettingsCom = () => {
 
         setStatus({ loading: true, error: '', success: '' });
         try {
-            await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/reset-password`, {
-                email: user.email, role: user.role, newPassword: passwords.new
-            });
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/reset-password`, { email: user.email, role: user.role, newPassword: passwords.new });
             setStatus({ loading: false, error: '', success: 'Password has been reset securely!' });
             setPwdFlow('standard');
             setPasswords({ current: '', new: '', confirm: '' });
@@ -200,6 +191,48 @@ const EmployeeSettingsCom = () => {
         logout();
         navigate('/login');
     };
+    
+    const handleDeleteAccount = async (e) => {
+        e.preventDefault();
+        if (!deletePassword) {
+            setDeleteError('Please enter your password to confirm.');
+            return;
+        }
+
+        setIsDeleting(true);
+        setDeleteError('');
+        
+        try {
+            // Using standard fetch instead of axios to bypass global 401 interceptors 
+            // that might redirect to /login automatically when the password is wrong
+            const token = localStorage.getItem('token')?.replace(/^["']|["']$/g, '');
+            
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/account`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ password: deletePassword })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                setDeleteError(data.message || 'Failed to request account deletion.');
+                setIsDeleting(false);
+                return;
+            }
+            
+            setIsDeleteModalOpen(false);
+            logout();
+            navigate('/login', { state: { message: data.message || 'Account deletion request submitted.' } });
+            
+        } catch (error) {
+            setDeleteError('A network error occurred. Please try again.');
+            setIsDeleting(false);
+        }
+    };
 
     const menuItems = [
         { id: 'account', label: 'Account Summary', icon: FaUserCog },
@@ -208,7 +241,6 @@ const EmployeeSettingsCom = () => {
         { id: 'notifications', label: 'Notification Preferences', icon: FaBell },
     ];
 
-    // ==================== SHIMMER ====================
     if (loading || !user) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden animate-pulse">
@@ -218,51 +250,72 @@ const EmployeeSettingsCom = () => {
                         <div className="h-3 md:h-4 bg-slate-200 rounded-md w-1/2"></div>
                     </div>
                 </div>
-
-                <div className="flex flex-col lg:flex-row gap-5 sm:gap-6">
-                    <div className="w-full lg:w-64 xl:w-72 shrink-0">
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex flex-row lg:flex-col gap-2 overflow-hidden">
-                            {[1, 2, 3, 4].map(i => (
-                                <div key={i} className="h-11 sm:h-12 bg-slate-200 rounded-xl w-full"></div>
-                            ))}
-                            <div className="hidden lg:block h-px bg-slate-100 my-2 mx-2"></div>
-                            <div className="h-11 sm:h-12 bg-slate-200 rounded-xl w-full"></div>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-5 border-b border-slate-100 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-slate-200 shrink-0"></div>
-                            <div className="space-y-2 w-1/2">
-                                <div className="h-5 bg-slate-200 rounded-md w-1/2"></div>
-                                <div className="h-3 bg-slate-200 rounded-md w-3/4"></div>
-                            </div>
-                        </div>
-                        <div className="p-5 sm:p-6 space-y-6">
-                            <div className="flex items-center gap-4 border-b border-slate-100 pb-5">
-                                <div className="w-16 h-16 rounded-2xl bg-slate-200 shrink-0"></div>
-                                <div className="space-y-2 w-1/2">
-                                    <div className="h-5 bg-slate-200 rounded-md w-3/4"></div>
-                                    <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {[1, 2, 3, 4].map(i => (
-                                    <div key={i} className="space-y-2">
-                                        <div className="h-3 bg-slate-200 rounded w-1/3"></div>
-                                        <div className="h-11 bg-slate-200 rounded-xl w-full"></div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         );
     }
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden">
+
+            {/* ==================== DELETE ACCOUNT MODAL ==================== */}
+            {isDeleteModalOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-100">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 to-orange-500"></div>
+
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-red-50/50">
+                            <div className="flex items-center gap-3">
+                                <span className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                                    <FaExclamationTriangle className="text-red-600 text-sm" />
+                                </span>
+                                <div>
+                                    <h2 className="text-sm sm:text-base font-bold text-red-700">Delete Account</h2>
+                                    <p className="text-[10px] text-red-500 font-medium">Submit deletion request</p>
+                                </div>
+                            </div>
+                            <button onClick={() => { setIsDeleteModalOpen(false); setDeleteError(''); setDeletePassword(''); }} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 sm:p-6">
+                            <p className="text-sm text-slate-600 mb-5 leading-relaxed">
+                                You are about to submit a request to permanently delete your account (<strong className="text-[#010a1f]">{user.email}</strong>). All your personal preferences and configurations will be scheduled for removal.
+                                <br/><br/>
+                                <span className="text-orange-600 font-semibold">Note:</span> This request requires Super Admin approval to ensure no critical historical payroll or attendance records are lost. <strong>You will be logged out upon submission.</strong>
+                            </p>
+                            
+                            {deleteError && (
+                                <div className="mb-4 bg-red-50 text-red-700 p-3 rounded-xl text-xs font-semibold border border-red-100 flex items-center gap-2">
+                                    <span className="w-4 h-4 rounded-full bg-red-100 flex items-center justify-center shrink-0 text-red-600 text-[10px] font-black">!</span>
+                                    {deleteError}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleDeleteAccount} className="space-y-4">
+                                <Input 
+                                    type="password" 
+                                    label="Confirm with Password" 
+                                    placeholder="Enter your current password" 
+                                    icon={FaLock} 
+                                    value={deletePassword} 
+                                    onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(''); }} 
+                                    required 
+                                    disabled={isDeleting} 
+                                />
+                                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                                    <Button type="button" variant="ghost" fullWidth onClick={() => { setIsDeleteModalOpen(false); setDeleteError(''); setDeletePassword(''); }} className="text-slate-500 bg-slate-100 hover:bg-slate-200 text-sm rounded-xl">
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" variant="danger" fullWidth disabled={isDeleting || !deletePassword} className="shadow-lg shadow-red-500/25 text-sm rounded-xl py-2.5">
+                                        {isDeleting ? 'Submitting...' : 'Submit Request'}
+                                    </Button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ==================== PAGE HEADER ==================== */}
             <div className="relative bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -308,9 +361,9 @@ const EmployeeSettingsCom = () => {
                         <div className="hidden lg:block h-px bg-slate-100 my-2 mx-2"></div>
                         <button
                             onClick={handleLogout}
-                            className="group flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 rounded-xl text-xs sm:text-[13px] md:text-sm font-bold text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all whitespace-nowrap shrink-0 lg:shrink w-full"
+                            className="group flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 rounded-xl text-xs sm:text-[13px] md:text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#010a1f] transition-all whitespace-nowrap shrink-0 lg:shrink w-full"
                         >
-                            <FaSignOutAlt className="text-sm sm:text-base lg:text-lg text-red-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                            <FaSignOutAlt className="text-sm sm:text-base lg:text-lg text-slate-400 shrink-0 group-hover:text-slate-600 transition-colors" />
                             <span className="truncate">Logout</span>
                         </button>
                     </div>
@@ -325,7 +378,7 @@ const EmployeeSettingsCom = () => {
                             <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
                             {/* Header */}
-                            <div className="relative p-5 border-b border-slate-100 flex items-center justify-between gap-3">
+                            <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white shrink-0 shadow-md shadow-[#0437cc]/20">
                                         <FaUserCog className="text-sm" />
@@ -335,6 +388,15 @@ const EmployeeSettingsCom = () => {
                                         <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Your core system identity details</p>
                                     </div>
                                 </div>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setIsDeleteModalOpen(true)}
+                                    className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600 text-xs py-2 rounded-xl transition-all self-start sm:self-auto shrink-0"
+                                    icon={FaTrash}
+                                >
+                                    Delete Account
+                                </Button>
                             </div>
 
                             <div className="relative p-5 sm:p-6 space-y-5 sm:space-y-6">
@@ -620,7 +682,6 @@ const EmployeeSettingsCom = () => {
                             </div>
                         </div>
                     )}
-
                 </div>
             </div>
         </div>

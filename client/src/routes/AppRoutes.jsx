@@ -58,6 +58,8 @@ import SuperAdminAppSettings from '../pages/superadmin/settings/SuperAdminAppSet
 import SuperAdminAuditLogs from '../pages/superadmin/SuperAdminAuditLogs';
 import SuperAdminProfile from '../pages/superadmin/SuperAdminProfile';
 
+import SuperAdminNotification from '../pages/superadmin/SuperAdminNotification';
+
 // HR 
 import HRLayout from '../layouts/HRLayout';
 import HRDashboard from '../pages/hr/HRDashboard';
@@ -173,6 +175,8 @@ const AppRoutes = () => {
 
                 <Route path="audit-logs" element={<SuperAdminAuditLogs />} />
                 <Route path="profile" element={<SuperAdminProfile />} />
+                
+                <Route path="notifications" element={<SuperAdminNotification />} />
             </Route>
 
             {/* HR Protected Routes */}
