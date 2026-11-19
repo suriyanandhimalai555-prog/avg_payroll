@@ -4,7 +4,7 @@ import { getAppSettings, updateAppSettings } from '../../controllers/superadmin/
 
 const router = express.Router();
 
-router.get('/', authenticateToken, requireRole('superadmin'), getAppSettings);
+router.get('/', getAppSettings);
 router.put('/', authenticateToken, requireRole('superadmin'), updateAppSettings);
 
 export default router;

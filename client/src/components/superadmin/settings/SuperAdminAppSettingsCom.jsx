@@ -33,7 +33,8 @@ const SuperAdminAppSettingsCom = () => {
             setLoading(true);
             setApiError('');
             try {
-                const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-app-version`, getAuthConfig());
+                // Public GET request — no auth token required
+                const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-app-version`);
                 const result = response.data;
                 
                 if (result.success && result.data) {
@@ -77,6 +78,7 @@ const SuperAdminAppSettingsCom = () => {
         setApiError('');
 
         try {
+            // Protected PUT request — retains Super Admin auth token
             const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-app-version`, formData, getAuthConfig());
             if (response.data.success) {
                 setSuccessMsg('App version settings updated successfully!');
