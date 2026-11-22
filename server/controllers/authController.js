@@ -10,10 +10,10 @@ dotenv.config();
 
 export const loginRateLimiter = rateLimit({
     windowMs: 30 * 1000,
-    max: 3, 
+    max: 3,
     message: { message: 'Too many login attempts. Please wait 30 seconds before trying again.' },
-    standardHeaders: true, 
-    legacyHeaders: false, 
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 
 const ensureOtpTableExists = async () => {
@@ -27,7 +27,6 @@ const ensureOtpTableExists = async () => {
     `);
 };
 
-// Setup Sessions Table for Active Tracking
 const ensureSessionTableExists = async () => {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS user_sessions (
@@ -52,7 +51,7 @@ const getTableByRole = (role) => {
     return null;
 };
 
-// ==================== LOGIN (WITH SESSION TRACKING) ====================
+// ==================== LOGIN ====================
 export const login = async (req, res) => {
     try {
         const { identifier, password, role } = req.body;
@@ -92,6 +91,7 @@ export const login = async (req, res) => {
 
         const user = result.rows[0];
 
+        if (user.status === 'Pending Deletion') return res.status(403).json({ message: `Your account is pending deletion. Access restricted.` });
         if (user.status !== 'Active') return res.status(403).json({ message: `Account is ${user.status}. Please contact administrator.` });
         if (!user.password) return res.status(403).json({ message: 'Account not activated. Please check your email to set a password.' });
 
@@ -111,14 +111,13 @@ export const login = async (req, res) => {
         const token = jwt.sign(
             { id: user.id, role: role, email: user.email },
             process.env.JWT_SECRET,
-            { expiresIn: '7d' } 
+            { expiresIn: '7d' }
         );
 
-        // Capture Device Data & Insert Session
         const ua = req.headers['user-agent'] || 'Unknown Device';
         const ip = req.ip || req.connection.remoteAddress || 'Unknown IP';
         const deviceType = /mobile|android|iphone|ipad/i.test(ua) ? 'mobile' : 'desktop';
-        
+
         let browser = 'Web Browser';
         if (/chrome|crios/i.test(ua)) browser = 'Chrome';
         else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
@@ -152,14 +151,14 @@ export const login = async (req, res) => {
     }
 };
 
-// ==================== SESSION TRACKING APIs ====================
+// ==================== SESSION TRACKING ====================
 export const getActiveSessions = async (req, res) => {
     try {
         const authHeader = req.headers['authorization'] || req.headers['Authorization'];
         let token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
 
         const result = await pool.query(
-            'SELECT id, device_info, device_type, ip_address, last_active, token FROM user_sessions WHERE email = $1 ORDER BY last_active DESC', 
+            'SELECT id, device_info, device_type, ip_address, last_active, token FROM user_sessions WHERE email = $1 ORDER BY last_active DESC',
             [req.user.email]
         );
 
@@ -172,7 +171,7 @@ export const getActiveSessions = async (req, res) => {
             lastActive: s.last_active,
             isCurrent: s.token === token
         }));
-        
+
         res.status(200).json(sessions);
     } catch (error) {
         res.status(500).json({ message: 'Error retrieving active sessions' });
@@ -189,7 +188,7 @@ export const revokeSession = async (req, res) => {
     }
 };
 
-// ==================== LOGOUT (DELETE SESSION) ====================
+// ==================== LOGOUT ====================
 export const logout = async (req, res) => {
     try {
         const authHeader = req.headers['authorization'] || req.headers['Authorization'];
@@ -197,17 +196,54 @@ export const logout = async (req, res) => {
         if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
             token = authHeader.slice(7).trim();
         }
-        
+
         if (token) {
             await pool.query('DELETE FROM user_sessions WHERE token = $1', [token]);
         }
-        
+
         res.status(200).json({ message: 'Logged out successfully' });
     } catch (error) {
         res.status(500).json({ message: 'Error during logout' });
     }
 };
 
+// ==================== ACCOUNT DELETION (SOFT REQUEST) ====================
+export const deleteAccount = async (req, res) => {
+    try {
+        const email = req.user?.email;
+        const role = req.user?.role;
+        const { password } = req.body;
+
+        const targetTable = getTableByRole(role);
+        if (!email || !targetTable) {
+            return res.status(401).json({ message: 'Authentication required to delete account.' });
+        }
+
+        if (!password) {
+            return res.status(400).json({ message: 'Password is required to confirm account deletion.' });
+        }
+
+        const userRes = await pool.query(`SELECT id, password FROM ${targetTable} WHERE email ILIKE $1 LIMIT 1`, [email.trim()]);
+        if (userRes.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
+
+        const user = userRes.rows[0];
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) return res.status(401).json({ message: 'The password you entered is incorrect.' });
+
+        // Revoke active sessions
+        await pool.query('DELETE FROM user_sessions WHERE email ILIKE $1', [email.trim()]);
+
+        // Instead of hard deleting, set status to Pending Deletion for Super Admin approval
+        await pool.query(`UPDATE ${targetTable} SET status = 'Pending Deletion' WHERE id = $1`, [user.id]);
+
+        return res.status(200).json({ message: 'Account deletion request submitted to Super Admin for approval.' });
+    } catch (error) {
+        console.error('Delete Account Error:', error);
+        return res.status(500).json({ message: 'Server error while submitting deletion request.' });
+    }
+};
+
+// ==================== ACTIVATION & RECOVERY ====================
 export const activateAccount = async (req, res) => {
     try {
         const { token, password } = req.body ?? {};
@@ -307,7 +343,7 @@ export const verifyOtp = async (req, res) => {
     try {
         const { email, otp } = req.body;
         const safeEmail = email.trim().toLowerCase();
-        
+
         await ensureOtpTableExists();
         const result = await pool.query(`SELECT * FROM password_reset_otps WHERE email = $1`, [safeEmail]);
         const storedRecord = result.rows[0];

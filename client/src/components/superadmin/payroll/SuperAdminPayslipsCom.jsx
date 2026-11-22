@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
     FaFileInvoice, FaInfoCircle, FaSearch, FaDownload,
     FaEye, FaEnvelope, FaFileInvoiceDollar, FaFilter, FaPaperPlane,
-    FaTimes, FaUsers, FaCheckCircle, FaClock, FaPaperclip,
-    FaCalendarAlt, FaChartPie, FaMoneyBillWave
+    FaTimes, FaUsers, FaCheckCircle, FaClock,
+    FaCalendarAlt, FaChevronDown, FaChevronUp, FaBuilding
 } from 'react-icons/fa';
-import Button from '../../common/Button';
+import Button from '../../../components/common/Button';
 
 // Base64 Placeholder Logo
 const COMPANY_LOGO_BASE64 = "https://avgwork.avgprimetech.com/assets/icon-C5ZMRYg3.png";
@@ -20,6 +21,15 @@ if (typeof document !== 'undefined' && !document.getElementById('dm-sans-import'
         "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');";
     document.head.appendChild(styleEl);
 }
+
+const getAuthConfig = () => {
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+    };
+};
 
 // ---------------------------------------------------------------------------
 // Font / Image helpers for jsPDF
@@ -124,93 +134,29 @@ const numberToWordsIndian = (num) => {
 const SuperAdminPayslipsCom = () => {
     const [payslips, setPayslips] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isEmailing, setIsEmailing] = useState(false);
+    
     const [searchTerm, setSearchTerm] = useState('');
     const [apiError, setApiError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
+    const [expandedBranches, setExpandedBranches] = useState([]);
 
     // PDF Preview State
     const [previewUrl, setPreviewUrl] = useState(null);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isBuildingPdf, setIsBuildingPdf] = useState(false);
 
+    // Fetch from the new sa-payslips API
     const fetchPayslips = async () => {
         setIsLoading(true);
         setApiError('');
-
         try {
-            setTimeout(() => {
-                setPayslips([
-                    {
-                        id: 1,
-                        employee_name: 'Ranjith Kumar',
-                        employee_id: 'AVG-2026-001',
-                        designation: 'Software Engineer',
-                        department: 'Engineering',
-                        pay_month: 'September 2026',
-                        doj: '2026-07-01',
-                        gross: 43000,
-                        deductions: 3500,
-                        net: 39500,
-                        status: 'Sent',
-                        account_number: '302010405060',
-                        ifsc_code: 'SBIN0001234',
-                        bank_name: 'SBI Bank'
-                    },
-                    {
-                        id: 2,
-                        employee_name: 'Pooja Sharma',
-                        employee_id: 'HR-001',
-                        designation: 'Senior HR Manager',
-                        department: 'Human Resources',
-                        pay_month: 'September 2026',
-                        doj: '2026-05-15',
-                        gross: 60000,
-                        deductions: 4500,
-                        net: 55500,
-                        status: 'Viewed',
-                        account_number: '501002345678',
-                        ifsc_code: 'HDFC0001234',
-                        bank_name: 'HDFC Bank'
-                    },
-                    {
-                        id: 3,
-                        employee_name: 'Arun Singh',
-                        employee_id: 'AVG-2026-003',
-                        designation: 'Sales Executive',
-                        department: 'Sales',
-                        pay_month: 'September 2026',
-                        doj: '2026-08-01',
-                        gross: 25000,
-                        deductions: 1800,
-                        net: 23200,
-                        status: 'Generated',
-                        account_number: '000123456789',
-                        ifsc_code: 'ICIC0000001',
-                        bank_name: 'ICICI Bank'
-                    },
-                    {
-                        id: 4,
-                        employee_name: 'Divya Krishnan',
-                        employee_id: 'AVG-2026-004',
-                        designation: 'Marketing Manager',
-                        department: 'Marketing',
-                        pay_month: 'August 2026',
-                        doj: '2026-04-10',
-                        gross: 40000,
-                        deductions: 2500,
-                        net: 37500,
-                        status: 'Viewed',
-                        account_number: '100234567890',
-                        ifsc_code: 'AXIS0001234',
-                        bank_name: 'Axis Bank'
-                    }
-                ]);
-                setIsLoading(false);
-            }, 800);
-
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-payslips`, getAuthConfig());
+            setPayslips(response.data || []);
         } catch (error) {
             console.error('Failed to load payslips', error);
             setApiError('Failed to load payslip records. Please try again later.');
+        } finally {
             setIsLoading(false);
         }
     };
@@ -220,13 +166,29 @@ const SuperAdminPayslipsCom = () => {
     }, []);
 
     const filteredPayslips = payslips.filter(record => {
-        const searchString = `${record.employee_name} ${record.employee_id} ${record.pay_month} ${record.status}`.toLowerCase();
+        const searchString = `${record.employee_name} ${record.employee_id} ${record.monthLabel} ${record.company} ${record.branch} ${record.status}`.toLowerCase();
         return searchString.includes(searchTerm.toLowerCase());
     });
 
+    const groupedPayslips = useMemo(() => {
+        const groups = {};
+        filteredPayslips.forEach(record => {
+            const comp = record.company || 'Unassigned Company';
+            const br = record.branch || 'Unassigned Branch';
+            if (!groups[comp]) groups[comp] = {};
+            if (!groups[comp][br]) groups[comp][br] = [];
+            groups[comp][br].push(record);
+        });
+        return groups;
+    }, [filteredPayslips]);
+
+    const toggleBranchAccordion = (branchKey) => {
+        setExpandedBranches(prev => prev.includes(branchKey) ? prev.filter(k => k !== branchKey) : [...prev, branchKey]);
+    };
+
     const formatCurrency = (amount) => {
         if (amount === undefined || amount === null) return '—';
-        return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
+        return `${parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     };
 
     const getStatusStyle = (status) => {
@@ -257,7 +219,7 @@ const SuperAdminPayslipsCom = () => {
     };
 
     // -----------------------------------------------------------------------
-    // Clean A4 Payslip PDF Generator — matches EmployeePayrollCom design
+    // Clean A4 Payslip PDF Generator — maps real DB data
     // -----------------------------------------------------------------------
     const buildPayslipPDF = async (record) => {
         const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
@@ -266,7 +228,6 @@ const SuperAdminPayslipsCom = () => {
         const margin = 15;
         const contentW = pageW - margin * 2;
 
-        // ---- Font ----
         let fontName = 'helvetica';
         try {
             const b64 = await getDMSansBase64();
@@ -278,7 +239,6 @@ const SuperAdminPayslipsCom = () => {
             }
         } catch (e) { fontName = 'helvetica'; }
 
-        // ---- Colors ----
         const navy = [12, 36, 82];
         const blue = [30, 100, 200];
         const lightBlue = [225, 236, 250];
@@ -286,11 +246,9 @@ const SuperAdminPayslipsCom = () => {
         const gray = [100, 116, 139];
         const border = [205, 215, 228];
 
-        // ---- Logo ----
         let logoData = null;
         try { logoData = await loadImageAsBase64(COMPANY_LOGO_BASE64); } catch (e) { logoData = null; }
 
-        // ============ HEADER ============
         if (logoData) {
             try { doc.addImage(logoData, 'PNG', pageW / 2 - 10, 10, 20, 20, undefined, 'FAST'); } catch (e) { }
         }
@@ -298,7 +256,7 @@ const SuperAdminPayslipsCom = () => {
         doc.setFont(fontName, 'bold');
         doc.setFontSize(15);
         doc.setTextColor(navy[0], navy[1], navy[2]);
-        doc.text('AVG PRIMETECH', pageW / 2, 38, { align: 'center' });
+        doc.text((record.company || 'AVG PRIMETECH').toUpperCase(), pageW / 2, 38, { align: 'center' });
 
         doc.setFont(fontName, 'normal');
         doc.setFontSize(8.5);
@@ -316,7 +274,6 @@ const SuperAdminPayslipsCom = () => {
         doc.setLineWidth(0.4);
         doc.line(margin, 52, pageW - margin, 52);
 
-        // ============ TITLE BAND ============
         const titleY = 58;
         doc.setFillColor(navy[0], navy[1], navy[2]);
         doc.rect(margin, titleY, contentW, 10, 'F');
@@ -328,9 +285,8 @@ const SuperAdminPayslipsCom = () => {
         doc.setFont(fontName, 'bold');
         doc.setFontSize(11);
         doc.setTextColor(navy[0], navy[1], navy[2]);
-        doc.text(`Payslip for the Month of ${record.pay_month}`, pageW / 2, titleY + 19, { align: 'center' });
+        doc.text(`Payslip for the Month of ${record.monthLabel}`, pageW / 2, titleY + 19, { align: 'center' });
 
-        // ============ EMPLOYEE INFO ============
         const empName = record.employee_name || 'Employee';
         const empId = record.employee_id || 'N/A';
         const empDesig = record.designation || 'N/A';
@@ -341,7 +297,7 @@ const SuperAdminPayslipsCom = () => {
             ? new Date(dojRaw).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
             : 'N/A';
 
-        const parts = String(record.pay_month).split(' ');
+        const parts = String(record.monthLabel).split(' ');
         const monthName = parts[0];
         const yearNum = parseInt(parts[1] || new Date().getFullYear(), 10);
         const monthIdx = new Date(`${monthName} 1, ${yearNum}`).getMonth();
@@ -350,8 +306,8 @@ const SuperAdminPayslipsCom = () => {
         const payDateObj = new Date(yearNum, monthIdx + 1, 10);
         const payDate = payDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
 
-        const netVal = Number(record.net) || 0;
-        const netDisplay = (netVal < 0 ? '-' : '') + `${formatCurrency(Math.abs(netVal))}`;
+        const netVal = Number(record.netSalary) || 0;
+        const netDisplay = (netVal < 0 ? '-' : '') + `₹${formatCurrency(Math.abs(netVal))}`;
 
         const infoY = titleY + 28;
         const leftRows = [
@@ -360,26 +316,23 @@ const SuperAdminPayslipsCom = () => {
             ['Department', empDept],
             ['Date of Joining', doj],
             ['Pay Period', payPeriod],
+            ['Pay Date', payDate],
             ['Employee ID', empId],
         ];
 
         doc.setFontSize(9.5);
         leftRows.forEach(([label, value], i) => {
-            const rowY = infoY + i * 6;
-
+            const rowY = infoY + i * 6.5;
             doc.setFont(fontName, 'normal');
             doc.setTextColor(gray[0], gray[1], gray[2]);
             doc.text(label, margin + 1, rowY);
-
-            doc.text(':', margin + 34, rowY);
-
+            doc.text(':', margin + 36, rowY);
             doc.setFont(fontName, 'bold');
             doc.setTextColor(dark[0], dark[1], dark[2]);
             const v = doc.splitTextToSize(String(value), 65)[0];
-            doc.text(v, margin + 37, rowY);
+            doc.text(v, margin + 39, rowY);
         });
 
-        // Right side — Net Pay box
         const npX = 120;
         const npY = infoY - 6;
         const npW = pageW - margin - npX;
@@ -401,27 +354,40 @@ const SuperAdminPayslipsCom = () => {
         doc.setTextColor(dark[0], dark[1], dark[2]);
         doc.text(netDisplay, npX + npW / 2, npY + 22, { align: 'center' });
 
-        // ============ EARNINGS / DEDUCTIONS TABLE ============
-        const tableStartY = infoY + leftRows.length * 6 + 8;
+        const tableStartY = infoY + leftRows.length * 6.5 + 8;
 
-        const gross = Number(record.gross) || 0;
-        const totalDeductions = Number(record.deductions) || 0;
+        const gross = Number(record.grossSalary) || 0;
+        const totalDeductions = Number(record.totalDeductions) || 0;
 
-        // Estimated breakdown from totals for demonstration purposes
-        const earnings = {
-            basic: Math.round(gross * 0.45),
-            hra: Math.round(gross * 0.20),
-            conveyance: Math.round(gross * 0.08),
-            medical: Math.round(gross * 0.07),
-            otherAllowances: Math.round(gross * 0.20),
-        };
-        const deductions = {
-            epf: Math.round(totalDeductions * 0.55),
-            healthInsurance: Math.round(totalDeductions * 0.15),
-            pt: Math.round(totalDeductions * 0.10),
-            tds: Math.round(totalDeductions * 0.20),
-            leaves: 0,
-        };
+        const earningsArr = [
+            { label: 'Basic Salary', amount: record.earnings?.basic || 0 },
+            { label: 'House Rent Allowance', amount: record.earnings?.hra || 0 },
+            { label: 'Conveyance Allowance', amount: record.earnings?.conveyance || 0 },
+            { label: 'Medical Allowance', amount: record.earnings?.medical || 0 },
+            { label: 'Special Allowance', amount: record.earnings?.specialAllowance || 0 },
+            { label: 'Other Allowances', amount: record.earnings?.otherAllowances || 0 }
+        ].filter(e => e.amount > 0);
+
+        const combinedDeductions = [
+            { label: 'LOP (Leave Deductions)', amount: record.deductions?.totalAttendanceDeduction || 0 },
+            { label: 'EPF Deduction', amount: record.deductions?.epf || 0 },
+            { label: 'ESI Deduction', amount: record.deductions?.esi || 0 },
+            { label: 'Professional Tax', amount: record.deductions?.pt || 0 },
+            { label: 'TDS Deduction', amount: record.deductions?.tds || 0 }, 
+            { label: 'Health Insurance', amount: record.deductions?.healthInsurance || 0 }
+        ].filter(d => d.amount > 0);
+
+        const maxRows = Math.max(earningsArr.length, combinedDeductions.length);
+        const bodyData = [];
+
+        for(let i=0; i<maxRows; i++){
+            bodyData.push([
+                earningsArr[i] ? earningsArr[i].label : '',
+                earningsArr[i] ? `Rs. ${parseFloat(earningsArr[i].amount).toLocaleString('en-IN')}` : '',
+                combinedDeductions[i] ? combinedDeductions[i].label : '',
+                combinedDeductions[i] ? `Rs. ${parseFloat(combinedDeductions[i].amount).toLocaleString('en-IN')}` : ''
+            ]);
+        }
 
         autoTable(doc, {
             startY: tableStartY,
@@ -448,22 +414,15 @@ const SuperAdminPayslipsCom = () => {
                 0: { cellWidth: 60 },
                 1: { cellWidth: 33, halign: 'right' },
                 2: { cellWidth: 55 },
-                3: { cellWidth: 32, halign: 'right' },
+                3: { cellWidth: 32, halign: 'right', textColor: [220, 38, 38] }, 
             },
             head: [['EARNINGS', 'AMOUNT', 'DEDUCTIONS', 'AMOUNT']],
-            body: [
-                ['Basic Salary', `${formatCurrency(earnings.basic)}`, 'EPF', `${formatCurrency(deductions.epf)}`],
-                ['House Rent Allowances', `${formatCurrency(earnings.hra)}`, 'Health Insurance', `${formatCurrency(deductions.healthInsurance)}`],
-                ['Conveyance Allowances', `${formatCurrency(earnings.conveyance)}`, 'Professional Tax', `${formatCurrency(deductions.pt)}`],
-                ['Medical', `${formatCurrency(earnings.medical)}`, 'TDS', `${formatCurrency(deductions.tds)}`],
-                ['Other Allowances', `${formatCurrency(earnings.otherAllowances)}`, 'Leaves', `${formatCurrency(deductions.leaves)}`],
-            ],
+            body: bodyData,
             margin: { left: margin, right: margin },
         });
 
         let y = doc.lastAutoTable.finalY;
 
-        // Gross / Total Deductions
         const rowH = 8;
         doc.setFillColor(lightBlue[0], lightBlue[1], lightBlue[2]);
         doc.rect(margin, y, contentW, rowH, 'F');
@@ -478,13 +437,13 @@ const SuperAdminPayslipsCom = () => {
         doc.setFontSize(9.5);
         doc.setTextColor(navy[0], navy[1], navy[2]);
         doc.text('Gross Salary', margin + 4, y + 5.4);
-        doc.text(`${formatCurrency(gross)}`, margin + 89, y + 5.4, { align: 'right' });
+        doc.text(`₹${formatCurrency(record.grossSalary)}`, margin + 89, y + 5.4, { align: 'right' });
         doc.text('Total Deductions', margin + 97, y + 5.4);
-        doc.text(`${formatCurrency(totalDeductions)}`, pageW - margin - 4, y + 5.4, { align: 'right' });
+        doc.setTextColor(220, 38, 38); 
+        doc.text(`₹${formatCurrency(record.totalDeductions)}`, pageW - margin - 4, y + 5.4, { align: 'right' });
 
         y += rowH;
 
-        // Net Pay row
         doc.setFillColor(navy[0], navy[1], navy[2]);
         doc.rect(margin, y, contentW, 10, 'F');
         doc.setFont(fontName, 'bold');
@@ -492,22 +451,20 @@ const SuperAdminPayslipsCom = () => {
         doc.setTextColor(255, 255, 255);
         doc.text('NET PAY', margin + 4, y + 6.5);
         doc.setFontSize(12);
-        doc.text(`${formatCurrency(record.net)}`, pageW - margin - 4, y + 6.5, { align: 'right' });
+        doc.text(`₹${formatCurrency(record.netSalary)}`, pageW - margin - 4, y + 6.5, { align: 'right' });
 
         y += 16;
 
-        // ============ AMOUNT IN WORDS ============
         doc.setFont(fontName, 'normal');
         doc.setFontSize(9);
         doc.setTextColor(dark[0], dark[1], dark[2]);
         doc.text('Amount in Words :', margin, y);
         doc.setTextColor(gray[0], gray[1], gray[2]);
-        const words = doc.splitTextToSize(numberToWordsIndian(record.net), contentW - 40);
+        const words = doc.splitTextToSize(numberToWordsIndian(record.netSalary), contentW - 40);
         doc.text(words, margin + 34, y);
 
         y += (Array.isArray(words) ? words.length : 1) * 4.5 + 5;
 
-        // ============ BANK ACCOUNT DETAILS ============
         const bankHeaderH = 8;
         doc.setFillColor(lightBlue[0], lightBlue[1], lightBlue[2]);
         doc.rect(margin, y, contentW, bankHeaderH, 'F');
@@ -539,16 +496,13 @@ const SuperAdminPayslipsCom = () => {
         doc.setFontSize(9);
         bankRows.forEach(([label, value], i) => {
             const rowY = y + i * bankRowH + 5.4;
-
             doc.setFont(fontName, 'normal');
             doc.setTextColor(gray[0], gray[1], gray[2]);
             doc.text(label, margin + 6, rowY);
-
             doc.setFont(fontName, 'bold');
             doc.setTextColor(dark[0], dark[1], dark[2]);
             const v = doc.splitTextToSize(String(value), contentW / 2 - 14)[0];
             doc.text(v, pageW - margin - 6, rowY, { align: 'right' });
-
             if (i < bankRows.length - 1) {
                 doc.setDrawColor(border[0], border[1], border[2]);
                 doc.setLineWidth(0.12);
@@ -558,7 +512,6 @@ const SuperAdminPayslipsCom = () => {
 
         y += bankBodyH + 10;
 
-        // ============ FOOTER NOTE ============
         doc.setFont(fontName, 'italic');
         doc.setFontSize(8);
         doc.setTextColor(gray[0], gray[1], gray[2]);
@@ -570,13 +523,82 @@ const SuperAdminPayslipsCom = () => {
         return doc;
     };
 
-    // Download handler
+    // -----------------------------------------------------------------------
+    // Single Email Logic
+    // -----------------------------------------------------------------------
+    const handleSendEmail = async (record) => {
+        if (!record.email) return alert("Employee doesn't have a registered email.");
+        
+        setIsEmailing(true);
+        setApiError('');
+        try {
+            const doc = await buildPayslipPDF(record);
+            const pdfBase64 = btoa(doc.output()); 
+
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-payslips/send`, { 
+                record,
+                pdfBase64 
+            }, getAuthConfig());
+            
+            setPayslips(prev => prev.map(p => p.id === record.id ? { ...p, status: 'Sent' } : p));
+            
+            setSuccessMsg(`Payslip successfully emailed to ${record.employee_name}.`);
+            setTimeout(() => setSuccessMsg(''), 4000);
+        } catch (error) {
+            console.error('Email failed:', error);
+            setApiError(error.response?.data?.message || 'Failed to send email. Check Azure configurations.');
+            setTimeout(() => setApiError(''), 5000);
+        } finally {
+            setIsEmailing(false);
+        }
+    };
+
+    // -----------------------------------------------------------------------
+    // Bulk Email Logic
+    // -----------------------------------------------------------------------
+    const handleBulkSendEmails = async () => {
+        const pendingRecords = payslips.filter(p => p.status === 'Generated' && p.email);
+        
+        if (pendingRecords.length === 0) {
+            return alert('No pending payslips to send (or missing emails).');
+        }
+
+        if (!window.confirm(`Are you sure you want to email ${pendingRecords.length} pending payslips with attachments?`)) return;
+
+        setIsEmailing(true);
+        setApiError('');
+        try {
+            const recordsWithPdfs = await Promise.all(pendingRecords.map(async (record) => {
+                const doc = await buildPayslipPDF(record);
+                return {
+                    record: record,
+                    pdfBase64: btoa(doc.output())
+                };
+            }));
+
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-payslips/send-bulk`, { records: recordsWithPdfs }, getAuthConfig());
+            
+            setPayslips(prev => prev.map(p => 
+                (p.status === 'Generated' && p.email) ? { ...p, status: 'Sent' } : p
+            ));
+            
+            setSuccessMsg(response.data.message || `Successfully dispatched ${pendingRecords.length} emails with PDF attachments.`);
+            setTimeout(() => setSuccessMsg(''), 5000);
+        } catch (error) {
+            console.error('Bulk Email failed:', error);
+            setApiError(error.response?.data?.message || 'Failed to execute bulk email dispatch.');
+            setTimeout(() => setApiError(''), 5000);
+        } finally {
+            setIsEmailing(false);
+        }
+    };
+
     const handleDownload = async (record) => {
         try {
             setIsBuildingPdf(true);
             const doc = await buildPayslipPDF(record);
             const safeName = (record.employee_name || 'Employee').replace(/\s+/g, '_');
-            const safeMonth = (record.pay_month || 'Payslip').replace(/\s+/g, '_');
+            const safeMonth = (record.monthLabel || 'Payslip').replace(/\s+/g, '_');
             doc.save(`Payslip_${safeName}_${safeMonth}.pdf`);
         } catch (err) {
             console.error('PDF download failed:', err);
@@ -586,12 +608,16 @@ const SuperAdminPayslipsCom = () => {
         }
     };
 
-    // View handler — renders PDF blob in an iframe modal
     const handleView = async (record) => {
         try {
             setIsBuildingPdf(true);
             const doc = await buildPayslipPDF(record);
             const blobUrl = doc.output('bloburl');
+            
+            if (record.status !== 'Sent') {
+                setPayslips(prev => prev.map(p => p.id === record.id ? { ...p, status: 'Viewed' } : p));
+            }
+            
             setPreviewUrl(blobUrl);
             setIsPreviewOpen(true);
         } catch (err) {
@@ -602,17 +628,11 @@ const SuperAdminPayslipsCom = () => {
         }
     };
 
-    const handleSendEmail = (employeeName) => {
-        setSuccessMsg(`Payslip successfully emailed to ${employeeName}.`);
-        setTimeout(() => setSuccessMsg(''), 4000);
-    };
-
     const closePreview = () => {
         setIsPreviewOpen(false);
         setPreviewUrl(null);
     };
 
-    // Derived display-only summary metrics
     const totalSent = payslips.filter(p => p.status === 'Sent').length;
     const totalViewed = payslips.filter(p => p.status === 'Viewed').length;
     const totalGenerated = payslips.filter(p => p.status === 'Generated').length;
@@ -709,9 +729,11 @@ const SuperAdminPayslipsCom = () => {
                         <Button
                             variant="primary"
                             icon={FaPaperPlane}
+                            onClick={handleBulkSendEmails}
+                            disabled={isEmailing}
                             className="w-full sm:w-auto shadow-lg shadow-[#0437cc]/25 rounded-xl text-xs sm:text-sm py-2"
                         >
-                            Email All Pending
+                            {isEmailing ? 'Dispatching...' : 'Email All Pending'}
                         </Button>
                     </div>
                 </div>
@@ -775,7 +797,7 @@ const SuperAdminPayslipsCom = () => {
             )}
 
             {/* ==================== MASTER TABLE ==================== */}
-            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-10">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
                 <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -796,7 +818,7 @@ const SuperAdminPayslipsCom = () => {
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <input
                                 type="text"
-                                placeholder="Search employee, ID or month…"
+                                placeholder="Search employee, ID, branch…"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
@@ -808,7 +830,7 @@ const SuperAdminPayslipsCom = () => {
                     </div>
                 </div>
 
-                <div className="relative overflow-x-auto custom-scrollbar">
+                <div className="p-5">
                     {isLoading ? (
                         <div className="p-12 text-center">
                             <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
@@ -824,92 +846,142 @@ const SuperAdminPayslipsCom = () => {
                             </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[960px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Employee</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Pay Month</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Gross Salary</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Deductions</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Net Salary</th>
-                                    <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
-                                    <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredPayslips.map((record, i) => {
-                                    const StatusIcon = getStatusIcon(record.status);
-                                    return (
-                                        <tr key={i} className="transition-colors group hover:bg-slate-50/60">
-                                            <td className="px-5 py-4">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
-                                                        {record.employee_name?.charAt(0)}
+                        <div className="space-y-6">
+                            {Object.keys(groupedPayslips).map(company => (
+                                <div key={company} className="relative">
+                                    <h3 className="text-sm sm:text-base font-black text-[#010a1f] mb-3 pb-2 border-b border-slate-200 sticky top-0 bg-white z-10 pt-2">
+                                        {company}
+                                    </h3>
+                                    
+                                    <div className="space-y-4">
+                                        {Object.keys(groupedPayslips[company]).map(branch => {
+                                            const branchPayslips = groupedPayslips[company][branch];
+                                            const branchKey = `${company}_${branch}`;
+                                            const isExpanded = expandedBranches.includes(branchKey);
+
+                                            return (
+                                                <div key={branchKey} className={`border rounded-2xl overflow-hidden transition-all duration-300 ${isExpanded ? 'border-[#0437cc]/30 shadow-md shadow-[#0437cc]/5' : 'border-slate-200 hover:border-slate-300'}`}>
+                                                    
+                                                    {/* Branch Header Row */}
+                                                    <div className={`px-4 py-3 flex flex-row items-center justify-between gap-3 cursor-pointer transition-colors ${isExpanded ? 'bg-gradient-to-r from-blue-50/80 to-indigo-50/40' : 'bg-slate-50/70 hover:bg-slate-50'}`}
+                                                         onClick={() => toggleBranchAccordion(branchKey)}
+                                                    >
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <span className="text-xs sm:text-sm font-bold text-slate-800 truncate">{branch}</span>
+                                                                <span className="text-[10px] font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-full shrink-0 shadow-sm">
+                                                                    {branchPayslips.length} Records
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <button 
+                                                                className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all shadow-sm border ${isExpanded ? 'bg-[#0437cc] text-white border-[#0437cc]' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
+                                                            >
+                                                                {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{record.employee_name}</p>
-                                                        <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
-                                                            {record.employee_id}
-                                                        </span>
-                                                    </div>
+
+                                                    {/* Branch Content (Payslips Table) */}
+                                                    {isExpanded && (
+                                                        <div className="overflow-x-auto bg-white border-t border-slate-100 custom-scrollbar">
+                                                            <table className="w-full text-left border-collapse min-w-[960px]">
+                                                                <thead>
+                                                                    <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/40">
+                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Employee</th>
+                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Pay Month</th>
+                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Gross Salary</th>
+                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Deductions</th>
+                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Net Salary</th>
+                                                                        <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                                                        <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-50">
+                                                                    {branchPayslips.map((record, i) => {
+                                                                        const StatusIcon = getStatusIcon(record.status);
+                                                                        return (
+                                                                            <tr key={i} className="transition-colors group hover:bg-slate-50/60">
+                                                                                <td className="px-5 py-4">
+                                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
+                                                                                            {record.employee_name?.charAt(0)}
+                                                                                        </div>
+                                                                                        <div className="min-w-0">
+                                                                                            <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{record.employee_name}</p>
+                                                                                            <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                                                                {record.employee_id}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <span className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                                                                                            <FaCalendarAlt className="text-slate-500 text-[10px]" />
+                                                                                        </span>
+                                                                                        <p className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">{record.pay_month}</p>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-xs sm:text-sm font-bold text-slate-700 tabular-nums whitespace-nowrap">{formatCurrency(record.grossSalary)}</p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-xs sm:text-sm font-bold text-red-600 tabular-nums whitespace-nowrap">-{formatCurrency(record.totalDeductions)}</p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-xs sm:text-sm font-black text-green-700 tabular-nums whitespace-nowrap">{formatCurrency(record.netSalary)}</p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getStatusStyle(record.status)}`}>
+                                                                                        <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(record.status)}`}></span>
+                                                                                        <StatusIcon className="text-[9px]" />
+                                                                                        {record.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-right">
+                                                                                    <div className="flex gap-1 justify-end">
+                                                                                        <button
+                                                                                            onClick={() => handleView(record)}
+                                                                                            disabled={isBuildingPdf || isEmailing}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                            title="Preview Payslip"
+                                                                                        >
+                                                                                            <FaEye className="text-xs" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleDownload(record)}
+                                                                                            disabled={isBuildingPdf || isEmailing}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                            title="Download PDF"
+                                                                                        >
+                                                                                            <FaDownload className="text-xs" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleSendEmail(record)}
+                                                                                            disabled={isEmailing}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                            title="Email to Employee"
+                                                                                        >
+                                                                                            <FaEnvelope className="text-xs" />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                                                        <FaCalendarAlt className="text-slate-500 text-[10px]" />
-                                                    </span>
-                                                    <p className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">{record.pay_month}</p>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <p className="text-xs sm:text-sm font-bold text-slate-700 tabular-nums whitespace-nowrap">{formatCurrency(record.gross)}</p>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <p className="text-xs sm:text-sm font-bold text-red-600 tabular-nums whitespace-nowrap">-{formatCurrency(record.deductions)}</p>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <p className="text-xs sm:text-sm font-black text-green-700 tabular-nums whitespace-nowrap">{formatCurrency(record.net)}</p>
-                                            </td>
-                                            <td className="px-5 py-4 text-center">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getStatusStyle(record.status)}`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(record.status)}`}></span>
-                                                    <StatusIcon className="text-[9px]" />
-                                                    {record.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-5 py-4 text-right">
-                                                <div className="flex gap-1 justify-end">
-                                                    <button
-                                                        onClick={() => handleView(record)}
-                                                        disabled={isBuildingPdf}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        title="Preview Payslip"
-                                                    >
-                                                        <FaEye className="text-xs" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDownload(record)}
-                                                        disabled={isBuildingPdf}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        title="Download PDF"
-                                                    >
-                                                        <FaDownload className="text-xs" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleSendEmail(record.employee_name)}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
-                                                        title="Send Email"
-                                                    >
-                                                        <FaEnvelope className="text-xs" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </div>
             </div>

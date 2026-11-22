@@ -25,6 +25,8 @@ import saHrUserRoutes from './routes/superadmin/saHrUserRoutes.js';
 import saManagerRoutes from './routes/superadmin/saManagerRoutes.js';
 import saReimbursementRoutes from './routes/superadmin/saReimbursementRoutes.js';
 import saSalaryRoutes from './routes/superadmin/saSalaryStructureRoutes.js';
+import saPayslipRoutes from './routes/superadmin/saPayslipRoutes.js';
+
 import saAppVersionRoutes from './routes/superadmin/saAppVersionRoutes.js';
 
 import hrProfileRoutes from './routes/hr/hrProfileRoutes.js';
@@ -175,6 +177,8 @@ if (cluster.isPrimary) {
     app.use('/api/sa-attendance', saAttendanceRoutes);
     app.use('/api/sa-reimbursements', saReimbursementRoutes);
     app.use('/api/sa-salary-structure', saSalaryRoutes);
+    app.use('/api/sa-payslips', saPayslipRoutes);
+
     app.use('/api/sa-app-version', saAppVersionRoutes);
 
     app.use('/api/hr-profile', hrProfileRoutes);

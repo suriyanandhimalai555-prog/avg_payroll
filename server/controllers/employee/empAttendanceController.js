@@ -11,7 +11,6 @@ export const getMyShiftDetails = async (req, res) => {
         
         const shiftName = empRes.rows[0].shift || '';
 
-        // FIXED: Using LOWER(TRIM()) to guarantee a match even if there are accidental spaces in the production DB
         const shiftQuery = `SELECT * FROM sa_work_shifts WHERE LOWER(TRIM(shift_name)) = LOWER(TRIM($1)) AND status = 'Active' LIMIT 1`;
         const shiftRes = await pool.query(shiftQuery, [shiftName]);
 
@@ -49,8 +48,7 @@ export const getAttendanceHistory = async (req, res) => {
 export const clockIn = async (req, res) => {
     try {
         const { employeeId, todayDate, locationData, deviceInfo, lateReason } = req.body;
-        const now = new Date();
-
+        
         const doubleCheckQuery = `
             SELECT id FROM emp_attendance 
             WHERE employee_id = $1 AND date = $2 AND clock_out IS NULL;
@@ -82,57 +80,83 @@ export const clockIn = async (req, res) => {
         let status = 'Present';
         
         try {
-            // FIXED: Added LOWER(TRIM()) on the JOIN so the grace logic correctly triggers for Development Fixed
-            const shiftQuery = `
-                SELECT s.* FROM sa_work_shifts s
-                JOIN sa_employees e ON LOWER(TRIM(s.shift_name)) = LOWER(TRIM(e.shift))
-                WHERE e.employee_id = $1;
-            `;
-            const shiftRes = await pool.query(shiftQuery, [employeeId]);
+            // 1. Get current time explicitly in IST to prevent Server UTC bugs
+            const nowISTStr = new Date().toLocaleString("en-US", { 
+                timeZone: "Asia/Kolkata", 
+                hour12: false, 
+                hour: 'numeric', 
+                minute: 'numeric' 
+            });
+            
+            // Convert current time to total minutes from midnight
+            const [currentHrs, currentMins] = nowISTStr.split(':').map(Number);
+            const currentTotalMins = (currentHrs * 60) + currentMins;
 
-            if (shiftRes.rows.length > 0) {
-                const shift = shiftRes.rows[0];
+            // 2. Fetch Employee's Shift
+            let shift = null;
+            const empRes = await pool.query('SELECT shift FROM sa_employees WHERE employee_id = $1', [employeeId]);
+            if (empRes.rows.length > 0 && empRes.rows[0].shift) {
+                const sRes = await pool.query(`SELECT * FROM sa_work_shifts WHERE LOWER(TRIM(shift_name)) = LOWER(TRIM($1)) AND status = 'Active' LIMIT 1`, [empRes.rows[0].shift]);
+                if (sRes.rows.length > 0) shift = sRes.rows[0];
+            }
+            
+            // Fallback to default shift if string mismatch
+            if (!shift) {
+                const defRes = await pool.query(`SELECT * FROM sa_work_shifts WHERE status = 'Active' ORDER BY id ASC LIMIT 1`);
+                if (defRes.rows.length > 0) shift = defRes.rows[0];
+            }
+
+            // 3. Process Shift Rules strictly using minutes from midnight
+            if (shift) {
                 const shiftType = (shift.shift_type || 'Fixed').trim();
 
                 if (shiftType === 'Flexible') {
-                    const fivePM = new Date(now);
-                    fivePM.setHours(17, 0, 0, 0); 
-                    if (now.getTime() >= fivePM.getTime()) {
+                    const fivePMTotalMins = 17 * 60; // 17:00 (5:00 PM)
+                    if (currentTotalMins >= fivePMTotalMins) {
                         return res.status(400).json({ message: 'It is past 5:00 PM. Flexible shift check-ins are not allowed at this time. You have been marked as Absent.' });
                     }
                 } else if (shiftType === 'Fixed' || shiftType === 'Development Fixed') {
                     if (shift.start_time) {
-                        let [sHrs, sMins] = shift.start_time.split(':').map(Number);
+                        let sHrs = 0;
+                        let sMins = 0;
                         
-                        if (shift.start_time.includes('PM') && sHrs !== 12) sHrs += 12;
-                        if (shift.start_time.includes('AM') && sHrs === 12) sHrs = 0;
+                        // Robustly parse "09:00", "9:00 AM", or "09:00:00"
+                        const timeStr = shift.start_time.trim().toUpperCase();
+                        const timeParts = timeStr.match(/(\d+):(\d+)/);
+                        if (timeParts) {
+                            sHrs = parseInt(timeParts[1], 10);
+                            sMins = parseInt(timeParts[2], 10);
+                            if (timeStr.includes('PM') && sHrs !== 12) sHrs += 12;
+                            if (timeStr.includes('AM') && sHrs === 12) sHrs = 0;
+                        }
 
-                        const expectedTime = new Date(now);
-                        expectedTime.setHours(sHrs, sMins, 0, 0);
+                        const expectedTotalMins = (sHrs * 60) + sMins;
 
-                        const graceMs = (shift.grace_time || shift.grace_period || 0) * 60000;
-                        const allowedTimeMs = expectedTime.getTime() + graceMs;
+                        // Memory Fallback: Uses 5 mins as default if database grace_time is missing
+                        const graceValue = parseInt(shift.grace_time || shift.grace_period || 5, 10);
+                        const graceMins = isNaN(graceValue) ? 5 : graceValue;
+                        const allowedTotalMins = expectedTotalMins + graceMins;
 
-                        // 1:00 PM Lockout Check
-                        const onePM = new Date(now);
-                        onePM.setHours(13, 0, 0, 0);
-                        if (now.getTime() >= onePM.getTime()) {
+                        // Lockout at 1:00 PM
+                        const onePMTotalMins = 13 * 60; 
+                        if (currentTotalMins >= onePMTotalMins) {
                             return res.status(400).json({ message: 'It is past 1:00 PM. You are marked as Absent for the whole day.' });
                         }
 
-                        // Late / Grace Time Check
-                        if (now.getTime() > allowedTimeMs) {
-                            if (!lateReason) {
+                        // Late Detection Logic
+                        if (currentTotalMins > allowedTotalMins) {
+                            if (!lateReason || lateReason.trim() === '') {
+                                // Triggers the modal on the frontend
                                 return res.status(428).json({ message: 'LATE_REASON_REQUIRED' });
                             }
-                            lateMinutes = Math.floor((now.getTime() - expectedTime.getTime()) / 60000);
+                            lateMinutes = currentTotalMins - expectedTotalMins;
                             status = 'Half Day Absent (Pending Approval)';
                         }
                     }
                 }
             }
         } catch (shiftError) {
-            console.warn("Could not calculate shift rules, falling back to default Present.", shiftError.message);
+            console.warn("Could not calculate shift rules, processing standard Present clock in.", shiftError.message);
         }
 
         const insertQuery = `
@@ -160,7 +184,7 @@ export const clockOut = async (req, res) => {
         const activeSession = await pool.query(findQuery, [employeeId, todayDate]);
 
         if (activeSession.rows.length === 0) {
-            return res.status(400).json({ message: 'No active clock-in session found for today.' });
+            return res.status(400).json({ message: 'No active clock-in session found for this date.' });
         }
 
         const recordId = activeSession.rows[0].id;

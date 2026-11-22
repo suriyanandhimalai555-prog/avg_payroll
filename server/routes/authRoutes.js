@@ -10,7 +10,8 @@ import {
     changePassword, 
     updateProfile,
     getActiveSessions,
-    revokeSession
+    revokeSession,
+    deleteAccount
 } from '../controllers/authController.js';
 
 const router = express.Router();
@@ -29,6 +30,8 @@ router.post('/request-otp', requestOtp);
 router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 router.post('/change-password', authenticateToken, changePassword);
+
+router.delete('/account', authenticateToken, deleteAccount);
 
 // Updates
 router.put('/profile', authenticateToken, requireRole('superadmin'), updateProfile);

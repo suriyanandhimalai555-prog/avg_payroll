@@ -1,10 +1,24 @@
+import React, { useState, useRef, useEffect } from 'react';
 import { FaBell, FaSearch, FaBars, FaAlignLeft } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import SuperAdminNotificationCom from './SuperAdminNotificationCom';
 
 const SuperAdminNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktopCollapsed }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const [isNotifOpen, setIsNotifOpen] = useState(false);
+    const notifRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (notifRef.current && !notifRef.current.contains(event.target)) {
+                setIsNotifOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     return (
         <header className="h-16 md:h-20 bg-white/85 backdrop-blur-xl border-b border-slate-200/70 flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-30 w-full transition-all duration-300">
@@ -61,16 +75,26 @@ const SuperAdminNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktop
                     {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </div>
 
-                {/* Notification Bell */}
-                <button
-                    className="relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 hover:text-[#0437cc] hover:bg-white hover:border-[#0437cc]/30 active:scale-95 transition-all"
-                    aria-label="Notifications"
-                >
-                    <FaBell className="text-base sm:text-lg" />
-                    <span className="absolute top-2 right-2 w-2 h-2 bg-[#f77704] rounded-full border-2 border-white shadow-sm">
-                        <span className="absolute inset-0 rounded-full bg-[#f77704] animate-ping opacity-75"></span>
-                    </span>
-                </button>
+                {/* Notification Bell with Dropdown */}
+                <div className="relative" ref={notifRef}>
+                    <button
+                        onClick={() => setIsNotifOpen(!isNotifOpen)}
+                        className={`relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl border active:scale-95 transition-all ${isNotifOpen ? 'bg-white border-[#0437cc]/30 text-[#0437cc]' : 'bg-slate-50 border-slate-200/80 text-slate-600 hover:text-[#0437cc] hover:bg-white hover:border-[#0437cc]/30'}`}
+                        aria-label="Notifications"
+                    >
+                        <FaBell className="text-base sm:text-lg" />
+                        <span className="absolute top-2 right-2 w-2 h-2 bg-[#f77704] rounded-full border-2 border-white shadow-sm">
+                            <span className="absolute inset-0 rounded-full bg-[#f77704] animate-ping opacity-75"></span>
+                        </span>
+                    </button>
+
+                    {/* Popup Container */}
+                    {isNotifOpen && (
+                        <div className="absolute right-0 mt-3 w-[320px] sm:w-[380px] bg-white rounded-2xl shadow-[0_15px_50px_-10px_rgba(0,0,0,0.15)] border border-slate-100 z-50 animate-in fade-in slide-in-from-top-4 duration-200 overflow-hidden">
+                            <SuperAdminNotificationCom />
+                        </div>
+                    )}
+                </div>
 
                 {/* Vertical Divider */}
                 <div className="hidden md:block w-px h-8 bg-slate-200/80"></div>
