@@ -1,0 +1,290 @@
+
+name: AVG Payroll - Deployment Email Notifications
+
+on:
+  workflow_run:
+    workflows:
+      - AVG Payroll - Build and Publish Images
+      - AVG Payroll - Deploy Fresh Test
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  notify:
+    name: Microsoft Graph Deployment Notification
+
+    if: >-
+      github.event.workflow_run.head_repository.full_name == 'suriyanandhimalai555-prog/avg_payroll' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      (
+        (github.event.workflow_run.name == 'AVG Payroll - Build and Publish Images' &&
+         github.event.workflow_run.conclusion != 'success') ||
+        github.event.workflow_run.name == 'AVG Payroll - Deploy Fresh Test'
+      )
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Collect workflow results
+        id: results
+        shell: bash
+        env:
+          TRIGGER_NAME: ${{ github.event.workflow_run.name }}
+          TRIGGER_RESULT: ${{ github.event.workflow_run.conclusion }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          ACTOR: ${{ github.event.workflow_run.actor.login }}
+          TRIGGER_URL: ${{ github.event.workflow_run.html_url }}
+          TRIGGER_ID: ${{ github.event.workflow_run.id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          BUILD_RESULT="unknown"
+          DEPLOY_RESULT="not_run"
+          BUILD_URL=""
+          DEPLOY_URL=""
+          COMMIT_AUTHOR="Unknown"
+
+          if [[ "$TRIGGER_NAME" == "AVG Payroll - Build and Publish Images" ]]; then
+            BUILD_RESULT="$TRIGGER_RESULT"
+            BUILD_URL="$TRIGGER_URL"
+          else
+            DEPLOY_URL="$TRIGGER_URL"
+
+            RUNS=$(curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/build.yml/runs?branch=main&per_page=100")
+
+            BUILD_INFO=$(echo "$RUNS" | jq -c --arg SHA "$SHA" \
+              '[.workflow_runs[] | select(.head_sha == $SHA)] | sort_by(.created_at) | last // empty')
+
+            if [[ -n "$BUILD_INFO" ]]; then
+              BUILD_RESULT=$(echo "$BUILD_INFO" | jq -r '.conclusion // "unknown"')
+              BUILD_URL=$(echo "$BUILD_INFO" | jq -r '.html_url // ""')
+            fi
+
+            JOBS=$(curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${TRIGGER_ID}/jobs")
+
+            DEPLOY_JOB=$(echo "$JOBS" | jq -c \
+              '[.jobs[] | select(.name == "Deploy to avgpayroll-fresh")] | last // empty')
+
+            if [[ -n "$DEPLOY_JOB" ]]; then
+              DEPLOY_RESULT=$(echo "$DEPLOY_JOB" | jq -r '.conclusion // "unknown"')
+            else
+              DEPLOY_RESULT="$TRIGGER_RESULT"
+            fi
+          fi
+
+          COMMIT_DATA=$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${SHA}")
+
+          COMMIT_AUTHOR=$(echo "$COMMIT_DATA" | jq -r '.commit.author.name // .author.login // "Unknown"')
+
+          {
+            echo "build_result=$BUILD_RESULT"
+            echo "deploy_result=$DEPLOY_RESULT"
+            echo "build_url=$BUILD_URL"
+            echo "deploy_url=$DEPLOY_URL"
+            echo "sha=$SHA"
+            echo "branch=$BRANCH"
+            echo "actor=$ACTOR"
+            echo "commit_author=$COMMIT_AUTHOR"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Build result: $BUILD_RESULT"
+          echo "Deployment result: $DEPLOY_RESULT"
+          echo "Commit author: $COMMIT_AUTHOR"
+
+      - name: Send Microsoft Graph notification
+        shell: bash
+        env:
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MS_CLIENT_SECRET: ${{ secrets.MS_CLIENT_SECRET }}
+          MS_TENANT_ID: ${{ secrets.MS_TENANT_ID }}
+          MS_SENDER_EMAIL: ${{ vars.MS_SENDER_EMAIL }}
+          MAIL_TO: ${{ vars.MAIL_TO }}
+          MAIL_CC: ${{ vars.MAIL_CC }}
+
+          BUILD_RESULT: ${{ steps.results.outputs.build_result }}
+          DEPLOY_RESULT: ${{ steps.results.outputs.deploy_result }}
+          BUILD_URL: ${{ steps.results.outputs.build_url }}
+          DEPLOY_URL: ${{ steps.results.outputs.deploy_url }}
+          SHA: ${{ steps.results.outputs.sha }}
+          BRANCH: ${{ steps.results.outputs.branch }}
+          ACTOR: ${{ steps.results.outputs.actor }}
+          COMMIT_AUTHOR: ${{ steps.results.outputs.commit_author }}
+
+        run: |
+          set -euo pipefail
+
+          echo "===== VALIDATE CONFIGURATION ====="
+
+          test -n "$MS_CLIENT_ID" || { echo "Missing MS_CLIENT_ID"; exit 1; }
+          test -n "$MS_CLIENT_SECRET" || { echo "Missing MS_CLIENT_SECRET"; exit 1; }
+          test -n "$MS_TENANT_ID" || { echo "Missing MS_TENANT_ID"; exit 1; }
+          test -n "$MS_SENDER_EMAIL" || { echo "Missing MS_SENDER_EMAIL"; exit 1; }
+          test -n "$MAIL_TO" || { echo "Missing MAIL_TO"; exit 1; }
+
+          echo "===== DETERMINE DEPLOYMENT STATUS ====="
+
+          if [[ "$BUILD_RESULT" != "success" ]]; then
+            SUBJECT="FAILED: AVG Payroll Kubernetes Deployment"
+            STATUS_TEXT="AVG Payroll Deployment FAILED"
+            STATUS_COLOR="#c62828"
+            SUMMARY="Docker image build failed. Kubernetes deployment was not completed."
+          elif [[ "$DEPLOY_RESULT" == "success" ]]; then
+            SUBJECT="AVG Payroll Kubernetes Deployment Successful"
+            STATUS_TEXT="AVG Payroll Deployment SUCCESSFUL"
+            STATUS_COLOR="#16803c"
+            SUMMARY="Docker image build, Kubernetes deployment, rollout checks and backend health check completed successfully."
+          else
+            SUBJECT="FAILED: AVG Payroll Kubernetes Deployment"
+            STATUS_TEXT="AVG Payroll Deployment FAILED"
+            STATUS_COLOR="#c62828"
+            SUMMARY="The Docker build succeeded, but Kubernetes deployment, rollout or backend health verification failed."
+          fi
+
+          echo "===== REQUEST MICROSOFT GRAPH ACCESS TOKEN ====="
+
+          TOKEN_RESPONSE=$(curl -fsSL -X POST \
+            "https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "client_id=${MS_CLIENT_ID}" \
+            --data-urlencode "client_secret=${MS_CLIENT_SECRET}" \
+            --data-urlencode "scope=https://graph.microsoft.com/.default" \
+            --data-urlencode "grant_type=client_credentials")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+
+          test -n "$ACCESS_TOKEN" || {
+            echo "ERROR: Microsoft Graph access token was not received"
+            exit 1
+          }
+
+          echo "===== PREPARE EMAIL HTML ====="
+
+          html_escape() {
+            jq -nr --arg value "$1" '$value | @html'
+          }
+
+          E_REPOSITORY=$(html_escape "avg_payroll")
+          E_BRANCH=$(html_escape "$BRANCH")
+          E_ACTOR=$(html_escape "$ACTOR")
+          E_AUTHOR=$(html_escape "$COMMIT_AUTHOR")
+          E_SHA=$(html_escape "$SHA")
+          E_BUILD=$(html_escape "$BUILD_RESULT")
+          E_DEPLOY=$(html_escape "$DEPLOY_RESULT")
+          E_NAMESPACE=$(html_escape "avgpayroll-fresh")
+          E_SUMMARY=$(html_escape "$SUMMARY")
+          E_STATUS_TEXT=$(html_escape "$STATUS_TEXT")
+
+          BUILD_LINK=""
+          DEPLOY_LINK=""
+
+          if [[ -n "$BUILD_URL" ]]; then
+            BUILD_LINK="<a href=\"$(html_escape "$BUILD_URL")\" style=\"display:inline-block;background:#1769aa;color:#ffffff;padding:12px 18px;text-decoration:none;border-radius:6px;font-weight:bold;\">View Docker Build Run</a>"
+          else
+            BUILD_LINK="<span>Docker Build Run unavailable</span>"
+          fi
+
+          if [[ -n "$DEPLOY_URL" ]]; then
+            DEPLOY_LINK="<a href=\"$(html_escape "$DEPLOY_URL")\" style=\"display:inline-block;background:#1769aa;color:#ffffff;padding:12px 18px;text-decoration:none;border-radius:6px;font-weight:bold;\">View Deployment Workflow Run</a>"
+          else
+            DEPLOY_LINK="<span>Deployment Workflow Run unavailable</span>"
+          fi
+
+          HTML_BODY=$(cat <<EOF
+          <!DOCTYPE html>
+          <html>
+          <body style="margin:0;padding:20px;background:#f1f4f8;font-family:Arial,Helvetica,sans-serif;color:#222;">
+            <div style="max-width:720px;margin:auto;background:#ffffff;border:1px solid #dce2e8;border-radius:10px;overflow:hidden;">
+                <div style="background:${STATUS_COLOR};padding:24px;color:#ffffff;">
+                    <h2 style="margin:0;">${E_STATUS_TEXT}</h2>
+                    <p style="margin:8px 0 0;">AVG Payroll Kubernetes Deployment</p>
+                </div>
+
+                <div style="padding:24px;">
+                    <p style="font-size:15px;line-height:1.6;">${E_SUMMARY}</p>
+
+                    <table style="border-collapse:collapse;width:100%;font-size:14px;margin-top:20px;">
+                        <tr><td style="padding:12px;border:1px solid #dce2e8;background:#f4f6f8;font-weight:bold;">Repository</td><td style="padding:12px;border:1px solid #dce2e8;">${E_REPOSITORY}</td></tr>
+                        <tr><td style="padding:12px;border:1px solid #dce2e8;background:#f4f6f8;font-weight:bold;">Branch</td><td style="padding:12px;border:1px solid #dce2e8;">${E_BRANCH}</td></tr>
+                        <tr><td style="padding:12px;border:1px solid #dce2e8;background:#f4f6f8;font-weight:bold;">Pushed By</td><td style="padding:12px;border:1px solid #dce2e8;">${E_ACTOR}</td></tr>
+                        <tr><td style="padding:12px;border:1px solid #dce2e8;background:#f4f6f8;font-weight:bold;">Commit Author</td><td style="padding:12px;border:1px solid #dce2e8;">${E_AUTHOR}</td></tr>
+                        <tr><td style="padding:12px;border:1px solid #dce2e8;background:#f4f6f8;font-weight:bold;">Image Tag / Commit</td><td style="padding:12px;border:1px solid #dce2e8;">${E_SHA}</td></tr>
+                        <tr><td style="padding:12px;border:1px solid #dce2e8;background:#f4f6f8;font-weight:bold;">Docker Build Result</td><td style="padding:12px;border:1px solid #dce2e8;">${E_BUILD}</td></tr>
+                        <tr><td style="padding:12px;border:1px solid #dce2e8;background:#f4f6f8;font-weight:bold;">Deployment Job Result</td><td style="padding:12px;border:1px solid #dce2e8;">${E_DEPLOY}</td></tr>
+                        <tr><td style="padding:12px;border:1px solid #dce2e8;background:#f4f6f8;font-weight:bold;">Namespace</td><td style="padding:12px;border:1px solid #dce2e8;">${E_NAMESPACE}</td></tr>
+                    </table>
+
+                    <div style="margin-top:25px;text-align:center;">
+                        <p style="margin-bottom:18px;">${BUILD_LINK}</p>
+                        <p style="margin-bottom:18px;">${DEPLOY_LINK}</p>
+                    </div>
+
+                    <div style="margin-top:25px;background:${STATUS_COLOR};color:#ffffff;text-align:center;padding:16px;border-radius:6px;font-weight:bold;font-size:16px;">
+                        ${E_STATUS_TEXT}
+                    </div>
+                </div>
+
+                <div style="background:#f4f6f8;padding:14px;text-align:center;color:#666;font-size:12px;">
+                    Automated notification from AVG Payroll GitHub Actions
+                </div>
+            </div>
+          </body>
+          </html>
+          EOF
+          )
+
+          echo "===== CREATE GRAPH EMAIL PAYLOAD ====="
+
+          EMAIL_PAYLOAD=$(jq -n \
+            --arg subject "$SUBJECT" \
+            --arg html "$HTML_BODY" \
+            --arg to "$MAIL_TO" \
+            --arg cc "${MAIL_CC:-}" \
+            '{
+              message: {
+                subject: $subject,
+                body: {
+                  contentType: "HTML",
+                  content: $html
+                },
+                toRecipients: ($to | split(",") | map(select(length > 0) | {emailAddress:{address:(trim)}})),
+                ccRecipients: ($cc | split(",") | map(select(length > 0) | {emailAddress:{address:(trim)}}))
+              },
+              saveToSentItems: true
+            }')
+
+          echo "===== SEND EMAIL THROUGH MICROSOFT GRAPH ====="
+
+          HTTP_CODE=$(curl -sS \
+            -o /tmp/avgpayroll-graph-response.txt \
+            -w "%{http_code}" \
+            -X POST \
+            "https://graph.microsoft.com/v1.0/users/${MS_SENDER_EMAIL}/sendMail" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "$EMAIL_PAYLOAD")
+
+          if [[ "$HTTP_CODE" != "202" ]]; then
+            echo "===== GRAPH API ERROR ====="
+            cat /tmp/avgpayroll-graph-response.txt
+            echo
+            echo "ERROR: Microsoft Graph sendMail failed. HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "Microsoft Graph accepted the email successfully."
