@@ -46,7 +46,8 @@ const menuItems = [
         subItems: [
             { name: 'Attendance Overview', path: '/superadmin/attendance/overview' },
             { name: 'Work Shifts', path: '/superadmin/attendance/shifts' },
-            { name: 'Attendance Logs', path: '/superadmin/attendance/logs' }
+            { name: 'Attendance Logs', path: '/superadmin/attendance/logs' },
+            { name: 'Live Tracking', path: '/superadmin/attendance/live-tracking' },
         ]
     },
     {

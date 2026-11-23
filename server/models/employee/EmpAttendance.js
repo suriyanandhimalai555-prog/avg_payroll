@@ -34,6 +34,8 @@ const initializeEmpAttendanceModel = async () => {
         );
         CREATE INDEX IF NOT EXISTS idx_emp_location_logs_emp_date 
         ON emp_location_logs(employee_id, recorded_at);
+        CREATE INDEX IF NOT EXISTS idx_emp_location_logs_att_recorded 
+        ON emp_location_logs(attendance_id, recorded_at DESC);
     `;
 
     const alterQueries = `

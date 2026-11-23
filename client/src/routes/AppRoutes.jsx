@@ -33,6 +33,7 @@ import SuperAdminAttendanceOverview from '../pages/superadmin/attendance/SuperAd
 import SuperAdminWorkShifts from '../pages/superadmin/attendance/SuperAdminWorkShifts';
 import SuperAdminAttendanceLogs from '../pages/superadmin/attendance/SuperAdminAttendanceLogs';
 import SuperAdminLeaveManagement from '../pages/superadmin/attendance/SuperAdminLeaveManagement';
+import SuperAdminLiveTracking from '../pages/superadmin/attendance/SuperAdminLiveTracking';
 // Super Admin Leave Policies
 import SuperAdminLeaveOverview from '../pages/superadmin/leave/SuperAdminLeaveOverview';
 import SuperAdminLeavePolicies from '../pages/superadmin/leave/SuperAdminLeavePolicies';
@@ -147,6 +148,7 @@ const AppRoutes = () => {
                 <Route path="attendance/shifts" element={<SuperAdminWorkShifts />} />
                 <Route path="attendance/logs" element={<SuperAdminAttendanceLogs />} />
                 <Route path="attendance/leave" element={<SuperAdminLeaveManagement />} />
+                <Route path="attendance/live-tracking" element={<SuperAdminLiveTracking />} />
 
                 {/* Leave Policies */}
                 <Route path="leave/overview" element={<SuperAdminLeaveOverview />} />

@@ -65,6 +65,7 @@ const EmployeeAttendanceCom = () => {
     const lastPingTimeRef = useRef(0);
     const lastCoordsRef = useRef(null);
     const [isLiveTracking, setIsLiveTracking] = useState(false);
+    const [gpsDenied, setGpsDenied] = useState(false);
 
     // EOD & Late Reason Modals
     const [isEodModalOpen, setIsEodModalOpen] = useState(false);
@@ -152,6 +153,7 @@ const EmployeeAttendanceCom = () => {
     useEffect(() => {
         if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !user?.employee_id) {
             setIsLiveTracking(false);
+            setGpsDenied(false);
             return;
         }
 
@@ -161,9 +163,13 @@ const EmployeeAttendanceCom = () => {
         }
 
         setIsLiveTracking(true);
+        setGpsDenied(false);
 
         const watchId = navigator.geolocation.watchPosition(
             async (position) => {
+                setGpsDenied(false);
+                setIsLiveTracking(true);
+
                 const { latitude, longitude, accuracy } = position.coords;
                 const now = Date.now();
                 const timeElapsed = now - lastPingTimeRef.current;
@@ -206,6 +212,9 @@ const EmployeeAttendanceCom = () => {
             (error) => {
                 console.warn('Live GPS watch error:', error.message);
                 setIsLiveTracking(false);
+                if (error.code === 1) {
+                    setGpsDenied(true);
+                }
             },
             { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
         );
@@ -350,6 +359,10 @@ const EmployeeAttendanceCom = () => {
                 deviceInfo: deviceData,
                 eodUpdate: eodInput
             }, getAuthConfig());
+
+            // Reset live tracking refs cleanly on checkout
+            lastPingTimeRef.current = 0;
+            lastCoordsRef.current = null;
 
             setIsEodModalOpen(false);
             setEodInput('');
@@ -1057,7 +1070,20 @@ const EmployeeAttendanceCom = () => {
                                             Live GPS Active
                                         </div>
                                     )}
+
+                                    {gpsDenied && isClockedIn && !isPendingOldCheckout && (
+                                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border text-amber-700 bg-amber-50 border-amber-200">
+                                            <FaExclamationTriangle className="text-[9px]" />
+                                            GPS Permission Denied
+                                        </div>
+                                    )}
                                 </div>
+
+                                {isClockedIn && !isPendingOldCheckout && (
+                                    <p className="text-[10px] text-slate-400 text-center mt-2">
+                                        Location is shared with your organization only while clocked in.
+                                    </p>
+                                )}
                             </div>
 
                             {/* ============ LAST IN / LAST OUT CARDS ============ */}

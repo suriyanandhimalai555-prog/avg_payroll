@@ -156,12 +156,14 @@ export const clockIn = async (req, res) => {
         const result = await pool.query(insertQuery, [employeeId, todayDate, locationData, deviceInfo, lateMinutes, status, lateReason || null]);
         const newRecord = result.rows[0];
 
-        // Log initial GPS coordinates for live tracking
-        if (latitude != null && longitude != null) {
+        // Log initial GPS coordinates if valid
+        const lat = Number(latitude);
+        const lng = Number(longitude);
+        if (latitude != null && longitude != null && Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
             try {
                 await pool.query(
                     `INSERT INTO emp_location_logs (attendance_id, employee_id, latitude, longitude, accuracy) VALUES ($1, $2, $3, $4, $5)`,
-                    [newRecord.id, employeeId, latitude, longitude, accuracy || null]
+                    [newRecord.id, employeeId, lat, lng, Number.isFinite(Number(accuracy)) ? Number(accuracy) : null]
                 );
             } catch (locErr) {
                 console.warn('Initial location log failed:', locErr.message);
@@ -207,12 +209,13 @@ export const clockOut = async (req, res) => {
 
         const result = await pool.query(updateQuery, [locationData, deviceInfo, totalHoursFormatted, eodUpdate, recordId]);
 
-        // Log final checkout GPS coordinates
-        if (latitude != null && longitude != null) {
+        const lat = Number(latitude);
+        const lng = Number(longitude);
+        if (latitude != null && longitude != null && Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
             try {
                 await pool.query(
                     `INSERT INTO emp_location_logs (attendance_id, employee_id, latitude, longitude, accuracy) VALUES ($1, $2, $3, $4, $5)`,
-                    [recordId, employeeId, latitude, longitude, accuracy || null]
+                    [recordId, employeeId, lat, lng, Number.isFinite(Number(accuracy)) ? Number(accuracy) : null]
                 );
             } catch (locErr) {
                 console.warn('Checkout location log failed:', locErr.message);
@@ -226,32 +229,76 @@ export const clockOut = async (req, res) => {
     }
 };
 
+// HARDENED: Verifies JWT identity, session ownership, active status, and coordinate/accuracy bounds
 export const logLiveLocation = async (req, res) => {
     try {
-        const { employeeId, attendanceId, latitude, longitude, accuracy } = req.body;
+        const { attendanceId, latitude, longitude, accuracy } = req.body;
+        const authEmail = req.user?.email;
 
-        if (!employeeId || latitude == null || longitude == null) {
-            return res.status(400).json({ message: 'Employee ID, latitude, and longitude are required.' });
+        if (!authEmail) {
+            return res.status(401).json({ message: 'Unauthorized request.' });
         }
 
-        let targetAttendanceId = attendanceId;
+        // 1. Validate coordinate ranges
+        const lat = Number(latitude);
+        const lng = Number(longitude);
+        if (latitude == null || longitude == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return res.status(400).json({ message: 'Valid numeric latitude and longitude are required.' });
+        }
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return res.status(400).json({ message: 'Coordinates out of valid geographic bounds.' });
+        }
 
-        if (!targetAttendanceId) {
-            const activeRes = await pool.query(
-                `SELECT id FROM emp_attendance WHERE employee_id = $1 AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1`,
-                [employeeId]
-            );
-            if (activeRes.rows.length === 0) {
-                return res.status(400).json({ message: 'No active shift found. Live tracking skipped.' });
+        // 2. Validate accuracy if provided
+        let safeAccuracy = null;
+        if (accuracy != null && accuracy !== '') {
+            const acc = Number(accuracy);
+            if (!Number.isFinite(acc) || acc < 0 || acc > 50000) {
+                return res.status(400).json({ message: 'Invalid GPS accuracy value.' });
             }
-            targetAttendanceId = activeRes.rows[0].id;
+            safeAccuracy = acc;
         }
 
+        // 3. Resolve authenticated employee_id from JWT email (never trust req.body.employeeId)
+        const empRes = await pool.query(
+            `SELECT employee_id FROM sa_employees WHERE LOWER(email) = LOWER($1) AND status = 'Active' LIMIT 1`,
+            [authEmail]
+        );
+        if (empRes.rows.length === 0) {
+            return res.status(403).json({ message: 'Active employee profile not found for this account.' });
+        }
+        const verifiedEmployeeId = empRes.rows[0].employee_id;
+
+        // 4. Verify attendance session ownership and active status (clock_out IS NULL)
+        let activeAttRes;
+        if (attendanceId) {
+            activeAttRes = await pool.query(
+                `SELECT id FROM emp_attendance 
+                 WHERE id = $1 AND employee_id = $2 AND clock_in IS NOT NULL AND clock_out IS NULL 
+                 LIMIT 1`,
+                [attendanceId, verifiedEmployeeId]
+            );
+        } else {
+            activeAttRes = await pool.query(
+                `SELECT id FROM emp_attendance 
+                 WHERE employee_id = $1 AND clock_in IS NOT NULL AND clock_out IS NULL 
+                 ORDER BY clock_in DESC LIMIT 1`,
+                [verifiedEmployeeId]
+            );
+        }
+
+        if (activeAttRes.rows.length === 0) {
+            return res.status(400).json({ message: 'No active attendance session found for this employee. Location update rejected.' });
+        }
+
+        const verifiedAttendanceId = activeAttRes.rows[0].id;
+
+        // 5. Insert GPS log
         const insertQuery = `
             INSERT INTO emp_location_logs (attendance_id, employee_id, latitude, longitude, accuracy)
             VALUES ($1, $2, $3, $4, $5) RETURNING *;
         `;
-        const result = await pool.query(insertQuery, [targetAttendanceId, employeeId, latitude, longitude, accuracy || null]);
+        const result = await pool.query(insertQuery, [verifiedAttendanceId, verifiedEmployeeId, lat, lng, safeAccuracy]);
 
         res.status(201).json({ message: 'Location logged', log: result.rows[0] });
     } catch (error) {

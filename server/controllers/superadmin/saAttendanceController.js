@@ -1,8 +1,11 @@
 import pool from '../../config/db.js';
 
+// Configurable GPS freshness threshold (default: 2 minutes)
+const STALE_THRESHOLD_MS = (parseInt(process.env.GPS_STALE_MINUTES || '2', 10) || 2) * 60 * 1000;
+
 // Haversine formula to calculate distance in km between two GPS points
 const calcDistanceKm = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Earth radius in km
+    const R = 6371;
     const toRad = (deg) => (deg * Math.PI) / 180;
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
@@ -18,7 +21,6 @@ export const getAttendanceOverview = async (req, res) => {
         const { date, company, branch, department } = req.query;
         const targetDate = date || new Date().toISOString().split('T')[0];
 
-        // 1. Fetch all employees matching the filters
         let empQuery = `
             SELECT employee_id, first_name, last_name, company, branch, department, location, shift, basic_salary
             FROM sa_employees
@@ -48,7 +50,6 @@ export const getAttendanceOverview = async (req, res) => {
 
         const empIds = employees.map(e => e.employee_id);
 
-        // 2. Fetch Attendance for the target date, ordered by clock_in to sequence sessions
         const attQuery = `
             SELECT * FROM emp_attendance 
             WHERE date = $1 AND employee_id = ANY($2::varchar[])
@@ -56,16 +57,12 @@ export const getAttendanceOverview = async (req, res) => {
         `;
         const attResult = await pool.query(attQuery, [targetDate, empIds]);
         
-        // Group multiple sessions under their respective employee ID
         const attendanceMap = {};
         attResult.rows.forEach(row => {
-            if (!attendanceMap[row.employee_id]) {
-                attendanceMap[row.employee_id] = [];
-            }
+            if (!attendanceMap[row.employee_id]) attendanceMap[row.employee_id] = [];
             attendanceMap[row.employee_id].push(row);
         });
 
-        // 3. Fetch Approved Leaves overlapping the target date
         const leaveQuery = `
             SELECT * FROM emp_leaves 
             WHERE status = 'Approved' 
@@ -79,13 +76,8 @@ export const getAttendanceOverview = async (req, res) => {
             leaveMap[row.employee_id] = row;
         });
 
-        let present = 0;
-        let absent = 0;
-        let pendingApproval = 0;
-        let onLeave = 0;
-        let wfh = 0;
+        let present = 0, absent = 0, pendingApproval = 0, onLeave = 0, wfh = 0;
 
-        // Helper to sum "HH:MM Hrs" string formats from multiple sessions
         const sumHours = (logs) => {
             let totalMins = 0;
             logs.forEach(log => {
@@ -100,7 +92,6 @@ export const getAttendanceOverview = async (req, res) => {
             return `${hrs}:${mins} Hrs`;
         };
 
-        // 4. Map and determine statuses
         const records = employees.map(emp => {
             const logs = attendanceMap[emp.employee_id];
             const leave = leaveMap[emp.employee_id];
@@ -164,26 +155,172 @@ export const getAttendanceOverview = async (req, res) => {
 
         res.status(200).json({
             records,
-            metrics: {
-                present,
-                absent,
-                pendingApproval,
-                onLeave,
-                wfh,
-                total: employees.length
-            }
+            metrics: { present, absent, pendingApproval, onLeave, wfh, total: employees.length }
         });
-
     } catch (error) {
         console.error('Overview Error:', error);
         res.status(500).json({ message: 'Error fetching attendance overview' });
     }
 };
 
-// Fetches raw historical logs for the logs table
+// NEW: Get all currently active (checked-in) employees with their latest GPS ping
+export const getLiveTrackingData = async (req, res) => {
+    try {
+        const { company, branch, department } = req.query;
+
+        const filterClauses = [];
+        const params = [];
+
+        if (company && company !== 'All') {
+            params.push(company);
+            filterClauses.push(`e.company = $${params.length}`);
+        }
+        if (branch && branch !== 'All') {
+            params.push(branch);
+            filterClauses.push(`e.branch = $${params.length}`);
+        }
+        if (department && department !== 'All') {
+            params.push(department);
+            filterClauses.push(`e.department = $${params.length}`);
+        }
+
+        const whereFilter = filterClauses.length > 0 ? `AND ${filterClauses.join(' AND ')}` : '';
+
+        // Latest active session per employee + latest GPS log for that session
+        const activeQuery = `
+            WITH latest_active_sessions AS (
+                SELECT DISTINCT ON (a.employee_id)
+                    a.id AS attendance_id,
+                    a.employee_id,
+                    a.date,
+                    a.clock_in,
+                    a.clock_in_location,
+                    a.status AS attendance_status
+                FROM emp_attendance a
+                WHERE a.clock_in IS NOT NULL AND a.clock_out IS NULL
+                ORDER BY a.employee_id, a.clock_in DESC
+            ),
+            latest_gps AS (
+                SELECT DISTINCT ON (l.attendance_id)
+                    l.attendance_id,
+                    l.latitude,
+                    l.longitude,
+                    l.accuracy,
+                    l.recorded_at
+                FROM emp_location_logs l
+                ORDER BY l.attendance_id, l.recorded_at DESC
+            )
+            SELECT
+                e.employee_id,
+                e.first_name,
+                e.last_name,
+                e.company,
+                e.branch,
+                e.department,
+                e.designation,
+                s.attendance_id,
+                s.date,
+                s.clock_in,
+                s.clock_in_location,
+                s.attendance_status,
+                g.latitude,
+                g.longitude,
+                g.accuracy,
+                g.recorded_at AS last_gps_at
+            FROM latest_active_sessions s
+            JOIN sa_employees e ON e.employee_id = s.employee_id
+            LEFT JOIN latest_gps g ON g.attendance_id = s.attendance_id
+            WHERE e.status = 'Active' ${whereFilter}
+            ORDER BY s.clock_in DESC;
+        `;
+
+        // Count employees checked out today (matching same org filters)
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const checkedOutParams = [todayStr, ...params];
+        const checkedOutFilter = filterClauses.length > 0
+            ? `AND ${filterClauses.map((clause, idx) => clause.replace(`$${idx + 1}`, `$${idx + 2}`)).join(' AND ')}`
+            : '';
+
+        const checkedOutQuery = `
+            SELECT COUNT(DISTINCT a.employee_id) AS count
+            FROM emp_attendance a
+            JOIN sa_employees e ON e.employee_id = a.employee_id
+            WHERE a.date = $1
+              AND a.clock_out IS NOT NULL
+              AND e.status = 'Active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM emp_attendance a2
+                  WHERE a2.employee_id = a.employee_id AND a2.clock_out IS NULL
+              )
+              ${checkedOutFilter};
+        `;
+
+        const [activeRes, checkedOutRes] = await Promise.all([
+            pool.query(activeQuery, params),
+            pool.query(checkedOutQuery, checkedOutParams)
+        ]);
+
+        const nowMs = Date.now();
+        let recentCount = 0;
+        let staleOrUnavailableCount = 0;
+
+        const employees = activeRes.rows.map(row => {
+            const hasCoords = row.latitude !== null && row.longitude !== null;
+            let trackingStatus = 'LOCATION UNAVAILABLE';
+
+            if (hasCoords && row.last_gps_at) {
+                const ageMs = nowMs - new Date(row.last_gps_at).getTime();
+                if (ageMs <= STALE_THRESHOLD_MS) {
+                    trackingStatus = 'ACTIVE';
+                    recentCount++;
+                } else {
+                    trackingStatus = 'STALE';
+                    staleOrUnavailableCount++;
+                }
+            } else {
+                staleOrUnavailableCount++;
+            }
+
+            return {
+                employee_id: row.employee_id,
+                first_name: row.first_name,
+                last_name: row.last_name,
+                company: row.company,
+                branch: row.branch,
+                department: row.department,
+                designation: row.designation,
+                attendance_id: row.attendance_id,
+                date: row.date,
+                clock_in: row.clock_in,
+                clock_in_location: row.clock_in_location,
+                latitude: hasCoords ? parseFloat(row.latitude) : null,
+                longitude: hasCoords ? parseFloat(row.longitude) : null,
+                accuracy: row.accuracy != null ? parseFloat(row.accuracy) : null,
+                last_gps_at: row.last_gps_at,
+                tracking_status: trackingStatus
+            };
+        });
+
+        res.status(200).json({
+            staleThresholdMinutes: Math.round(STALE_THRESHOLD_MS / 60000),
+            metrics: {
+                totalCheckedIn: employees.length,
+                recentGps: recentCount,
+                staleOrUnavailable: staleOrUnavailableCount,
+                checkedOutToday: parseInt(checkedOutRes.rows[0]?.count || '0', 10)
+            },
+            employees
+        });
+    } catch (error) {
+        console.error('Live Tracking Fetch Error:', error);
+        res.status(500).json({ message: 'Error fetching live employee tracking data.' });
+    }
+};
+
+// Fetches raw historical logs (supports optional employee_id filter for Route History view)
 export const getAttendanceHistoryLogs = async (req, res) => {
     try {
-        const { start_date, end_date, company, branch, department } = req.query;
+        const { start_date, end_date, company, branch, department, employee_id } = req.query;
         
         if (!start_date || !end_date) {
             return res.status(400).json({ message: "Start date and end date are required." });
@@ -210,6 +347,10 @@ export const getAttendanceHistoryLogs = async (req, res) => {
             query += ` AND e.department = $${paramIndex++}`;
             params.push(department);
         }
+        if (employee_id) {
+            query += ` AND a.employee_id = $${paramIndex++}`;
+            params.push(employee_id);
+        }
 
         query += ` ORDER BY a.date DESC, a.clock_in ASC`;
 
@@ -221,7 +362,7 @@ export const getAttendanceHistoryLogs = async (req, res) => {
     }
 };
 
-// Fetches detailed Live Roaming GPS logs for a specific attendance session
+// Reused by both Attendance Logs and Live Tracking Route History
 export const getSessionRoamingLogs = async (req, res) => {
     try {
         const { attendanceId } = req.params;
@@ -271,15 +412,9 @@ export const getSessionRoamingLogs = async (req, res) => {
 export const adminApproveAttendance = async (req, res) => {
     try {
         const { recordId } = req.params;
-        const updateQuery = `
-            UPDATE emp_attendance 
-            SET status = 'Present' 
-            WHERE id = $1 RETURNING *;
-        `;
+        const updateQuery = `UPDATE emp_attendance SET status = 'Present' WHERE id = $1 RETURNING *;`;
         const result = await pool.query(updateQuery, [recordId]);
-
         if (result.rows.length === 0) return res.status(404).json({ message: 'Session not found.' });
-
         res.status(200).json({ message: 'Attendance late request approved successfully', record: result.rows[0] });
     } catch (error) {
         console.error('Approve Attendance Error:', error);
@@ -292,9 +427,7 @@ export const adminRejectAttendance = async (req, res) => {
         const { recordId } = req.params;
         const deleteQuery = `DELETE FROM emp_attendance WHERE id = $1 RETURNING id`;
         const result = await pool.query(deleteQuery, [recordId]);
-
         if (result.rows.length === 0) return res.status(404).json({ message: 'Session not found.' });
-
         res.status(200).json({ message: 'Late request rejected and removed.' });
     } catch (error) {
         console.error('Reject Attendance Error:', error);
