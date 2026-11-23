@@ -22,6 +22,20 @@ const initializeEmpAttendanceModel = async () => {
         );
     `;
 
+    const createLocationLogsQuery = `
+        CREATE TABLE IF NOT EXISTS emp_location_logs (
+            id SERIAL PRIMARY KEY,
+            attendance_id INT REFERENCES emp_attendance(id) ON DELETE CASCADE,
+            employee_id VARCHAR(50) NOT NULL,
+            latitude DECIMAL(10, 8) NOT NULL,
+            longitude DECIMAL(11, 8) NOT NULL,
+            accuracy FLOAT,
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_emp_location_logs_emp_date 
+        ON emp_location_logs(employee_id, recorded_at);
+    `;
+
     const alterQueries = `
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS clock_in_location TEXT;
         ALTER TABLE emp_attendance ADD COLUMN IF NOT EXISTS clock_out_location TEXT;
@@ -36,9 +50,10 @@ const initializeEmpAttendanceModel = async () => {
     try {
         await pool.query(createTableQuery);
         await pool.query(alterQueries);
-        console.log('EmpAttendance table checked/updated successfully.');
+        await pool.query(createLocationLogsQuery);
+        console.log('EmpAttendance & EmpLocationLogs tables checked/updated successfully.');
     } catch (error) {
-        console.error('Error updating EmpAttendance table:', error);
+        console.error('Error updating EmpAttendance tables:', error);
     }
 };
 

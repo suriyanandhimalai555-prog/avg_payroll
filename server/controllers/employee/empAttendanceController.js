@@ -47,7 +47,7 @@ export const getAttendanceHistory = async (req, res) => {
 
 export const clockIn = async (req, res) => {
     try {
-        const { employeeId, todayDate, locationData, deviceInfo, lateReason } = req.body;
+        const { employeeId, todayDate, locationData, deviceInfo, lateReason, latitude, longitude, accuracy } = req.body;
         
         const doubleCheckQuery = `
             SELECT id FROM emp_attendance 
@@ -80,7 +80,6 @@ export const clockIn = async (req, res) => {
         let status = 'Present';
         
         try {
-            // 1. Get current time explicitly in IST to prevent Server UTC bugs
             const nowISTStr = new Date().toLocaleString("en-US", { 
                 timeZone: "Asia/Kolkata", 
                 hour12: false, 
@@ -88,11 +87,9 @@ export const clockIn = async (req, res) => {
                 minute: 'numeric' 
             });
             
-            // Convert current time to total minutes from midnight
             const [currentHrs, currentMins] = nowISTStr.split(':').map(Number);
             const currentTotalMins = (currentHrs * 60) + currentMins;
 
-            // 2. Fetch Employee's Shift
             let shift = null;
             const empRes = await pool.query('SELECT shift FROM sa_employees WHERE employee_id = $1', [employeeId]);
             if (empRes.rows.length > 0 && empRes.rows[0].shift) {
@@ -100,18 +97,16 @@ export const clockIn = async (req, res) => {
                 if (sRes.rows.length > 0) shift = sRes.rows[0];
             }
             
-            // Fallback to default shift if string mismatch
             if (!shift) {
                 const defRes = await pool.query(`SELECT * FROM sa_work_shifts WHERE status = 'Active' ORDER BY id ASC LIMIT 1`);
                 if (defRes.rows.length > 0) shift = defRes.rows[0];
             }
 
-            // 3. Process Shift Rules strictly using minutes from midnight
             if (shift) {
                 const shiftType = (shift.shift_type || 'Fixed').trim();
 
                 if (shiftType === 'Flexible') {
-                    const fivePMTotalMins = 17 * 60; // 17:00 (5:00 PM)
+                    const fivePMTotalMins = 17 * 60;
                     if (currentTotalMins >= fivePMTotalMins) {
                         return res.status(400).json({ message: 'It is past 5:00 PM. Flexible shift check-ins are not allowed at this time. You have been marked as Absent.' });
                     }
@@ -120,7 +115,6 @@ export const clockIn = async (req, res) => {
                         let sHrs = 0;
                         let sMins = 0;
                         
-                        // Robustly parse "09:00", "9:00 AM", or "09:00:00"
                         const timeStr = shift.start_time.trim().toUpperCase();
                         const timeParts = timeStr.match(/(\d+):(\d+)/);
                         if (timeParts) {
@@ -131,22 +125,17 @@ export const clockIn = async (req, res) => {
                         }
 
                         const expectedTotalMins = (sHrs * 60) + sMins;
-
-                        // Memory Fallback: Uses 5 mins as default if database grace_time is missing
                         const graceValue = parseInt(shift.grace_time || shift.grace_period || 5, 10);
                         const graceMins = isNaN(graceValue) ? 5 : graceValue;
                         const allowedTotalMins = expectedTotalMins + graceMins;
 
-                        // Lockout at 1:00 PM
                         const onePMTotalMins = 13 * 60; 
                         if (currentTotalMins >= onePMTotalMins) {
                             return res.status(400).json({ message: 'It is past 1:00 PM. You are marked as Absent for the whole day.' });
                         }
 
-                        // Late Detection Logic
                         if (currentTotalMins > allowedTotalMins) {
                             if (!lateReason || lateReason.trim() === '') {
-                                // Triggers the modal on the frontend
                                 return res.status(428).json({ message: 'LATE_REASON_REQUIRED' });
                             }
                             lateMinutes = currentTotalMins - expectedTotalMins;
@@ -165,7 +154,21 @@ export const clockIn = async (req, res) => {
         `;
 
         const result = await pool.query(insertQuery, [employeeId, todayDate, locationData, deviceInfo, lateMinutes, status, lateReason || null]);
-        res.status(201).json({ message: 'Clocked in successfully', record: result.rows[0] });
+        const newRecord = result.rows[0];
+
+        // Log initial GPS coordinates for live tracking
+        if (latitude != null && longitude != null) {
+            try {
+                await pool.query(
+                    `INSERT INTO emp_location_logs (attendance_id, employee_id, latitude, longitude, accuracy) VALUES ($1, $2, $3, $4, $5)`,
+                    [newRecord.id, employeeId, latitude, longitude, accuracy || null]
+                );
+            } catch (locErr) {
+                console.warn('Initial location log failed:', locErr.message);
+            }
+        }
+
+        res.status(201).json({ message: 'Clocked in successfully', record: newRecord });
     } catch (error) {
         console.error('Clock In Error:', error);
         res.status(500).json({ message: 'Error processing clock in' });
@@ -174,7 +177,7 @@ export const clockIn = async (req, res) => {
 
 export const clockOut = async (req, res) => {
     try {
-        const { employeeId, todayDate, locationData, deviceInfo, eodUpdate } = req.body;
+        const { employeeId, todayDate, locationData, deviceInfo, eodUpdate, latitude, longitude, accuracy } = req.body;
 
         const findQuery = `
             SELECT id, clock_in FROM emp_attendance 
@@ -203,10 +206,57 @@ export const clockOut = async (req, res) => {
         `;
 
         const result = await pool.query(updateQuery, [locationData, deviceInfo, totalHoursFormatted, eodUpdate, recordId]);
+
+        // Log final checkout GPS coordinates
+        if (latitude != null && longitude != null) {
+            try {
+                await pool.query(
+                    `INSERT INTO emp_location_logs (attendance_id, employee_id, latitude, longitude, accuracy) VALUES ($1, $2, $3, $4, $5)`,
+                    [recordId, employeeId, latitude, longitude, accuracy || null]
+                );
+            } catch (locErr) {
+                console.warn('Checkout location log failed:', locErr.message);
+            }
+        }
+
         res.status(200).json({ message: 'Clocked out successfully', record: result.rows[0] });
     } catch (error) {
         console.error('Clock Out Error:', error);
         res.status(500).json({ message: 'Error processing clock out' });
+    }
+};
+
+export const logLiveLocation = async (req, res) => {
+    try {
+        const { employeeId, attendanceId, latitude, longitude, accuracy } = req.body;
+
+        if (!employeeId || latitude == null || longitude == null) {
+            return res.status(400).json({ message: 'Employee ID, latitude, and longitude are required.' });
+        }
+
+        let targetAttendanceId = attendanceId;
+
+        if (!targetAttendanceId) {
+            const activeRes = await pool.query(
+                `SELECT id FROM emp_attendance WHERE employee_id = $1 AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1`,
+                [employeeId]
+            );
+            if (activeRes.rows.length === 0) {
+                return res.status(400).json({ message: 'No active shift found. Live tracking skipped.' });
+            }
+            targetAttendanceId = activeRes.rows[0].id;
+        }
+
+        const insertQuery = `
+            INSERT INTO emp_location_logs (attendance_id, employee_id, latitude, longitude, accuracy)
+            VALUES ($1, $2, $3, $4, $5) RETURNING *;
+        `;
+        const result = await pool.query(insertQuery, [targetAttendanceId, employeeId, latitude, longitude, accuracy || null]);
+
+        res.status(201).json({ message: 'Location logged', log: result.rows[0] });
+    } catch (error) {
+        console.error('Live Location Ping Error:', error);
+        res.status(500).json({ message: 'Error logging live location.' });
     }
 };
 

@@ -27,6 +27,19 @@ const getSafeDateStr = (dateVal) => {
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 };
 
+// Haversine formula to calculate distance in meters between two GPS points
+const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 const EmployeeAttendanceCom = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('today');
@@ -47,6 +60,11 @@ const EmployeeAttendanceCom = () => {
 
     const countdownRef = useRef(null);
     const [completedMsToday, setCompletedMsToday] = useState(0);
+
+    // Live GPS Tracking Refs & State
+    const lastPingTimeRef = useRef(0);
+    const lastCoordsRef = useRef(null);
+    const [isLiveTracking, setIsLiveTracking] = useState(false);
 
     // EOD & Late Reason Modals
     const [isEodModalOpen, setIsEodModalOpen] = useState(false);
@@ -129,6 +147,74 @@ const EmployeeAttendanceCom = () => {
     const activeSessionDateStr = activeSession ? getSafeDateStr(activeSession.date) : null;
     const isPendingOldCheckout = isClockedIn && activeSessionDateStr !== getSafeDateStr(new Date());
     const hasWorkedToday = todayLogs.length > 0;
+
+    // ==================== LIVE GPS TRACKING WATCHER ====================
+    useEffect(() => {
+        if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !user?.employee_id) {
+            setIsLiveTracking(false);
+            return;
+        }
+
+        if (!navigator.geolocation) {
+            setIsLiveTracking(false);
+            return;
+        }
+
+        setIsLiveTracking(true);
+
+        const watchId = navigator.geolocation.watchPosition(
+            async (position) => {
+                const { latitude, longitude, accuracy } = position.coords;
+                const now = Date.now();
+                const timeElapsed = now - lastPingTimeRef.current;
+
+                let movedEnough = false;
+                if (lastCoordsRef.current) {
+                    const dist = getDistanceMeters(
+                        lastCoordsRef.current.latitude,
+                        lastCoordsRef.current.longitude,
+                        latitude,
+                        longitude
+                    );
+                    movedEnough = dist >= 30; // Moved at least 30 meters
+                } else {
+                    movedEnough = true;
+                }
+
+                // Ping backend if >= 30 seconds elapsed OR moved >= 30 meters
+                if (timeElapsed >= 30000 || movedEnough) {
+                    lastPingTimeRef.current = now;
+                    lastCoordsRef.current = { latitude, longitude };
+
+                    try {
+                        await axios.post(
+                            `${import.meta.env.VITE_API_URL}/api/attendance/location-ping`,
+                            {
+                                employeeId: user.employee_id,
+                                attendanceId: activeSession.id,
+                                latitude,
+                                longitude,
+                                accuracy
+                            },
+                            getAuthConfig()
+                        );
+                    } catch (err) {
+                        console.warn('Live location ping failed:', err.message);
+                    }
+                }
+            },
+            (error) => {
+                console.warn('Live GPS watch error:', error.message);
+                setIsLiveTracking(false);
+            },
+            { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+        );
+
+        return () => {
+            navigator.geolocation.clearWatch(watchId);
+            setIsLiveTracking(false);
+        };
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, user?.employee_id]);
     
     const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8) : 8;
     const targetMs = targetHours * 3600000;
@@ -171,30 +257,29 @@ const EmployeeAttendanceCom = () => {
     const fetchLocationData = () => {
         return new Promise((resolve) => {
             if (!navigator.geolocation) {
-                resolve('Location Unavailable (Browser unsupported)');
+                resolve({ address: 'Location Unavailable (Browser unsupported)', latitude: null, longitude: null, accuracy: null });
                 return;
             }
             
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
-                    const { latitude, longitude } = position.coords;
+                    const { latitude, longitude, accuracy } = position.coords;
                     try {
                         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
                         const data = await response.json();
-                        if (data && data.display_name) {
-                            resolve(`${data.display_name} (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`);
-                        } else {
-                            resolve(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`);
-                        }
+                        const address = data && data.display_name
+                            ? `${data.display_name} (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`
+                            : `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+                        resolve({ address, latitude, longitude, accuracy });
                     } catch (err) {
-                        resolve(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`);
+                        resolve({ address: `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`, latitude, longitude, accuracy });
                     }
                 },
                 (error) => {
                     console.warn("Geolocation failed (kCLErrorLocationUnknown or Denied):", error.message);
-                    resolve('Location Unavailable (Check Device Settings)');
+                    resolve({ address: 'Location Unavailable (Check Device Settings)', latitude: null, longitude: null, accuracy: null });
                 },
-                { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
             );
         });
     };
@@ -205,14 +290,17 @@ const EmployeeAttendanceCom = () => {
 
         setIsActionLoading(true);
         try {
-            const locationData = await fetchLocationData();
+            const locObj = await fetchLocationData();
             const deviceData = getDeviceInfo();
             const todayDate = getSafeDateStr(now);
 
             await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
                 employeeId: user.employee_id,
                 todayDate: todayDate,
-                locationData: locationData,
+                locationData: locObj.address,
+                latitude: locObj.latitude,
+                longitude: locObj.longitude,
+                accuracy: locObj.accuracy,
                 deviceInfo: deviceData,
                 lateReason: providedLateReason
             }, getAuthConfig());
@@ -247,7 +335,7 @@ const EmployeeAttendanceCom = () => {
         setIsSubmittingEod(true);
         setIsActionLoading(true);
         try {
-            const locationData = await fetchLocationData();
+            const locObj = await fetchLocationData();
             const deviceData = getDeviceInfo();
             const recordToClose = activeSession;
             const targetDate = getSafeDateStr(recordToClose.date);
@@ -255,7 +343,10 @@ const EmployeeAttendanceCom = () => {
             await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
                 employeeId: user.employee_id,
                 todayDate: targetDate,
-                locationData: locationData,
+                locationData: locObj.address,
+                latitude: locObj.latitude,
+                longitude: locObj.longitude,
+                accuracy: locObj.accuracy,
                 deviceInfo: deviceData,
                 eodUpdate: eodInput
             }, getAuthConfig());
@@ -948,8 +1039,8 @@ const EmployeeAttendanceCom = () => {
                                     </div>
                                 </div>
 
-                                {/* Status Badge */}
-                                <div className="mt-5">
+                                {/* Status Badges */}
+                                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                                     <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-bold border ${isClockedIn
                                         ? 'text-green-700 bg-green-50 border-green-200'
                                         : hasWorkedToday
@@ -959,6 +1050,13 @@ const EmployeeAttendanceCom = () => {
                                         {isClockedIn && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>}
                                         {isClockedIn ? 'Currently Working' : (hasWorkedToday ? 'Shift Paused / Completed' : 'Not Checked In')}
                                     </div>
+
+                                    {isLiveTracking && (
+                                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border text-[#0437cc] bg-blue-50 border-blue-200">
+                                            <FaMapMarkerAlt className="text-[9px] animate-bounce" />
+                                            Live GPS Active
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1125,20 +1223,20 @@ const EmployeeAttendanceCom = () => {
                                                                                             <FaSignOutAlt className="text-red-400 text-[8px]" />
                                                                                         </span>
                                                                                         Out
-                                                                                        <p className="text-xs font-bold text-slate-700 truncate">
-                                                                                            {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>Working</span>}
-                                                                                        </p>
-                                                                                        {session.clock_out && (
-                                                                                            <>
-                                                                                                <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location || session.location_out}>
-                                                                                                    <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || session.location_out || 'No Location'}
-                                                                                                </p>
-                                                                                                <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
-                                                                                                    <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || session.device_out || 'No Device'}
-                                                                                                </p>
-                                                                                            </>
-                                                                                        )}
                                                                                     </p>
+                                                                                    <p className="text-xs font-bold text-slate-700 truncate">
+                                                                                        {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>Working</span>}
+                                                                                    </p>
+                                                                                    {session.clock_out && (
+                                                                                        <>
+                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location || session.location_out}>
+                                                                                                <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || session.location_out || 'No Location'}
+                                                                                            </p>
+                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                                <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || session.device_out || 'No Device'}
+                                                                                            </p>
+                                                                                        </>
+                                                                                    )}
                                                                                 </div>
                                                                             </div>
                                                                             {session.total_hours && (
