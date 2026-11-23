@@ -5,7 +5,8 @@ import {
     FaClock, FaCalendarDay, FaHistory, FaCalendarAlt,
     FaSignOutAlt, FaSignInAlt, FaTasks, FaFingerprint,
     FaBusinessTime, FaWalking, FaExclamationTriangle,
-    FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp, FaTimes, FaCheck, FaEdit, FaFilter, FaUmbrellaBeach
+    FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp,
+    FaTimes, FaCheck, FaEdit, FaFilter, FaUmbrellaBeach, FaSyncAlt
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -66,6 +67,9 @@ const EmployeeAttendanceCom = () => {
     const lastCoordsRef = useRef(null);
     const [isLiveTracking, setIsLiveTracking] = useState(false);
     const [gpsDenied, setGpsDenied] = useState(false);
+    const [gpsErrorMsg, setGpsErrorMsg] = useState('');
+    const [gpsRetryCount, setGpsRetryCount] = useState(0);
+    const [isRetryingGps, setIsRetryingGps] = useState(false);
 
     // EOD & Late Reason Modals
     const [isEodModalOpen, setIsEodModalOpen] = useState(false);
@@ -154,21 +158,27 @@ const EmployeeAttendanceCom = () => {
         if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !user?.employee_id) {
             setIsLiveTracking(false);
             setGpsDenied(false);
+            setGpsErrorMsg('');
+            setIsRetryingGps(false);
             return;
         }
 
         if (!navigator.geolocation) {
             setIsLiveTracking(false);
+            setGpsErrorMsg('Browser does not support GPS');
+            setIsRetryingGps(false);
             return;
         }
 
-        setIsLiveTracking(true);
         setGpsDenied(false);
+        setGpsErrorMsg('');
 
         const watchId = navigator.geolocation.watchPosition(
             async (position) => {
                 setGpsDenied(false);
+                setGpsErrorMsg('');
                 setIsLiveTracking(true);
+                setIsRetryingGps(false);
 
                 const { latitude, longitude, accuracy } = position.coords;
                 const now = Date.now();
@@ -212,18 +222,37 @@ const EmployeeAttendanceCom = () => {
             (error) => {
                 console.warn('Live GPS watch error:', error.message);
                 setIsLiveTracking(false);
+                setIsRetryingGps(false);
                 if (error.code === 1) {
                     setGpsDenied(true);
+                    setGpsErrorMsg('GPS Permission Denied');
+                } else if (error.code === 3) {
+                    setGpsErrorMsg('GPS Timed Out');
+                } else {
+                    setGpsErrorMsg('GPS Unavailable');
                 }
             },
-            { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+            { enableHighAccuracy: false, maximumAge: 30000, timeout: 20000 }
         );
 
         return () => {
             navigator.geolocation.clearWatch(watchId);
             setIsLiveTracking(false);
         };
-    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, user?.employee_id]);
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, user?.employee_id, gpsRetryCount]);
+
+    const handleRetryGps = () => {
+        if (!navigator.geolocation) {
+            setGpsErrorMsg('Browser does not support GPS');
+            return;
+        }
+        setIsRetryingGps(true);
+        setGpsDenied(false);
+        setGpsErrorMsg('');
+        lastPingTimeRef.current = 0;
+        lastCoordsRef.current = null;
+        setGpsRetryCount((prev) => prev + 1);
+    };
     
     const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8) : 8;
     const targetMs = targetHours * 3600000;
@@ -288,7 +317,7 @@ const EmployeeAttendanceCom = () => {
                     console.warn("Geolocation failed (kCLErrorLocationUnknown or Denied):", error.message);
                     resolve({ address: 'Location Unavailable (Check Device Settings)', latitude: null, longitude: null, accuracy: null });
                 },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+                { enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 }
             );
         });
     };
@@ -1052,7 +1081,7 @@ const EmployeeAttendanceCom = () => {
                                     </div>
                                 </div>
 
-                                {/* Status Badges */}
+                                {/* Status Badges & Retry GPS Button */}
                                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                                     <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-bold border ${isClockedIn
                                         ? 'text-green-700 bg-green-50 border-green-200'
@@ -1071,11 +1100,24 @@ const EmployeeAttendanceCom = () => {
                                         </div>
                                     )}
 
-                                    {gpsDenied && isClockedIn && !isPendingOldCheckout && (
-                                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border text-amber-700 bg-amber-50 border-amber-200">
-                                            <FaExclamationTriangle className="text-[9px]" />
-                                            GPS Permission Denied
-                                        </div>
+                                    {isClockedIn && !isPendingOldCheckout && !isLiveTracking && (
+                                        <>
+                                            {(gpsDenied || gpsErrorMsg) && (
+                                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border text-amber-700 bg-amber-50 border-amber-200">
+                                                    <FaExclamationTriangle className="text-[9px]" />
+                                                    {gpsErrorMsg || 'GPS Permission Denied'}
+                                                </div>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={handleRetryGps}
+                                                disabled={isRetryingGps}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border border-[#0437cc]/30 text-[#0437cc] bg-white hover:bg-blue-50 transition-colors shadow-sm disabled:opacity-60"
+                                            >
+                                                <FaSyncAlt className={`text-[9px] ${isRetryingGps ? 'animate-spin' : ''}`} />
+                                                {isRetryingGps ? 'Retrying GPS...' : 'Retry GPS'}
+                                            </button>
+                                        </>
                                     )}
                                 </div>
 
