@@ -70,6 +70,7 @@ const EmployeeAttendanceCom = () => {
     const [gpsErrorMsg, setGpsErrorMsg] = useState('');
     const [gpsRetryCount, setGpsRetryCount] = useState(0);
     const [isRetryingGps, setIsRetryingGps] = useState(false);
+    const [locationPermState, setLocationPermState] = useState('prompt'); // 'granted' | 'prompt' | 'denied'
 
     // EOD & Late Reason Modals
     const [isEodModalOpen, setIsEodModalOpen] = useState(false);
@@ -82,6 +83,74 @@ const EmployeeAttendanceCom = () => {
 
     const [isLateModalOpen, setIsLateModalOpen] = useState(false);
     const [lateReasonInput, setLateReasonInput] = useState('');
+
+    // ==================== AUTO-REQUEST LOCATION ON LOGIN / MOUNT ====================
+    useEffect(() => {
+        if (!user || !navigator.geolocation) return;
+
+        let permStatusObj = null;
+
+        const requestInitialPermission = () => {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setLocationPermState('granted');
+                    setGpsDenied(false);
+                    setGpsErrorMsg('');
+                    lastCoordsRef.current = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    };
+                },
+                (error) => {
+                    if (error.code === 1) {
+                        setLocationPermState('denied');
+                        setGpsDenied(true);
+                        setGpsErrorMsg('GPS Permission Denied');
+                    }
+                },
+                { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
+            );
+        };
+
+        // Monitor browser permission state changes where supported
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'geolocation' })
+                .then((result) => {
+                    permStatusObj = result;
+                    setLocationPermState(result.state);
+                    if (result.state === 'denied') {
+                        setGpsDenied(true);
+                        setGpsErrorMsg('GPS Permission Denied');
+                    } else {
+                        // Always prompt or warm up GPS on login
+                        requestInitialPermission();
+                    }
+
+                    result.onchange = () => {
+                        setLocationPermState(result.state);
+                        if (result.state === 'granted') {
+                            setGpsDenied(false);
+                            setGpsErrorMsg('');
+                            setGpsRetryCount((prev) => prev + 1);
+                        } else if (result.state === 'denied') {
+                            setGpsDenied(true);
+                            setGpsErrorMsg('GPS Permission Denied');
+                        }
+                    };
+                })
+                .catch(() => {
+                    requestInitialPermission();
+                });
+        } else {
+            // Safari / older browsers fallback
+            requestInitialPermission();
+        }
+
+        return () => {
+            if (permStatusObj) permStatusObj.onchange = null;
+        };
+    }, [user]);
 
     const fetchAttendanceData = async () => {
         if (!user || !user.employee_id || !localStorage.getItem('token')) {
@@ -157,8 +226,6 @@ const EmployeeAttendanceCom = () => {
     useEffect(() => {
         if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !user?.employee_id) {
             setIsLiveTracking(false);
-            setGpsDenied(false);
-            setGpsErrorMsg('');
             setIsRetryingGps(false);
             return;
         }
@@ -170,11 +237,11 @@ const EmployeeAttendanceCom = () => {
             return;
         }
 
-        setGpsDenied(false);
         setGpsErrorMsg('');
 
         const watchId = navigator.geolocation.watchPosition(
             async (position) => {
+                setLocationPermState('granted');
                 setGpsDenied(false);
                 setGpsErrorMsg('');
                 setIsLiveTracking(true);
@@ -197,10 +264,12 @@ const EmployeeAttendanceCom = () => {
                     movedEnough = true;
                 }
 
+                // Always keep latest coordinates cached for tab-close keepalive ping
+                lastCoordsRef.current = { latitude, longitude, accuracy };
+
                 // Ping backend if >= 30 seconds elapsed OR moved >= 30 meters
                 if (timeElapsed >= 30000 || movedEnough) {
                     lastPingTimeRef.current = now;
-                    lastCoordsRef.current = { latitude, longitude };
 
                     try {
                         await axios.post(
@@ -224,6 +293,7 @@ const EmployeeAttendanceCom = () => {
                 setIsLiveTracking(false);
                 setIsRetryingGps(false);
                 if (error.code === 1) {
+                    setLocationPermState('denied');
                     setGpsDenied(true);
                     setGpsErrorMsg('GPS Permission Denied');
                 } else if (error.code === 3) {
@@ -241,6 +311,57 @@ const EmployeeAttendanceCom = () => {
         };
     }, [isClockedIn, isPendingOldCheckout, activeSession?.id, user?.employee_id, gpsRetryCount]);
 
+    // ==================== FINAL KEEPALIVE PING ON TAB CLOSE / MINIMIZE ====================
+    useEffect(() => {
+        if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !user?.employee_id) {
+            return;
+        }
+
+        const sendFinalKeepalivePing = () => {
+            const coords = lastCoordsRef.current;
+            const token = localStorage.getItem('token');
+            if (!coords || !token) return;
+
+            try {
+                fetch(`${import.meta.env.VITE_API_URL}/api/attendance/location-ping`, {
+                    method: 'POST',
+                    keepalive: true,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        employeeId: user.employee_id,
+                        attendanceId: activeSession.id,
+                        latitude: coords.latitude,
+                        longitude: coords.longitude,
+                        accuracy: coords.accuracy ?? null
+                    })
+                }).catch(() => {});
+            } catch {
+                // Ignore unload network errors
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                sendFinalKeepalivePing();
+            } else if (document.visibilityState === 'visible') {
+                // Immediately refresh GPS when returning to the tab
+                lastPingTimeRef.current = 0;
+                setGpsRetryCount((prev) => prev + 1);
+            }
+        };
+
+        window.addEventListener('pagehide', sendFinalKeepalivePing);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('pagehide', sendFinalKeepalivePing);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, user?.employee_id]);
+
     const handleRetryGps = () => {
         if (!navigator.geolocation) {
             setGpsErrorMsg('Browser does not support GPS');
@@ -251,7 +372,30 @@ const EmployeeAttendanceCom = () => {
         setGpsErrorMsg('');
         lastPingTimeRef.current = 0;
         lastCoordsRef.current = null;
-        setGpsRetryCount((prev) => prev + 1);
+
+        // Trigger fresh browser prompt if needed and restart watcher
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                setLocationPermState('granted');
+                lastCoordsRef.current = {
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy
+                };
+                setGpsRetryCount((prev) => prev + 1);
+            },
+            (err) => {
+                setIsRetryingGps(false);
+                if (err.code === 1) {
+                    setLocationPermState('denied');
+                    setGpsDenied(true);
+                    setGpsErrorMsg('GPS Permission Denied');
+                } else {
+                    setGpsErrorMsg('GPS Unavailable');
+                }
+            },
+            { enableHighAccuracy: false, timeout: 20000, maximumAge: 0 }
+        );
     };
     
     const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8) : 8;
@@ -696,6 +840,32 @@ const EmployeeAttendanceCom = () => {
                     .digital-font { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
                 `}
             </style>
+
+            {/* ==================== LOCATION PERMISSION BANNER ==================== */}
+            {locationPermState === 'denied' && (
+                <div className="relative bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between shadow-sm overflow-hidden">
+                    <div className="flex items-start gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                            <FaMapMarkerAlt className="text-amber-600 text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <p className="text-sm font-bold text-amber-900">Location Access Required</p>
+                            <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                                Please allow Location access in your browser/device settings (click the lock/tune icon in the address bar → Location → Allow) so your attendance and shift location can be recorded.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleRetryGps}
+                        disabled={isRetryingGps}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-colors shrink-0 shadow-sm"
+                    >
+                        <FaSyncAlt className={isRetryingGps ? 'animate-spin' : ''} />
+                        {isRetryingGps ? 'Checking...' : 'Enable Location'}
+                    </button>
+                </div>
+            )}
 
             {/* ==================== LATE REASON MODAL ==================== */}
             {isLateModalOpen && (
