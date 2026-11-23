@@ -1,5 +1,18 @@
 import pool from '../../config/db.js';
 
+// Haversine formula to calculate distance in km between two GPS points
+const calcDistanceKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Earth radius in km
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 export const getAttendanceOverview = async (req, res) => {
     try {
         const { date, company, branch, department } = req.query;
@@ -99,17 +112,12 @@ export const getAttendanceOverview = async (req, res) => {
             let is_working = false;
 
             if (logs && logs.length > 0) {
-                // If they have logs, they are present or pending. Get the first Check-In and the Latest Check-Out
                 first_clock_in = logs[0].clock_in;
                 const latestLog = logs[logs.length - 1];
                 last_clock_out = latestLog.clock_out;
-                
-                // If the very last session has no clock out, the employee is currently active/working
                 is_working = latestLog.clock_out === null;
-                
                 total_hours = sumHours(logs);
                 
-                // Prioritize Pending Status if any session requires approval
                 if (logs.some(l => l.status?.includes('Pending Approval'))) {
                     status = 'Absent (Pending Approval)';
                     pendingApproval++;
@@ -127,12 +135,11 @@ export const getAttendanceOverview = async (req, res) => {
                 absent++;
             }
 
-            // Estimate Pay (Extremely rudimentary estimation just for UI demo purposes)
             let calculatedPay = 0;
             if (status === 'Present' || status === 'WFH') {
-                calculatedPay = (parseFloat(emp.basic_salary) || 0) / 30; // Full day
+                calculatedPay = (parseFloat(emp.basic_salary) || 0) / 30;
             } else if (status === 'Absent (Pending Approval)') {
-                calculatedPay = ((parseFloat(emp.basic_salary) || 0) / 30) / 2; // Half day
+                calculatedPay = ((parseFloat(emp.basic_salary) || 0) / 30) / 2;
             }
 
             return {
@@ -173,7 +180,7 @@ export const getAttendanceOverview = async (req, res) => {
     }
 };
 
-// NEW ENDPOINT: Fetches raw historical logs for the logs table
+// Fetches raw historical logs for the logs table
 export const getAttendanceHistoryLogs = async (req, res) => {
     try {
         const { start_date, end_date, company, branch, department } = req.query;
@@ -211,6 +218,53 @@ export const getAttendanceHistoryLogs = async (req, res) => {
     } catch (error) {
         console.error('History Logs Error:', error);
         res.status(500).json({ message: 'Error fetching historical attendance logs.' });
+    }
+};
+
+// Fetches detailed Live Roaming GPS logs for a specific attendance session
+export const getSessionRoamingLogs = async (req, res) => {
+    try {
+        const { attendanceId } = req.params;
+
+        const query = `
+            SELECT id, attendance_id, employee_id, latitude, longitude, accuracy, recorded_at
+            FROM emp_location_logs
+            WHERE attendance_id = $1
+            ORDER BY recorded_at ASC;
+        `;
+        const result = await pool.query(query, [attendanceId]);
+        const rawLogs = result.rows;
+
+        let totalDistanceKm = 0;
+        const enrichedLogs = rawLogs.map((log, idx) => {
+            const lat = parseFloat(log.latitude);
+            const lng = parseFloat(log.longitude);
+            let segmentKm = 0;
+
+            if (idx > 0) {
+                const prevLat = parseFloat(rawLogs[idx - 1].latitude);
+                const prevLng = parseFloat(rawLogs[idx - 1].longitude);
+                segmentKm = calcDistanceKm(prevLat, prevLng, lat, lng);
+                totalDistanceKm += segmentKm;
+            }
+
+            return {
+                ...log,
+                latitude: lat,
+                longitude: lng,
+                segment_distance_km: Number(segmentKm.toFixed(3))
+            };
+        });
+
+        res.status(200).json({
+            attendanceId: Number(attendanceId),
+            totalPoints: enrichedLogs.length,
+            totalDistanceKm: Number(totalDistanceKm.toFixed(2)),
+            logs: enrichedLogs
+        });
+    } catch (error) {
+        console.error('Fetch Roaming Logs Error:', error);
+        res.status(500).json({ message: 'Error fetching live roaming location logs.' });
     }
 };
 
