@@ -7,7 +7,6 @@ import { useAuth } from '../context/AuthContext';
 
 const EmployeeLayout = () => {
     const { user } = useAuth();
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
     // Global Mandatory Location State: 'checking' | 'granted' | 'prompt' | 'denied' | 'unsupported'
@@ -15,8 +14,7 @@ const EmployeeLayout = () => {
     const [locationError, setLocationError] = useState('');
     const [isRequestingLocation, setIsRequestingLocation] = useState(false);
 
-    const toggleMobileSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-    const toggleDesktopSidebar = () => setIsDesktopCollapsed(!isDesktopCollapsed);
+    const toggleDesktopSidebar = () => setIsDesktopCollapsed((prev) => !prev);
 
     const requestLocationAccess = useCallback(() => {
         if (!navigator.geolocation) {
@@ -87,7 +85,6 @@ const EmployeeLayout = () => {
                     requestLocationAccess();
                 });
         } else {
-            // Safari / older browsers fallback
             requestLocationAccess();
         }
 
@@ -96,31 +93,15 @@ const EmployeeLayout = () => {
         };
     }, [user, requestLocationAccess]);
 
-    useEffect(() => {
-        const handleResize = () => {
-            if (window.innerWidth >= 768 && isSidebarOpen) {
-                setIsSidebarOpen(false);
-            }
-        };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [isSidebarOpen]);
-
     const showMandatoryModal =
         user && (locationStatus === 'denied' || locationStatus === 'prompt' || locationStatus === 'unsupported');
 
     return (
         <div className="flex h-screen bg-slate-50 overflow-hidden relative">
-            <EmployeeSidebar
-                isOpen={isSidebarOpen}
-                toggleMobileSidebar={toggleMobileSidebar}
-                isDesktopCollapsed={isDesktopCollapsed}
-                setIsDesktopCollapsed={setIsDesktopCollapsed}
-            />
+            <EmployeeSidebar isDesktopCollapsed={isDesktopCollapsed} />
 
             <div className="flex flex-col flex-1 overflow-hidden w-full transition-all duration-300">
                 <EmployeeNavbar
-                    toggleMobileSidebar={toggleMobileSidebar}
                     toggleDesktopSidebar={toggleDesktopSidebar}
                     isDesktopCollapsed={isDesktopCollapsed}
                     locationStatus={locationStatus}
@@ -128,17 +109,10 @@ const EmployeeLayout = () => {
                     isRequestingLocation={isRequestingLocation}
                 />
 
-                <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 bg-slate-50">
+                <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 lg:p-6 pb-24 lg:pb-6 bg-slate-50">
                     <Outlet />
                 </main>
             </div>
-
-            {isSidebarOpen && (
-                <div
-                    className="fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-sm transition-opacity"
-                    onClick={toggleMobileSidebar}
-                ></div>
-            )}
 
             {/* ==================== MANDATORY LOCATION ACCESS MODAL ==================== */}
             {showMandatoryModal && (

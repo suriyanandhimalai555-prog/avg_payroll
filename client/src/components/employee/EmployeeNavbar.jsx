@@ -1,9 +1,8 @@
-import { FaBell, FaSearch, FaBars, FaAlignLeft, FaMapMarkerAlt, FaExclamationTriangle } from 'react-icons/fa';
+import { FaBell, FaSearch, FaAlignLeft, FaMapMarkerAlt, FaExclamationTriangle } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const EmployeeNavbar = ({
-    toggleMobileSidebar,
     toggleDesktopSidebar,
     isDesktopCollapsed,
     locationStatus = 'checking',
@@ -16,53 +15,51 @@ const EmployeeNavbar = ({
     const isGpsGranted = locationStatus === 'granted';
 
     return (
-        <header className="h-16 md:h-20 bg-white/85 backdrop-blur-xl border-b border-slate-200/70 flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-30 w-full transition-all duration-300">
+        <header className="h-16 lg:h-20 bg-white/90 backdrop-blur-xl border-b border-slate-200/70 flex items-center justify-between px-3 sm:px-5 lg:px-6 shrink-0 z-30 w-full transition-all duration-300">
 
-            {/* ==================== LEFT: TOGGLES + SEARCH ==================== */}
-            <div className="flex items-center gap-2 sm:gap-3 md:gap-5 flex-1 min-w-0">
+            {/* ==================== LEFT: MOBILE/TABLET APP BRAND + DESKTOP TOGGLE/SEARCH ==================== */}
+            <div className="flex items-center gap-2.5 sm:gap-3 lg:gap-5 flex-1 min-w-0">
 
-                {/* Mobile menu toggle */}
-                <button
-                    onClick={toggleMobileSidebar}
-                    className="md:hidden p-2 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100/80 active:scale-95 rounded-xl transition-all shrink-0"
-                    aria-label="Open menu"
+                {/* Mobile & Tablet Native App Brand Header */}
+                <div
+                    onClick={() => navigate('/employee')}
+                    className="lg:hidden flex items-center gap-2.5 cursor-pointer shrink-0"
                 >
-                    <FaBars className="text-lg sm:text-xl" />
-                </button>
+                    <img
+                        src="/logo.jpg"
+                        alt="AVG Logo"
+                        className="w-9 h-9 object-cover rounded-xl shadow-sm ring-1 ring-slate-200/70"
+                    />
+                    <span className="font-bold text-[#010a1f] text-base tracking-tight">
+                        AVG <span className="text-[#f77704]">Payroll</span>
+                    </span>
+                </div>
 
                 {/* Desktop collapse toggle */}
                 <button
                     onClick={toggleDesktopSidebar}
-                    className="hidden md:flex items-center justify-center w-10 h-10 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100/80 active:scale-95 rounded-xl transition-all shrink-0"
+                    className="hidden lg:flex items-center justify-center w-10 h-10 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100/80 active:scale-95 rounded-xl transition-all shrink-0"
                     aria-label="Toggle sidebar"
                 >
                     <FaAlignLeft className={`text-lg transition-transform duration-300 ${isDesktopCollapsed ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Desktop search */}
-                <div className="relative w-full max-w-xs sm:max-w-sm md:max-w-md hidden md:block group">
+                <div className="relative w-full max-w-md hidden lg:block group">
                     <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm group-focus-within:text-[#0437cc] transition-colors pointer-events-none" />
                     <input
                         type="text"
                         placeholder="Search payslips, documents, leaves…"
                         className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 border border-slate-200/80 rounded-xl text-sm text-[#010a1f] placeholder:text-slate-400 focus:ring-2 focus:ring-[#0437cc]/20 focus:border-[#0437cc]/60 focus:bg-white transition-all outline-none"
                     />
-                    <span className="hidden lg:inline-flex absolute right-3 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-white border border-slate-200 rounded-md">
+                    <span className="hidden xl:inline-flex absolute right-3 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-white border border-slate-200 rounded-md">
                         ⌘ K
                     </span>
                 </div>
-
-                {/* Mobile search icon */}
-                <button
-                    className="md:hidden p-2 text-slate-500 hover:text-[#0437cc] hover:bg-slate-100/80 active:scale-95 rounded-xl transition-all shrink-0 ml-auto"
-                    aria-label="Search"
-                >
-                    <FaSearch className="text-lg" />
-                </button>
             </div>
 
             {/* ==================== RIGHT: GPS STATUS + DATE + BELL + PROFILE ==================== */}
-            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 lg:gap-5 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 shrink-0">
 
                 {/* Global GPS Location Status Pill */}
                 <button
@@ -78,7 +75,6 @@ const EmployeeNavbar = ({
                 >
                     {isGpsGranted ? (
                         <>
-                            {/* <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> */}
                             <FaMapMarkerAlt className="text-[11px]" />
                             <span className="hidden sm:inline">Active</span>
                         </>
@@ -93,7 +89,7 @@ const EmployeeNavbar = ({
                 </button>
 
                 {/* Date pill */}
-                <div className="hidden lg:inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
+                <div className="hidden xl:inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                     {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </div>
@@ -110,17 +106,17 @@ const EmployeeNavbar = ({
                 </button>
 
                 {/* Vertical divider */}
-                <div className="hidden md:block w-px h-8 bg-slate-200/80"></div>
+                <div className="hidden lg:block w-px h-8 bg-slate-200/80"></div>
 
                 {/* Profile */}
                 <div
                     onClick={() => navigate('/employee/profile')}
-                    className="flex items-center gap-2 sm:gap-3 cursor-pointer group rounded-xl px-1 py-1 md:pl-2 hover:bg-slate-50 transition-colors"
+                    className="flex items-center gap-2 sm:gap-3 cursor-pointer group rounded-xl px-1 py-1 lg:pl-2 hover:bg-slate-50 transition-colors"
                 >
                     <div className="relative shrink-0">
                         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden ring-2 ring-[#0437cc]/15 group-hover:ring-[#0437cc]/40 transition-all">
                             <img
-                                src={user?.profile_photo || "https://ui-avatars.com/api/?name=" + user?.first_name + "+" + user?.last_name + "&background=f1f5f9&color=0437cc"}
+                                src={user?.profile_photo || `https://ui-avatars.com/api/?name=${user?.first_name}+${user?.last_name}&background=f1f5f9&color=0437cc`}
                                 alt={`${user?.first_name} ${user?.last_name}`}
                                 className="w-full h-full object-cover"
                             />
