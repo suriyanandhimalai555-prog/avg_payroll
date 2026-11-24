@@ -982,7 +982,7 @@ const SuperAdminLiveTrackingCom = () => {
                                     backgroundColor: viewMode === 'history' ? '#0437cc' : '#16a34a',
                                     color: '#ffffff',
                                     height: '24px',
-                                    padding: '16px 16px',
+                                    padding: '0 16px',
                                     borderRadius: '999px',
                                     fontSize: '10px',
                                     fontWeight: 800,
