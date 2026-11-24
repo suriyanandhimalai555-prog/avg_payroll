@@ -1,4 +1,7 @@
 import pool from '../../config/db.js';
+import { isS3Configured, uploadBase64ToS3, deleteFromS3ByUrl } from '../../services/s3Service.js';
+
+const isBase64Image = (val) => typeof val === 'string' && val.startsWith('data:image/');
 
 export const createProfile = async (req, res) => {
     try {
@@ -8,6 +11,20 @@ export const createProfile = async (req, res) => {
             return res.status(400).json({ message: "Missing required company details." });
         }
 
+        let finalLogoUrl = data.logoBase64 || null;
+
+        if (isBase64Image(finalLogoUrl)) {
+            if (isS3Configured()) {
+                finalLogoUrl = await uploadBase64ToS3(
+                    finalLogoUrl,
+                    'company-logos',
+                    data.companyName || 'company'
+                );
+            } else {
+                console.warn('AWS S3 credentials not set in .env — falling back to Base64 storage.');
+            }
+        }
+
         const insertQuery = `
             INSERT INTO sa_company_profiles (
                 company_name, email, phone, website, address, pan, gst, financial_year, logo
@@ -15,8 +32,15 @@ export const createProfile = async (req, res) => {
         `;
 
         const values = [
-            data.companyName, data.email, data.phone, data.website, data.address,
-            data.pan, data.gst, data.financialYear, data.logoBase64
+            data.companyName,
+            data.email,
+            data.phone,
+            data.website,
+            data.address,
+            data.pan,
+            data.gst,
+            data.financialYear,
+            finalLogoUrl
         ];
 
         const result = await pool.query(insertQuery, values);
@@ -43,6 +67,26 @@ export const updateProfile = async (req, res) => {
         const { id } = req.params;
         const data = req.body;
 
+        const existingRes = await pool.query('SELECT logo FROM sa_company_profiles WHERE id = $1', [id]);
+        if (existingRes.rows.length === 0) {
+            return res.status(404).json({ message: 'Profile not found.' });
+        }
+
+        const oldLogoUrl = existingRes.rows[0].logo;
+        let finalLogoUrl = data.logoBase64 || null;
+
+        if (isBase64Image(finalLogoUrl)) {
+            if (isS3Configured()) {
+                finalLogoUrl = await uploadBase64ToS3(
+                    finalLogoUrl,
+                    'company-logos',
+                    data.companyName || `company_${id}`
+                );
+            } else {
+                console.warn('AWS S3 credentials not set in .env — falling back to Base64 storage.');
+            }
+        }
+
         const updateQuery = `
             UPDATE sa_company_profiles SET
                 company_name = $1, email = $2, phone = $3, website = $4, address = $5,
@@ -51,14 +95,23 @@ export const updateProfile = async (req, res) => {
         `;
 
         const values = [
-            data.companyName, data.email, data.phone, data.website, data.address,
-            data.pan, data.gst, data.financialYear, data.logoBase64 || null, id
+            data.companyName,
+            data.email,
+            data.phone,
+            data.website,
+            data.address,
+            data.pan,
+            data.gst,
+            data.financialYear,
+            finalLogoUrl,
+            id
         ];
 
         const result = await pool.query(updateQuery, values);
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Profile not found.' });
+        // Delete old S3 logo if a new one was uploaded
+        if (isS3Configured() && oldLogoUrl && finalLogoUrl && oldLogoUrl !== finalLogoUrl) {
+            await deleteFromS3ByUrl(oldLogoUrl);
         }
 
         res.status(200).json({ message: 'Company Profile updated successfully.', profile: result.rows[0] });
@@ -71,10 +124,14 @@ export const updateProfile = async (req, res) => {
 export const deleteProfile = async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await pool.query('DELETE FROM sa_company_profiles WHERE id = $1 RETURNING id', [id]);
+        const result = await pool.query('DELETE FROM sa_company_profiles WHERE id = $1 RETURNING id, logo', [id]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Profile not found.' });
+        }
+
+        if (isS3Configured() && result.rows[0].logo) {
+            await deleteFromS3ByUrl(result.rows[0].logo);
         }
 
         res.status(200).json({ message: 'Company profile deleted successfully.' });

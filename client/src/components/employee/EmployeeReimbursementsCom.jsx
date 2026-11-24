@@ -205,8 +205,10 @@ const EmployeeReimbursementsCom = () => {
         return { icon: FaClock, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', dot: 'bg-slate-400' };
     };
 
-    const isPdf = (base64String) => {
-        return base64String && base64String.startsWith('data:application/pdf');
+    // Supports both Base64 PDFs and AWS S3 .pdf URLs
+    const isPdf = (fileRef) => {
+        if (!fileRef || typeof fileRef !== 'string') return false;
+        return fileRef.startsWith('data:application/pdf') || /\.pdf(\?|$)/i.test(fileRef);
     };
 
     // ==================== SHIMMER ====================
@@ -276,7 +278,7 @@ const EmployeeReimbursementsCom = () => {
                         <FaTimes className="text-xl sm:text-2xl" />
                     </button>
                     {isPdf(fullScreenReceipt) ? (
-                        <iframe src={fullScreenReceipt} className="w-full max-w-4xl h-[85vh] bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}></iframe>
+                        <iframe src={fullScreenReceipt} title="Receipt PDF" className="w-full max-w-4xl h-[85vh] bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}></iframe>
                     ) : (
                         <img
                             src={fullScreenReceipt}
@@ -418,7 +420,7 @@ const EmployeeReimbursementsCom = () => {
                                     </span>
                                     <div className="min-w-0">
                                         <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">{isEditing ? 'Edit Claim' : 'Submit Claim'}</h2>
-                                        <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 leading-snug truncate">Fill out the expense details and upload your receipt 路 Max 10MB</p>
+                                        <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 leading-snug truncate">Fill out the expense details and upload your receipt · Max 10MB</p>
                                     </div>
                                 </div>
                                 {isEditing && (
@@ -524,7 +526,7 @@ const EmployeeReimbursementsCom = () => {
                                                     <p className="mb-0.5 text-xs sm:text-sm font-semibold text-slate-600">
                                                         <span className="text-[#0437cc]">Click to upload</span> or drag and drop
                                                     </p>
-                                                    <p className="text-[10px] sm:text-[11px] text-slate-400">PDF, JPG or PNG 路 Up to 10MB</p>
+                                                    <p className="text-[10px] sm:text-[11px] text-slate-400">PDF, JPG or PNG · Up to 10MB</p>
                                                 </div>
                                                 <input type="file" accept=".pdf, image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
                                             </label>
@@ -580,7 +582,6 @@ const EmployeeReimbursementsCom = () => {
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {claims.map((claim, i) => {
-                                                const StatusIcon = getStatusStyle(claim.status).icon;
                                                 const style = getStatusStyle(claim.status);
                                                 return (
                                                     <tr key={i} className="hover:bg-slate-50/60 transition-colors">

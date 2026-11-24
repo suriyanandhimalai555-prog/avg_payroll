@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { verifyActivationToken } from '../utils/activationToken.js';
 import rateLimit from 'express-rate-limit';
 import { sendMicrosoftEmail, isMicrosoftGraphConfigured } from '../services/microsoftGraphService.js';
+import { isS3Configured, uploadBase64ToS3, deleteFromS3ByUrl } from '../services/s3Service.js';
 
 dotenv.config();
 
@@ -230,10 +231,7 @@ export const deleteAccount = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ message: 'The password you entered is incorrect.' });
 
-        // Revoke active sessions
         await pool.query('DELETE FROM user_sessions WHERE email ILIKE $1', [email.trim()]);
-
-        // Instead of hard deleting, set status to Pending Deletion for Super Admin approval
         await pool.query(`UPDATE ${targetTable} SET status = 'Pending Deletion' WHERE id = $1`, [user.id]);
 
         return res.status(200).json({ message: 'Account deletion request submitted to Super Admin for approval.' });
@@ -431,9 +429,12 @@ export const changePassword = async (req, res) => {
     }
 };
 
+// ==================== SUPERADMIN PROFILE UPDATE (WITH AWS S3) ====================
 export const updateProfile = async (req, res) => {
     try {
-        if (req.user?.role !== 'superadmin' || !req.user.email) return res.status(403).json({ message: 'You are not authorized to update this profile.' });
+        if (req.user?.role !== 'superadmin' || !req.user.email) {
+            return res.status(403).json({ message: 'You are not authorized to update this profile.' });
+        }
 
         const { fullName, phone, profilePhoto } = req.body ?? {};
 
@@ -441,9 +442,30 @@ export const updateProfile = async (req, res) => {
             return res.status(400).json({ message: 'Valid name, phone number, and profile photo are required.' });
         }
 
+        let finalPhotoUrl = profilePhoto ?? null;
+
+        if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image/')) {
+            if (isS3Configured()) {
+                const existingRes = await pool.query(
+                    'SELECT id, profile_photo FROM sa_superadmins WHERE LOWER(email) = LOWER($1) LIMIT 1',
+                    [req.user.email]
+                );
+                const oldPhotoUrl = existingRes.rows[0]?.profile_photo;
+                const adminId = existingRes.rows[0]?.id || 'root';
+
+                finalPhotoUrl = await uploadBase64ToS3(finalPhotoUrl, 'profile-photos', `superadmin_${adminId}`);
+
+                if (oldPhotoUrl && oldPhotoUrl !== finalPhotoUrl) {
+                    await deleteFromS3ByUrl(oldPhotoUrl);
+                }
+            } else {
+                console.warn('AWS S3 credentials not set in .env — falling back to Base64 storage.');
+            }
+        }
+
         const result = await pool.query(
             `UPDATE sa_superadmins SET full_name = $1, phone = $2, profile_photo = $3 WHERE LOWER(email) = LOWER($4) RETURNING *`,
-            [fullName.trim(), phone.trim(), profilePhoto ?? null, req.user.email]
+            [fullName.trim(), phone.trim(), finalPhotoUrl, req.user.email]
         );
 
         if (result.rows.length !== 1) return res.status(404).json({ message: 'User not found.' });

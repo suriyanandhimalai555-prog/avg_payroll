@@ -1,4 +1,5 @@
 import pool from '../../config/db.js';
+import { isS3Configured, uploadBase64ToS3, deleteFromS3ByUrl } from '../../services/s3Service.js';
 
 // Employees/managers can access only their own employee profile.
 // HR/superadmin access is retained for existing workflows.
@@ -82,12 +83,33 @@ export const updateProfile = async (req, res) => {
             `;
             values = [data.emergency_name, data.emergency_relationship, data.emergency_phone, employeeId];
         } else if (section === 'photo') {
+            let finalPhotoUrl = data.profile_photo;
+
+            if (finalPhotoUrl && typeof finalPhotoUrl === 'string' && finalPhotoUrl.startsWith('data:image/')) {
+                if (isS3Configured()) {
+                    // Fetch existing photo URL so we can clean it up after uploading the new one
+                    const existingRes = await pool.query(
+                        'SELECT profile_photo FROM sa_employees WHERE employee_id = $1',
+                        [employeeId]
+                    );
+                    const oldPhotoUrl = existingRes.rows[0]?.profile_photo;
+
+                    finalPhotoUrl = await uploadBase64ToS3(finalPhotoUrl, 'profile-photos', employeeId);
+
+                    if (oldPhotoUrl) {
+                        await deleteFromS3ByUrl(oldPhotoUrl);
+                    }
+                } else {
+                    console.warn('AWS S3 credentials not set in .env — falling back to Base64 storage.');
+                }
+            }
+
             query = `
                 UPDATE sa_employees 
                 SET profile_photo = $1
                 WHERE employee_id = $2 RETURNING *;
             `;
-            values = [data.profile_photo, employeeId];
+            values = [finalPhotoUrl, employeeId];
         } else {
             return res.status(400).json({ message: 'Invalid profile section specified.' });
         }
