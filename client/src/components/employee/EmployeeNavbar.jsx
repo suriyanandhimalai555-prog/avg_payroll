@@ -1,11 +1,19 @@
-import { FaBell, FaSearch, FaBars, FaAlignLeft } from 'react-icons/fa';
+import { FaBell, FaSearch, FaBars, FaAlignLeft, FaMapMarkerAlt, FaExclamationTriangle } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const EmployeeNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktopCollapsed }) => {
-    // Extract real-time user data and navigation
+const EmployeeNavbar = ({
+    toggleMobileSidebar,
+    toggleDesktopSidebar,
+    isDesktopCollapsed,
+    locationStatus = 'checking',
+    onRequestLocation,
+    isRequestingLocation = false
+}) => {
     const { user } = useAuth();
     const navigate = useNavigate();
+
+    const isGpsGranted = locationStatus === 'granted';
 
     return (
         <header className="h-16 md:h-20 bg-white/85 backdrop-blur-xl border-b border-slate-200/70 flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-30 w-full transition-all duration-300">
@@ -39,7 +47,6 @@ const EmployeeNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktopCo
                         placeholder="Search payslips, documents, leaves…"
                         className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 border border-slate-200/80 rounded-xl text-sm text-[#010a1f] placeholder:text-slate-400 focus:ring-2 focus:ring-[#0437cc]/20 focus:border-[#0437cc]/60 focus:bg-white transition-all outline-none"
                     />
-                    {/* Keyboard hint (cosmetic) */}
                     <span className="hidden lg:inline-flex absolute right-3 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-white border border-slate-200 rounded-md">
                         ⌘ K
                     </span>
@@ -54,8 +61,36 @@ const EmployeeNavbar = ({ toggleMobileSidebar, toggleDesktopSidebar, isDesktopCo
                 </button>
             </div>
 
-            {/* ==================== RIGHT: DATE + BELL + PROFILE ==================== */}
+            {/* ==================== RIGHT: GPS STATUS + DATE + BELL + PROFILE ==================== */}
             <div className="flex items-center gap-2 sm:gap-3 md:gap-4 lg:gap-5 shrink-0">
+
+                {/* Global GPS Location Status Pill */}
+                <button
+                    type="button"
+                    onClick={() => !isGpsGranted && onRequestLocation && onRequestLocation()}
+                    disabled={isRequestingLocation}
+                    title={isGpsGranted ? 'Location Access Active' : 'Click to enable mandatory GPS location access'}
+                    className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all shrink-0 ${
+                        isGpsGranted
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 cursor-default'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 cursor-pointer'
+                    }`}
+                >
+                    {isGpsGranted ? (
+                        <>
+                            {/* <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> */}
+                            <FaMapMarkerAlt className="text-[11px]" />
+                            <span className="hidden sm:inline">Active</span>
+                        </>
+                    ) : (
+                        <>
+                            <FaExclamationTriangle className="text-[11px]" />
+                            <span className="hidden sm:inline">
+                                {isRequestingLocation ? 'Locating...' : 'Enable GPS'}
+                            </span>
+                        </>
+                    )}
+                </button>
 
                 {/* Date pill */}
                 <div className="hidden lg:inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
