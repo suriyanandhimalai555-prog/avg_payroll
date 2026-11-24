@@ -67,6 +67,39 @@ const sanitizeOklchForCanvas = (clonedDoc, rootEl) => {
     });
 };
 
+// Reverse geocode helper with timeout so screenshot export never hangs
+const resolveAddressQuick = async (lat, lng) => {
+    if (lat == null || lng == null) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    try {
+        const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+            { signal: controller.signal }
+        );
+        const data = await res.json();
+        return data?.display_name || null;
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
+// Sample waypoints evenly for clean screenshot report tables (max 12 rows)
+const getSampledWaypoints = (logs, maxRows = 12) => {
+    if (!logs || logs.length <= maxRows) {
+        return (logs || []).map((pt, idx) => ({ ...pt, seq: idx + 1 }));
+    }
+    const sampled = [];
+    const step = (logs.length - 1) / (maxRows - 1);
+    for (let i = 0; i < maxRows; i++) {
+        const index = Math.round(i * step);
+        sampled.push({ ...logs[index], seq: index + 1 });
+    }
+    return sampled;
+};
+
 // Custom divIcon markers (avoids Vite default Leaflet asset path issues)
 const createStatusIcon = (status, isSelected = false) => {
     const color = status === 'ACTIVE' ? '#16a34a' : status === 'STALE' ? '#f59e0b' : '#64748b';
@@ -80,14 +113,15 @@ const createStatusIcon = (status, isSelected = false) => {
     });
 };
 
+// Flexbox-centered IN / OUT badges so html2canvas renders text cleanly without clipping
 const createRouteEndpointIcon = (type) => {
     const bg = type === 'start' ? '#16a34a' : '#dc2626';
     const label = type === 'start' ? 'IN' : 'OUT';
     return L.divIcon({
         className: 'custom-route-marker',
-        html: `<div style="padding:2px 6px;background:${bg};color:#fff;font-size:10px;font-weight:800;border-radius:6px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);white-space:nowrap;">${label}</div>`,
-        iconSize: [34, 22],
-        iconAnchor: [17, 11]
+        html: `<div style="display:flex;align-items:center;justify-content:center;width:42px;height:24px;background:${bg};color:#ffffff;font-size:10px;font-weight:800;line-height:1;letter-spacing:0.5px;border-radius:6px;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.35);font-family:system-ui,-apple-system,sans-serif;">${label}</div>`,
+        iconSize: [42, 24],
+        iconAnchor: [21, 12]
     });
 };
 
@@ -102,7 +136,7 @@ const MapFocusController = ({ targetCoords, routeLogs, viewMode }) => {
             if (lastTargetRef.current !== boundsKey) {
                 lastTargetRef.current = boundsKey;
                 const bounds = L.latLngBounds(routeLogs.map(p => [p.latitude, p.longitude]));
-                map.fitBounds(bounds, { padding: [45, 45], maxZoom: 16 });
+                map.fitBounds(bounds, { padding: [55, 55], maxZoom: 16 });
             }
             return;
         }
@@ -158,9 +192,12 @@ const SuperAdminLiveTrackingCom = () => {
     const [isRouteLoading, setIsRouteLoading] = useState(false);
     const [showTimeline, setShowTimeline] = useState(true);
 
-    // Screenshot Capture State
+    // Detailed Screenshot Report State
     const mapCaptureRef = useRef(null);
+    const liveMapBoxRef = useRef(null);
     const [isCapturing, setIsCapturing] = useState(false);
+    const [exportAddresses, setExportAddresses] = useState({ start: '', end: '' });
+    const [exportTimestamp, setExportTimestamp] = useState('');
 
     const fetchOrgAndDirectory = async () => {
         try {
@@ -231,6 +268,7 @@ const SuperAdminLiveTrackingCom = () => {
         const loadSessions = async () => {
             setIsRouteLoading(true);
             setRouteData({ logs: [], totalDistanceKm: 0, totalPoints: 0 });
+            setExportAddresses({ start: '', end: '' });
             try {
                 const res = await axios.get(
                     `${import.meta.env.VITE_API_URL}/api/sa-attendance/history?start_date=${historyDate}&end_date=${historyDate}&employee_id=${encodeURIComponent(selectedEmpId)}`,
@@ -261,6 +299,7 @@ const SuperAdminLiveTrackingCom = () => {
 
         const loadRoute = async () => {
             setIsRouteLoading(true);
+            setExportAddresses({ start: '', end: '' });
             try {
                 const res = await axios.get(
                     `${import.meta.env.VITE_API_URL}/api/sa-attendance/roaming/${selectedSessionId}`,
@@ -308,6 +347,15 @@ const SuperAdminLiveTrackingCom = () => {
         );
     }, [employees, allEmployees, selectedEmpId]);
 
+    const selectedSession = useMemo(() => {
+        return historySessions.find(s => String(s.id) === String(selectedSessionId)) || null;
+    }, [historySessions, selectedSessionId]);
+
+    const sampledWaypoints = useMemo(
+        () => getSampledWaypoints(routeData.logs, 12),
+        [routeData.logs]
+    );
+
     const mapFocusTarget = useMemo(() => {
         if (viewMode === 'history' && routeData.logs.length > 0) {
             const first = routeData.logs[0];
@@ -319,11 +367,43 @@ const SuperAdminLiveTrackingCom = () => {
         return null;
     }, [viewMode, routeData.logs, selectedSessionId, selectedEmployee]);
 
-    // ==================== TAKE MAP SCREENSHOT (OKLCH-SAFE) ====================
+    // ==================== DETAILED REPORT SCREENSHOT (OKLCH-SAFE) ====================
     const handleCaptureScreenshot = async () => {
         if (!mapCaptureRef.current) return;
         setIsCapturing(true);
+
         try {
+            // 1. Resolve Start & End street addresses before rendering report
+            let startAddr = selectedSession?.clock_in_location || selectedEmployee?.clock_in_location || '';
+            let endAddr = selectedSession?.clock_out_location || '';
+
+            if (viewMode === 'history' && routeData.logs.length > 0) {
+                const firstPt = routeData.logs[0];
+                const lastPt = routeData.logs[routeData.logs.length - 1];
+                const [resolvedStart, resolvedEnd] = await Promise.all([
+                    startAddr ? Promise.resolve(startAddr) : resolveAddressQuick(firstPt.latitude, firstPt.longitude),
+                    endAddr
+                        ? Promise.resolve(endAddr)
+                        : routeData.logs.length > 1
+                            ? resolveAddressQuick(lastPt.latitude, lastPt.longitude)
+                            : Promise.resolve('')
+                ]);
+                startAddr = resolvedStart || `${firstPt.latitude.toFixed(5)}, ${firstPt.longitude.toFixed(5)}`;
+                endAddr = resolvedEnd || `${lastPt.latitude.toFixed(5)}, ${lastPt.longitude.toFixed(5)}`;
+            } else if (viewMode === 'live' && selectedEmployee?.latitude != null) {
+                const resolvedLive = await resolveAddressQuick(selectedEmployee.latitude, selectedEmployee.longitude);
+                endAddr = resolvedLive || `${selectedEmployee.latitude.toFixed(5)}, ${selectedEmployee.longitude.toFixed(5)}`;
+            }
+
+            setExportAddresses({ start: startAddr, end: endAddr });
+            setExportTimestamp(new Date().toLocaleString('en-IN'));
+
+            // Wait one frame so React flushes the resolved addresses into the hidden report blocks
+            await new Promise((resolve) => setTimeout(resolve, 120));
+
+            const liveWidth = mapCaptureRef.current.offsetWidth;
+            const liveMapHeight = liveMapBoxRef.current ? liveMapBoxRef.current.offsetHeight : 380;
+
             const canvas = await html2canvas(mapCaptureRef.current, {
                 useCORS: true,
                 allowTaint: false,
@@ -331,6 +411,38 @@ const SuperAdminLiveTrackingCom = () => {
                 scale: 2,
                 logging: false,
                 onclone: (clonedDoc, clonedEl) => {
+                    // Preserve exact width so Leaflet tiles never shift
+                    clonedEl.style.width = `${liveWidth}px`;
+                    clonedEl.style.height = 'auto';
+                    clonedEl.style.maxHeight = 'none';
+                    clonedEl.style.overflow = 'visible';
+                    clonedEl.style.padding = '20px';
+                    clonedEl.style.backgroundColor = '#ffffff';
+
+                    // Lock the map box to its exact rendered height so tiles stay aligned
+                    const clonedMapBox = clonedEl.querySelector('[data-map-box="true"]');
+                    if (clonedMapBox) {
+                        clonedMapBox.style.height = `${liveMapHeight}px`;
+                        clonedMapBox.style.minHeight = `${liveMapHeight}px`;
+                        clonedMapBox.style.maxHeight = `${liveMapHeight}px`;
+                        clonedMapBox.style.borderRadius = '12px';
+                        clonedMapBox.style.overflow = 'hidden';
+                        clonedMapBox.style.border = '1px solid #cbd5e1';
+                    }
+
+                    // Hide interactive-only bars & Leaflet zoom controls from the export
+                    clonedEl.querySelectorAll('[data-hide-on-export="true"]').forEach((el) => {
+                        el.style.display = 'none';
+                    });
+                    clonedEl.querySelectorAll('.leaflet-control-zoom').forEach((el) => {
+                        el.style.display = 'none';
+                    });
+
+                    // Reveal the detailed report header, metrics, start/end cards, waypoint table & footer
+                    clonedEl.querySelectorAll('[data-export-only="true"]').forEach((el) => {
+                        el.style.display = el.getAttribute('data-export-display') || 'block';
+                    });
+
                     sanitizeOklchForCanvas(clonedDoc, clonedEl);
                 }
             });
@@ -338,7 +450,7 @@ const SuperAdminLiveTrackingCom = () => {
             const safeEmp = selectedEmpId || 'LiveMap';
             const datePart = viewMode === 'history' ? historyDate : new Date().toLocaleDateString('en-CA');
             const link = document.createElement('a');
-            link.download = `GPS_${viewMode === 'history' ? 'Route' : 'Live'}_${safeEmp}_${datePart}.png`;
+            link.download = `GPS_Report_${viewMode === 'history' ? 'Route' : 'Live'}_${safeEmp}_${datePart}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
         } catch (err) {
@@ -358,6 +470,9 @@ const SuperAdminLiveTrackingCom = () => {
     };
 
     const defaultCenter = [12.9716, 77.5946];
+
+    const firstRoutePoint = routeData.logs.length > 0 ? routeData.logs[0] : null;
+    const lastRoutePoint = routeData.logs.length > 0 ? routeData.logs[routeData.logs.length - 1] : null;
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
@@ -434,7 +549,6 @@ const SuperAdminLiveTrackingCom = () => {
 
                 {/* LEFT PANEL: ACTIVE / ALL EMPLOYEES SWITCHER + FILTERS */}
                 <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden max-h-[760px]">
-                    {/* List Mode Tabs */}
                     <div className="grid grid-cols-2 p-2 gap-1.5 bg-slate-100/80 border-b border-slate-200/70">
                         <button
                             onClick={() => setListTab('active')}
@@ -611,7 +725,7 @@ const SuperAdminLiveTrackingCom = () => {
                     </div>
                 </div>
 
-                {/* RIGHT PANEL: INTERACTIVE LEAFLET MAP + SCREENSHOT + ROUTE HISTORY */}
+                {/* RIGHT PANEL: INTERACTIVE LEAFLET MAP + DETAILED SCREENSHOT + ROUTE HISTORY */}
                 <div className="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden min-h-[580px] max-h-[760px]">
 
                     {/* Map Toolbar */}
@@ -640,10 +754,10 @@ const SuperAdminLiveTrackingCom = () => {
                                 onClick={handleCaptureScreenshot}
                                 disabled={isCapturing}
                                 className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-60"
-                                title="Download PNG Screenshot of Map"
+                                title="Download Detailed GPS Route Report PNG"
                             >
                                 <FaCamera className="text-[11px]" />
-                                {isCapturing ? 'Capturing...' : 'Screenshot'}
+                                {isCapturing ? 'Generating Report...' : 'Screenshot'}
                             </button>
                         </div>
 
@@ -684,11 +798,113 @@ const SuperAdminLiveTrackingCom = () => {
                         )}
                     </div>
 
-                    {/* Capturable Map Wrapper (includes audit header for clean screenshots) */}
+                    {/* ==================== CAPTURABLE REPORT & MAP WRAPPER ==================== */}
                     <div ref={mapCaptureRef} style={{ backgroundColor: '#ffffff' }} className="flex-1 flex flex-col relative min-h-[380px]">
-                        {/* Audit Strip Included in Screenshot */}
+
+                        {/* [EXPORT-ONLY] DETAILED REPORT HEADER */}
+                        <div
+                            data-export-only="true"
+                            data-export-display="block"
+                            style={{ display: 'none', marginBottom: '14px' }}
+                        >
+                            {/* Top Brand Banner */}
+                            <div
+                                style={{
+                                    backgroundColor: '#010a1f',
+                                    color: '#ffffff',
+                                    padding: '16px 20px',
+                                    borderRadius: '12px',
+                                    borderBottom: '4px solid #0437cc',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    marginBottom: '12px'
+                                }}
+                            >
+                                <div>
+                                    <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', color: '#93c5fd', textTransform: 'uppercase' }}>
+                                        AVG PAYROLL • GPS TRACKING AUDIT REPORT
+                                    </div>
+                                    <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: '#ffffff' }}>
+                                        {selectedEmployee
+                                            ? `${selectedEmployee.first_name} ${selectedEmployee.last_name} (${selectedEmployee.employee_id})`
+                                            : 'Active Employees Live Map'}
+                                    </div>
+                                    {selectedEmployee && (
+                                        <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '3px' }}>
+                                            {[selectedEmployee.designation, selectedEmployee.company, selectedEmployee.branch, selectedEmployee.department]
+                                                .filter(Boolean)
+                                                .join('  •  ')}
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div
+                                        style={{
+                                            display: 'inline-block',
+                                            backgroundColor: viewMode === 'history' ? '#0437cc' : '#16a34a',
+                                            color: '#ffffff',
+                                            fontSize: '10px',
+                                            fontWeight: 800,
+                                            padding: '4px 10px',
+                                            borderRadius: '999px',
+                                            textTransform: 'uppercase'
+                                        }}
+                                    >
+                                        {viewMode === 'history' ? 'Route History' : 'Live Snapshot'}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#e2e8f0', marginTop: '6px', fontWeight: 600 }}>
+                                        Date: {viewMode === 'history' ? historyDate : new Date().toLocaleDateString('en-CA')}
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
+                                        Generated: {exportTimestamp || new Date().toLocaleString('en-IN')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 4-Metric KPI Strip */}
+                            <div
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                                    gap: '10px'
+                                }}
+                            >
+                                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
+                                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Distance Traveled</div>
+                                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#0437cc', marginTop: '2px' }}>
+                                        {viewMode === 'history' ? `${routeData.totalDistanceKm} km` : `${metrics.totalCheckedIn} Active`}
+                                    </div>
+                                </div>
+                                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
+                                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                                        {viewMode === 'history' ? 'Total GPS Pings' : 'Recent GPS'}
+                                    </div>
+                                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#010a1f', marginTop: '2px' }}>
+                                        {viewMode === 'history' ? `${routeData.totalPoints} pts` : `${metrics.recentGps} Active`}
+                                    </div>
+                                </div>
+                                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
+                                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Check-In Time</div>
+                                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#15803d', marginTop: '3px' }}>
+                                        {formatTime(selectedSession?.clock_in || selectedEmployee?.clock_in || firstRoutePoint?.recorded_at)}
+                                    </div>
+                                </div>
+                                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
+                                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                                        {selectedSession?.clock_out ? 'Check-Out Time' : 'Last GPS Update'}
+                                    </div>
+                                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#b91c1c', marginTop: '3px' }}>
+                                        {formatTime(selectedSession?.clock_out || lastRoutePoint?.recorded_at || selectedEmployee?.last_gps_at)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Interactive-Only Compact Strip (hidden during screenshot export) */}
                         {selectedEmployee && (
                             <div
+                                data-hide-on-export="true"
                                 style={{ backgroundColor: '#010a1f', color: '#ffffff' }}
                                 className="px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]"
                             >
@@ -703,7 +919,8 @@ const SuperAdminLiveTrackingCom = () => {
                             </div>
                         )}
 
-                        <div className="flex-1 relative z-10 min-h-[360px]">
+                        {/* Interactive Leaflet Map Box */}
+                        <div ref={liveMapBoxRef} data-map-box="true" className="flex-1 relative z-10 min-h-[360px]">
                             <MapContainer
                                 center={defaultCenter}
                                 zoom={12}
@@ -791,9 +1008,125 @@ const SuperAdminLiveTrackingCom = () => {
                                 </div>
                             )}
                         </div>
+
+                        {/* [EXPORT-ONLY] LEGEND + START/END DETAILS + WAYPOINT TABLE + FOOTER */}
+                        <div
+                            data-export-only="true"
+                            data-export-display="block"
+                            style={{ display: 'none', marginTop: '12px' }}
+                        >
+                            {/* Map Legend Bar */}
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    backgroundColor: '#f8fafc',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    padding: '8px 14px',
+                                    fontSize: '10px',
+                                    color: '#334155',
+                                    marginBottom: '12px'
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontWeight: 700 }}>
+                                    <span>
+                                        <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#16a34a', marginRight: '5px', verticalAlign: 'middle' }}></span>
+                                        IN / Start Point
+                                    </span>
+                                    <span>
+                                        <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#dc2626', marginRight: '5px', verticalAlign: 'middle' }}></span>
+                                        OUT / Latest Point
+                                    </span>
+                                    <span>
+                                        <span style={{ display: 'inline-block', width: '16px', height: '3px', backgroundColor: '#0437cc', marginRight: '5px', verticalAlign: 'middle' }}></span>
+                                        Recorded GPS Route
+                                    </span>
+                                </div>
+                                <span style={{ color: '#64748b' }}>Map Data © OpenStreetMap</span>
+                            </div>
+
+                            {/* Start & End Location Cards */}
+                            {(exportAddresses.start || exportAddresses.end) && (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '10px 12px' }}>
+                                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                            Start Location (IN) • {formatTime(firstRoutePoint?.recorded_at || selectedSession?.clock_in)}
+                                        </div>
+                                        <div style={{ fontSize: '11px', color: '#0f172a', fontWeight: 600, lineHeight: 1.4 }}>
+                                            {exportAddresses.start || 'N/A'}
+                                        </div>
+                                        {firstRoutePoint && (
+                                            <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginTop: '4px' }}>
+                                                {firstRoutePoint.latitude.toFixed(5)}, {firstRoutePoint.longitude.toFixed(5)}
+                                                {firstRoutePoint.accuracy ? ` (±${Math.round(firstRoutePoint.accuracy)}m)` : ''}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '10px 12px' }}>
+                                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                            End / Latest Location (OUT) • {formatTime(lastRoutePoint?.recorded_at || selectedSession?.clock_out || selectedEmployee?.last_gps_at)}
+                                        </div>
+                                        <div style={{ fontSize: '11px', color: '#0f172a', fontWeight: 600, lineHeight: 1.4 }}>
+                                            {exportAddresses.end || 'N/A'}
+                                        </div>
+                                        {lastRoutePoint && (
+                                            <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginTop: '4px' }}>
+                                                {lastRoutePoint.latitude.toFixed(5)}, {lastRoutePoint.longitude.toFixed(5)}
+                                                {lastRoutePoint.accuracy ? ` (±${Math.round(lastRoutePoint.accuracy)}m)` : ''}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Key Waypoints Log Table (History Mode) */}
+                            {viewMode === 'history' && sampledWaypoints.length > 0 && (
+                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '10px' }}>
+                                    <div style={{ backgroundColor: '#f1f5f9', padding: '7px 12px', fontSize: '10px', fontWeight: 800, color: '#010a1f', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0' }}>
+                                        Recorded GPS Checkpoints ({sampledWaypoints.length} of {routeData.logs.length} points shown)
+                                    </div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                                        <thead>
+                                            <tr style={{ backgroundColor: '#f8fafc', color: '#64748b', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
+                                                <th style={{ padding: '6px 10px', fontWeight: 700 }}>#</th>
+                                                <th style={{ padding: '6px 10px', fontWeight: 700 }}>Timestamp</th>
+                                                <th style={{ padding: '6px 10px', fontWeight: 700 }}>Coordinates (Lat, Lng)</th>
+                                                <th style={{ padding: '6px 10px', fontWeight: 700 }}>Accuracy</th>
+                                                <th style={{ padding: '6px 10px', fontWeight: 700, textAlign: 'right' }}>Segment</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {sampledWaypoints.map((pt, idx) => (
+                                                <tr key={pt.id || idx} style={{ borderBottom: idx < sampledWaypoints.length - 1 ? '1px solid #f1f5f9' : 'none', color: '#0f172a' }}>
+                                                    <td style={{ padding: '5px 10px', fontWeight: 700, color: '#0437cc' }}>#{pt.seq}</td>
+                                                    <td style={{ padding: '5px 10px', fontWeight: 600 }}>{formatTime(pt.recorded_at)}</td>
+                                                    <td style={{ padding: '5px 10px', fontFamily: 'monospace', color: '#334155' }}>
+                                                        {pt.latitude.toFixed(5)}, {pt.longitude.toFixed(5)}
+                                                    </td>
+                                                    <td style={{ padding: '5px 10px', color: '#64748b' }}>
+                                                        {pt.accuracy ? `±${Math.round(pt.accuracy)}m` : '—'}
+                                                    </td>
+                                                    <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 700, color: '#0437cc' }}>
+                                                        {pt.segment_distance_km > 0 ? `+${(pt.segment_distance_km * 1000).toFixed(0)}m` : 'Start'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Official Footer */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '9px', color: '#94a3b8', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
+                                <span>AVG Payroll • Official Live GPS Audit Report</span>
+                                <span>Computer-generated record • Coordinates verified from emp_location_logs</span>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* USER ROUTE HISTORY TIMELINE */}
+                    {/* USER ROUTE HISTORY TIMELINE (Interactive UI) */}
                     {viewMode === 'history' && showTimeline && routeData.logs.length > 0 && (
                         <div className="border-t border-slate-200 bg-slate-50/70 max-h-[175px] overflow-y-auto p-3 custom-scrollbar">
                             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
