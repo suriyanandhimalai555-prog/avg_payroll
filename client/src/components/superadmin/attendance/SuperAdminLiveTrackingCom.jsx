@@ -103,13 +103,13 @@ const createStatusIcon = (status, isSelected = false) => {
     });
 };
 
-// Table-cell centered IN / OUT badges so html2canvas renders text centered cleanly
+// FIXED: Using Flexbox instead of table-cell for perfect centering in html2canvas
 const createRouteEndpointIcon = (type) => {
     const bg = type === 'start' ? '#16a34a' : '#dc2626';
     const label = type === 'start' ? 'IN' : 'OUT';
     return L.divIcon({
         className: 'custom-route-marker',
-        html: `<div style="display:table;width:44px;height:24px;background:${bg};color:#ffffff;border-radius:6px;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.35);font-family:'DM Sans',sans-serif;"><span style="display:table-cell;vertical-align:middle;text-align:center;font-size:10px;font-weight:800;line-height:1;">${label}</span></div>`,
+        html: `<div style="display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:44px;height:24px;background:${bg};color:#ffffff;border-radius:6px;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.35);font-family:'DM Sans',sans-serif;padding-bottom:1px;"><span style="font-size:10px;font-weight:800;line-height:1;letter-spacing:0.5px;">${label}</span></div>`,
         iconSize: [44, 24],
         iconAnchor: [22, 12]
     });
@@ -935,7 +935,7 @@ const SuperAdminLiveTrackingCom = () => {
                         width: '1000px',
                         backgroundColor: '#ffffff',
                         padding: '24px',
-                        fontFamily: '"DM Sans", sans-serif', // FIXED: Applied DM Sans font
+                        fontFamily: '"DM Sans", sans-serif',
                         color: '#0f172a',
                         zIndex: -1
                     }}
@@ -950,7 +950,7 @@ const SuperAdminLiveTrackingCom = () => {
                             borderBottom: '4px solid #0437cc',
                             display: 'flex',
                             justifyContent: 'space-between',
-                            alignItems: 'flex-start', // FIXED: Align to top
+                            alignItems: 'flex-start',
                             marginBottom: '14px'
                         }}
                     >
@@ -971,25 +971,31 @@ const SuperAdminLiveTrackingCom = () => {
                                 </div>
                             )}
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        
+                        {/* FIXED: Used inline-flex to ensure the text renders inside the blue pill */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                             <div
                                 style={{
-                                    display: 'inline-table',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
                                     backgroundColor: viewMode === 'history' ? '#0437cc' : '#16a34a',
                                     color: '#ffffff',
                                     height: '24px',
-                                    padding: '0 12px',
-                                    borderRadius: '999px'
+                                    padding: '0 16px',
+                                    borderRadius: '999px',
+                                    fontSize: '10px',
+                                    fontWeight: 800,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px'
                                 }}
                             >
-                                <span style={{ display: 'table-cell', verticalAlign: 'middle', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase' }}>
-                                    {viewMode === 'history' ? 'Route History' : 'Live Snapshot'}
-                                </span>
+                                {viewMode === 'history' ? 'Route History' : 'Live Snapshot'}
                             </div>
-                            <div style={{ fontSize: '11px', color: '#e2e8f0', marginTop: '6px', fontWeight: 700 }}>
+                            <div style={{ fontSize: '11px', color: '#e2e8f0', fontWeight: 700 }}>
                                 Date: {viewMode === 'history' ? historyDate : new Date().toLocaleDateString('en-CA')}
                             </div>
-                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
+                            <div style={{ fontSize: '10px', color: '#94a3b8' }}>
                                 Generated: {exportSnapshot.generatedAt}
                             </div>
                         </div>
