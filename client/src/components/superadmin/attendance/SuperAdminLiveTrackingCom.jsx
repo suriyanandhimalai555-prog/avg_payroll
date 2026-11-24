@@ -3,7 +3,7 @@ import axios from 'axios';
 import html2canvas from 'html2canvas';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from 'react-leaflet';
 import {
     FaMapMarkerAlt, FaSearch, FaSyncAlt, FaUsers, FaCheckCircle,
     FaExclamationTriangle, FaSignOutAlt, FaRoute, FaBuilding,
@@ -113,15 +113,15 @@ const createStatusIcon = (status, isSelected = false) => {
     });
 };
 
-// Flexbox-centered IN / OUT badges so html2canvas renders text cleanly without clipping
+// Table-cell centered IN / OUT badges so html2canvas renders text centered cleanly
 const createRouteEndpointIcon = (type) => {
     const bg = type === 'start' ? '#16a34a' : '#dc2626';
     const label = type === 'start' ? 'IN' : 'OUT';
     return L.divIcon({
         className: 'custom-route-marker',
-        html: `<div style="display:flex;align-items:center;justify-content:center;width:42px;height:24px;background:${bg};color:#ffffff;font-size:10px;font-weight:800;line-height:1;letter-spacing:0.5px;border-radius:6px;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.35);font-family:system-ui,-apple-system,sans-serif;">${label}</div>`,
-        iconSize: [42, 24],
-        iconAnchor: [21, 12]
+        html: `<div style="display:table;width:44px;height:24px;background:${bg};color:#ffffff;border-radius:6px;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.35);font-family:Arial,sans-serif;"><span style="display:table-cell;vertical-align:middle;text-align:center;font-size:10px;font-weight:800;line-height:1;">${label}</span></div>`,
+        iconSize: [44, 24],
+        iconAnchor: [22, 12]
     });
 };
 
@@ -193,11 +193,10 @@ const SuperAdminLiveTrackingCom = () => {
     const [showTimeline, setShowTimeline] = useState(true);
 
     // Detailed Screenshot Report State
-    const mapCaptureRef = useRef(null);
     const liveMapBoxRef = useRef(null);
+    const exportReportRef = useRef(null);
     const [isCapturing, setIsCapturing] = useState(false);
-    const [exportAddresses, setExportAddresses] = useState({ start: '', end: '' });
-    const [exportTimestamp, setExportTimestamp] = useState('');
+    const [exportSnapshot, setExportSnapshot] = useState(null);
 
     const fetchOrgAndDirectory = async () => {
         try {
@@ -268,7 +267,6 @@ const SuperAdminLiveTrackingCom = () => {
         const loadSessions = async () => {
             setIsRouteLoading(true);
             setRouteData({ logs: [], totalDistanceKm: 0, totalPoints: 0 });
-            setExportAddresses({ start: '', end: '' });
             try {
                 const res = await axios.get(
                     `${import.meta.env.VITE_API_URL}/api/sa-attendance/history?start_date=${historyDate}&end_date=${historyDate}&employee_id=${encodeURIComponent(selectedEmpId)}`,
@@ -299,7 +297,6 @@ const SuperAdminLiveTrackingCom = () => {
 
         const loadRoute = async () => {
             setIsRouteLoading(true);
-            setExportAddresses({ start: '', end: '' });
             try {
                 const res = await axios.get(
                     `${import.meta.env.VITE_API_URL}/api/sa-attendance/roaming/${selectedSessionId}`,
@@ -367,82 +364,72 @@ const SuperAdminLiveTrackingCom = () => {
         return null;
     }, [viewMode, routeData.logs, selectedSessionId, selectedEmployee]);
 
-    // ==================== DETAILED REPORT SCREENSHOT (OKLCH-SAFE) ====================
+    const firstRoutePoint = routeData.logs.length > 0 ? routeData.logs[0] : null;
+    const lastRoutePoint = routeData.logs.length > 0 ? routeData.logs[routeData.logs.length - 1] : null;
+
+    // ==================== TWO-STEP FULL-HEIGHT REPORT SCREENSHOT ====================
     const handleCaptureScreenshot = async () => {
-        if (!mapCaptureRef.current) return;
+        if (!liveMapBoxRef.current) return;
         setIsCapturing(true);
 
         try {
-            // 1. Resolve Start & End street addresses before rendering report
+            // Step 1: Capture the interactive map cleanly (without zoom controls)
+            const mapCanvas = await html2canvas(liveMapBoxRef.current, {
+                useCORS: true,
+                allowTaint: false,
+                backgroundColor: '#f8fafc',
+                scale: 2,
+                logging: false,
+                onclone: (clonedDoc, clonedEl) => {
+                    clonedEl.querySelectorAll('.leaflet-control-zoom').forEach((el) => {
+                        el.style.display = 'none';
+                    });
+                    sanitizeOklchForCanvas(clonedDoc, clonedEl);
+                }
+            });
+            const mapDataUrl = mapCanvas.toDataURL('image/png');
+
+            // Step 2: Resolve Start & End street addresses
             let startAddr = selectedSession?.clock_in_location || selectedEmployee?.clock_in_location || '';
             let endAddr = selectedSession?.clock_out_location || '';
 
             if (viewMode === 'history' && routeData.logs.length > 0) {
-                const firstPt = routeData.logs[0];
-                const lastPt = routeData.logs[routeData.logs.length - 1];
                 const [resolvedStart, resolvedEnd] = await Promise.all([
-                    startAddr ? Promise.resolve(startAddr) : resolveAddressQuick(firstPt.latitude, firstPt.longitude),
+                    startAddr ? Promise.resolve(startAddr) : resolveAddressQuick(firstRoutePoint.latitude, firstRoutePoint.longitude),
                     endAddr
                         ? Promise.resolve(endAddr)
                         : routeData.logs.length > 1
-                            ? resolveAddressQuick(lastPt.latitude, lastPt.longitude)
+                            ? resolveAddressQuick(lastRoutePoint.latitude, lastRoutePoint.longitude)
                             : Promise.resolve('')
                 ]);
-                startAddr = resolvedStart || `${firstPt.latitude.toFixed(5)}, ${firstPt.longitude.toFixed(5)}`;
-                endAddr = resolvedEnd || `${lastPt.latitude.toFixed(5)}, ${lastPt.longitude.toFixed(5)}`;
+                startAddr = resolvedStart || `${firstRoutePoint.latitude.toFixed(5)}, ${firstRoutePoint.longitude.toFixed(5)}`;
+                endAddr = resolvedEnd || `${lastRoutePoint.latitude.toFixed(5)}, ${lastRoutePoint.longitude.toFixed(5)}`;
             } else if (viewMode === 'live' && selectedEmployee?.latitude != null) {
                 const resolvedLive = await resolveAddressQuick(selectedEmployee.latitude, selectedEmployee.longitude);
                 endAddr = resolvedLive || `${selectedEmployee.latitude.toFixed(5)}, ${selectedEmployee.longitude.toFixed(5)}`;
             }
 
-            setExportAddresses({ start: startAddr, end: endAddr });
-            setExportTimestamp(new Date().toLocaleString('en-IN'));
+            // Step 3: Mount the full-height off-screen report with the captured map image
+            setExportSnapshot({
+                mapDataUrl,
+                startAddr,
+                endAddr,
+                generatedAt: new Date().toLocaleString('en-IN')
+            });
 
-            // Wait one frame so React flushes the resolved addresses into the hidden report blocks
-            await new Promise((resolve) => setTimeout(resolve, 120));
+            // Wait for off-screen DOM and embedded map image to finish painting
+            await new Promise((resolve) => setTimeout(resolve, 250));
 
-            const liveWidth = mapCaptureRef.current.offsetWidth;
-            const liveMapHeight = liveMapBoxRef.current ? liveMapBoxRef.current.offsetHeight : 380;
+            if (!exportReportRef.current) throw new Error('Report container not ready');
 
-            const canvas = await html2canvas(mapCaptureRef.current, {
+            // Step 4: Capture the full-height off-screen report (zero clipping!)
+            const reportCanvas = await html2canvas(exportReportRef.current, {
                 useCORS: true,
                 allowTaint: false,
                 backgroundColor: '#ffffff',
                 scale: 2,
                 logging: false,
                 onclone: (clonedDoc, clonedEl) => {
-                    // Preserve exact width so Leaflet tiles never shift
-                    clonedEl.style.width = `${liveWidth}px`;
-                    clonedEl.style.height = 'auto';
-                    clonedEl.style.maxHeight = 'none';
-                    clonedEl.style.overflow = 'visible';
-                    clonedEl.style.padding = '20px';
-                    clonedEl.style.backgroundColor = '#ffffff';
-
-                    // Lock the map box to its exact rendered height so tiles stay aligned
-                    const clonedMapBox = clonedEl.querySelector('[data-map-box="true"]');
-                    if (clonedMapBox) {
-                        clonedMapBox.style.height = `${liveMapHeight}px`;
-                        clonedMapBox.style.minHeight = `${liveMapHeight}px`;
-                        clonedMapBox.style.maxHeight = `${liveMapHeight}px`;
-                        clonedMapBox.style.borderRadius = '12px';
-                        clonedMapBox.style.overflow = 'hidden';
-                        clonedMapBox.style.border = '1px solid #cbd5e1';
-                    }
-
-                    // Hide interactive-only bars & Leaflet zoom controls from the export
-                    clonedEl.querySelectorAll('[data-hide-on-export="true"]').forEach((el) => {
-                        el.style.display = 'none';
-                    });
-                    clonedEl.querySelectorAll('.leaflet-control-zoom').forEach((el) => {
-                        el.style.display = 'none';
-                    });
-
-                    // Reveal the detailed report header, metrics, start/end cards, waypoint table & footer
-                    clonedEl.querySelectorAll('[data-export-only="true"]').forEach((el) => {
-                        el.style.display = el.getAttribute('data-export-display') || 'block';
-                    });
-
                     sanitizeOklchForCanvas(clonedDoc, clonedEl);
                 }
             });
@@ -450,13 +437,14 @@ const SuperAdminLiveTrackingCom = () => {
             const safeEmp = selectedEmpId || 'LiveMap';
             const datePart = viewMode === 'history' ? historyDate : new Date().toLocaleDateString('en-CA');
             const link = document.createElement('a');
-            link.download = `GPS_Report_${viewMode === 'history' ? 'Route' : 'Live'}_${safeEmp}_${datePart}.png`;
-            link.href = canvas.toDataURL('image/png');
+            link.download = `GPS_Audit_Report_${viewMode === 'history' ? 'Route' : 'Live'}_${safeEmp}_${datePart}.png`;
+            link.href = reportCanvas.toDataURL('image/png');
             link.click();
         } catch (err) {
             console.error('Map screenshot failed:', err);
             alert('Could not capture map screenshot. Please wait for map tiles to finish loading and try again.');
         } finally {
+            setExportSnapshot(null);
             setIsCapturing(false);
         }
     };
@@ -470,9 +458,6 @@ const SuperAdminLiveTrackingCom = () => {
     };
 
     const defaultCenter = [12.9716, 77.5946];
-
-    const firstRoutePoint = routeData.logs.length > 0 ? routeData.logs[0] : null;
-    const lastRoutePoint = routeData.logs.length > 0 ? routeData.logs[routeData.logs.length - 1] : null;
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
@@ -754,7 +739,7 @@ const SuperAdminLiveTrackingCom = () => {
                                 onClick={handleCaptureScreenshot}
                                 disabled={isCapturing}
                                 className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-60"
-                                title="Download Detailed GPS Route Report PNG"
+                                title="Download Detailed GPS Audit Report PNG"
                             >
                                 <FaCamera className="text-[11px]" />
                                 {isCapturing ? 'Generating Report...' : 'Screenshot'}
@@ -798,332 +783,121 @@ const SuperAdminLiveTrackingCom = () => {
                         )}
                     </div>
 
-                    {/* ==================== CAPTURABLE REPORT & MAP WRAPPER ==================== */}
-                    <div ref={mapCaptureRef} style={{ backgroundColor: '#ffffff' }} className="flex-1 flex flex-col relative min-h-[380px]">
-
-                        {/* [EXPORT-ONLY] DETAILED REPORT HEADER */}
-                        <div
-                            data-export-only="true"
-                            data-export-display="block"
-                            style={{ display: 'none', marginBottom: '14px' }}
-                        >
-                            {/* Top Brand Banner */}
-                            <div
-                                style={{
-                                    backgroundColor: '#010a1f',
-                                    color: '#ffffff',
-                                    padding: '16px 20px',
-                                    borderRadius: '12px',
-                                    borderBottom: '4px solid #0437cc',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    marginBottom: '12px'
-                                }}
-                            >
-                                <div>
-                                    <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', color: '#93c5fd', textTransform: 'uppercase' }}>
-                                        AVG PAYROLL • GPS TRACKING AUDIT REPORT
-                                    </div>
-                                    <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: '#ffffff' }}>
-                                        {selectedEmployee
-                                            ? `${selectedEmployee.first_name} ${selectedEmployee.last_name} (${selectedEmployee.employee_id})`
-                                            : 'Active Employees Live Map'}
-                                    </div>
-                                    {selectedEmployee && (
-                                        <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '3px' }}>
-                                            {[selectedEmployee.designation, selectedEmployee.company, selectedEmployee.branch, selectedEmployee.department]
-                                                .filter(Boolean)
-                                                .join('  •  ')}
-                                        </div>
-                                    )}
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <div
-                                        style={{
-                                            display: 'inline-block',
-                                            backgroundColor: viewMode === 'history' ? '#0437cc' : '#16a34a',
-                                            color: '#ffffff',
-                                            fontSize: '10px',
-                                            fontWeight: 800,
-                                            padding: '4px 10px',
-                                            borderRadius: '999px',
-                                            textTransform: 'uppercase'
-                                        }}
-                                    >
-                                        {viewMode === 'history' ? 'Route History' : 'Live Snapshot'}
-                                    </div>
-                                    <div style={{ fontSize: '11px', color: '#e2e8f0', marginTop: '6px', fontWeight: 600 }}>
-                                        Date: {viewMode === 'history' ? historyDate : new Date().toLocaleDateString('en-CA')}
-                                    </div>
-                                    <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
-                                        Generated: {exportTimestamp || new Date().toLocaleString('en-IN')}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* 4-Metric KPI Strip */}
-                            <div
-                                style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                                    gap: '10px'
-                                }}
-                            >
-                                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
-                                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Distance Traveled</div>
-                                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#0437cc', marginTop: '2px' }}>
-                                        {viewMode === 'history' ? `${routeData.totalDistanceKm} km` : `${metrics.totalCheckedIn} Active`}
-                                    </div>
-                                </div>
-                                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
-                                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                                        {viewMode === 'history' ? 'Total GPS Pings' : 'Recent GPS'}
-                                    </div>
-                                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#010a1f', marginTop: '2px' }}>
-                                        {viewMode === 'history' ? `${routeData.totalPoints} pts` : `${metrics.recentGps} Active`}
-                                    </div>
-                                </div>
-                                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
-                                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Check-In Time</div>
-                                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#15803d', marginTop: '3px' }}>
-                                        {formatTime(selectedSession?.clock_in || selectedEmployee?.clock_in || firstRoutePoint?.recorded_at)}
-                                    </div>
-                                </div>
-                                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 12px' }}>
-                                    <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                                        {selectedSession?.clock_out ? 'Check-Out Time' : 'Last GPS Update'}
-                                    </div>
-                                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#b91c1c', marginTop: '3px' }}>
-                                        {formatTime(selectedSession?.clock_out || lastRoutePoint?.recorded_at || selectedEmployee?.last_gps_at)}
-                                    </div>
-                                </div>
-                            </div>
+                    {/* Interactive Compact Strip */}
+                    {selectedEmployee && (
+                        <div className="px-4 py-2 bg-[#010a1f] text-white flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                            <span className="font-bold">
+                                {selectedEmployee.first_name} {selectedEmployee.last_name} ({selectedEmployee.employee_id})
+                            </span>
+                            <span className="text-slate-300">
+                                {viewMode === 'history'
+                                    ? `Route History • ${historyDate} • ${routeData.totalDistanceKm} km (${routeData.totalPoints} GPS pts)`
+                                    : `Live View • ${new Date().toLocaleString('en-IN')}`}
+                            </span>
                         </div>
+                    )}
 
-                        {/* Interactive-Only Compact Strip (hidden during screenshot export) */}
-                        {selectedEmployee && (
-                            <div
-                                data-hide-on-export="true"
-                                style={{ backgroundColor: '#010a1f', color: '#ffffff' }}
-                                className="px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]"
-                            >
-                                <span className="font-bold">
-                                    {selectedEmployee.first_name} {selectedEmployee.last_name} ({selectedEmployee.employee_id})
-                                </span>
-                                <span style={{ color: '#cbd5e1' }}>
-                                    {viewMode === 'history'
-                                        ? `Route History • ${historyDate} • ${routeData.totalDistanceKm} km (${routeData.totalPoints} GPS pts)`
-                                        : `Live View • ${new Date().toLocaleString('en-IN')}`}
-                                </span>
-                            </div>
-                        )}
+                    {/* Interactive Leaflet Map Box */}
+                    <div ref={liveMapBoxRef} className="flex-1 relative z-10 min-h-[360px]">
+                        <MapContainer
+                            center={defaultCenter}
+                            zoom={12}
+                            preferCanvas={true}
+                            className="w-full h-full min-h-[360px]"
+                        >
+                            <TileLayer
+                                crossOrigin="anonymous"
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            <MapFocusController
+                                targetCoords={mapFocusTarget}
+                                routeLogs={routeData.logs}
+                                viewMode={viewMode}
+                            />
 
-                        {/* Interactive Leaflet Map Box */}
-                        <div ref={liveMapBoxRef} data-map-box="true" className="flex-1 relative z-10 min-h-[360px]">
-                            <MapContainer
-                                center={defaultCenter}
-                                zoom={12}
-                                preferCanvas={true}
-                                className="w-full h-full min-h-[360px]"
-                            >
-                                <TileLayer
-                                    crossOrigin="anonymous"
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                />
-                                <MapFocusController
-                                    targetCoords={mapFocusTarget}
-                                    routeLogs={routeData.logs}
-                                    viewMode={viewMode}
-                                />
+                            {/* LIVE MODE MARKERS */}
+                            {viewMode === 'live' && filteredActiveEmployees
+                                .filter(e => e.latitude != null && e.longitude != null)
+                                .map(emp => (
+                                    <Marker
+                                        key={emp.employee_id}
+                                        position={[emp.latitude, emp.longitude]}
+                                        icon={createStatusIcon(emp.tracking_status, selectedEmpId === emp.employee_id)}
+                                        eventHandlers={{ click: () => setSelectedEmpId(emp.employee_id) }}
+                                    >
+                                        <Popup>
+                                            <div className="text-xs space-y-1 min-w-[180px]">
+                                                <p className="font-bold text-[#010a1f] text-sm">{emp.first_name} {emp.last_name}</p>
+                                                <p className="font-mono text-[#0437cc] font-bold">{emp.employee_id}</p>
+                                                <p><strong>Status:</strong> {emp.tracking_status}</p>
+                                                <p><strong>Check-In:</strong> {formatTime(emp.clock_in)}</p>
+                                                <p><strong>Last GPS:</strong> {formatTime(emp.last_gps_at)}</p>
+                                                {emp.accuracy != null && <p><strong>Accuracy:</strong> ±{Math.round(emp.accuracy)}m</p>}
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                ))}
 
-                                {/* LIVE MODE MARKERS */}
-                                {viewMode === 'live' && filteredActiveEmployees
-                                    .filter(e => e.latitude != null && e.longitude != null)
-                                    .map(emp => (
-                                        <Marker
-                                            key={emp.employee_id}
-                                            position={[emp.latitude, emp.longitude]}
-                                            icon={createStatusIcon(emp.tracking_status, selectedEmpId === emp.employee_id)}
-                                            eventHandlers={{ click: () => setSelectedEmpId(emp.employee_id) }}
-                                        >
-                                            <Popup>
-                                                <div className="text-xs space-y-1 min-w-[180px]">
-                                                    <p className="font-bold text-[#010a1f] text-sm">{emp.first_name} {emp.last_name}</p>
-                                                    <p className="font-mono text-[#0437cc] font-bold">{emp.employee_id}</p>
-                                                    <p><strong>Status:</strong> {emp.tracking_status}</p>
-                                                    <p><strong>Check-In:</strong> {formatTime(emp.clock_in)}</p>
-                                                    <p><strong>Last GPS:</strong> {formatTime(emp.last_gps_at)}</p>
-                                                    {emp.accuracy != null && <p><strong>Accuracy:</strong> ±{Math.round(emp.accuracy)}m</p>}
-                                                </div>
-                                            </Popup>
-                                        </Marker>
-                                    ))}
-
-                                {/* HISTORY ROUTE POLYLINE & ENDPOINTS */}
-                                {viewMode === 'history' && routeData.logs.length > 0 && (
-                                    <>
-                                        <Polyline
-                                            positions={routeData.logs.map(p => [p.latitude, p.longitude])}
-                                            pathOptions={{ color: '#0437cc', weight: 4, opacity: 0.9 }}
-                                        />
-                                        <Marker
-                                            position={[routeData.logs[0].latitude, routeData.logs[0].longitude]}
-                                            icon={createRouteEndpointIcon('start')}
+                            {/* HISTORY ROUTE POLYLINE, INTERMEDIATE CHECKPOINTS & ENDPOINTS */}
+                            {viewMode === 'history' && routeData.logs.length > 0 && (
+                                <>
+                                    <Polyline
+                                        positions={routeData.logs.map(p => [p.latitude, p.longitude])}
+                                        pathOptions={{ color: '#0437cc', weight: 4, opacity: 0.9 }}
+                                    />
+                                    {routeData.logs.slice(1, -1).map((pt, i) => (
+                                        <CircleMarker
+                                            key={pt.id || i}
+                                            center={[pt.latitude, pt.longitude]}
+                                            radius={4}
+                                            pathOptions={{ color: '#ffffff', weight: 1.5, fillColor: '#0437cc', fillOpacity: 0.95 }}
                                         >
                                             <Popup>
                                                 <div className="text-xs">
-                                                    <p className="font-bold text-green-700">First Recorded Point</p>
-                                                    <p>{formatTime(routeData.logs[0].recorded_at)}</p>
+                                                    <p className="font-bold text-[#0437cc]">Checkpoint #{i + 2}</p>
+                                                    <p>{formatTime(pt.recorded_at)}</p>
+                                                    <p className="font-mono text-[10px]">{pt.latitude.toFixed(5)}, {pt.longitude.toFixed(5)}</p>
+                                                </div>
+                                            </Popup>
+                                        </CircleMarker>
+                                    ))}
+                                    <Marker
+                                        position={[routeData.logs[0].latitude, routeData.logs[0].longitude]}
+                                        icon={createRouteEndpointIcon('start')}
+                                    >
+                                        <Popup>
+                                            <div className="text-xs">
+                                                <p className="font-bold text-green-700">First Recorded Point (IN)</p>
+                                                <p>{formatTime(routeData.logs[0].recorded_at)}</p>
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                    {routeData.logs.length > 1 && (
+                                        <Marker
+                                            position={[
+                                                routeData.logs[routeData.logs.length - 1].latitude,
+                                                routeData.logs[routeData.logs.length - 1].longitude
+                                            ]}
+                                            icon={createRouteEndpointIcon('end')}
+                                        >
+                                            <Popup>
+                                                <div className="text-xs">
+                                                    <p className="font-bold text-red-700">Last Recorded Point (OUT)</p>
+                                                    <p>{formatTime(routeData.logs[routeData.logs.length - 1].recorded_at)}</p>
                                                 </div>
                                             </Popup>
                                         </Marker>
-                                        {routeData.logs.length > 1 && (
-                                            <Marker
-                                                position={[
-                                                    routeData.logs[routeData.logs.length - 1].latitude,
-                                                    routeData.logs[routeData.logs.length - 1].longitude
-                                                ]}
-                                                icon={createRouteEndpointIcon('end')}
-                                            >
-                                                <Popup>
-                                                    <div className="text-xs">
-                                                        <p className="font-bold text-red-700">Last Recorded Point</p>
-                                                        <p>{formatTime(routeData.logs[routeData.logs.length - 1].recorded_at)}</p>
-                                                    </div>
-                                                </Popup>
-                                            </Marker>
-                                        )}
-                                    </>
-                                )}
-                            </MapContainer>
-
-                            {viewMode === 'history' && !isRouteLoading && routeData.logs.length === 0 && (
-                                <div
-                                    style={{ backgroundColor: '#ffffff', color: '#475569', borderColor: '#e2e8f0' }}
-                                    className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[400] px-4 py-2 rounded-xl shadow-md border text-xs font-semibold"
-                                >
-                                    No recorded GPS points for this date/session.
-                                </div>
+                                    )}
+                                </>
                             )}
-                        </div>
+                        </MapContainer>
 
-                        {/* [EXPORT-ONLY] LEGEND + START/END DETAILS + WAYPOINT TABLE + FOOTER */}
-                        <div
-                            data-export-only="true"
-                            data-export-display="block"
-                            style={{ display: 'none', marginTop: '12px' }}
-                        >
-                            {/* Map Legend Bar */}
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    backgroundColor: '#f8fafc',
-                                    border: '1px solid #e2e8f0',
-                                    borderRadius: '8px',
-                                    padding: '8px 14px',
-                                    fontSize: '10px',
-                                    color: '#334155',
-                                    marginBottom: '12px'
-                                }}
-                            >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontWeight: 700 }}>
-                                    <span>
-                                        <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#16a34a', marginRight: '5px', verticalAlign: 'middle' }}></span>
-                                        IN / Start Point
-                                    </span>
-                                    <span>
-                                        <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#dc2626', marginRight: '5px', verticalAlign: 'middle' }}></span>
-                                        OUT / Latest Point
-                                    </span>
-                                    <span>
-                                        <span style={{ display: 'inline-block', width: '16px', height: '3px', backgroundColor: '#0437cc', marginRight: '5px', verticalAlign: 'middle' }}></span>
-                                        Recorded GPS Route
-                                    </span>
-                                </div>
-                                <span style={{ color: '#64748b' }}>Map Data © OpenStreetMap</span>
+                        {viewMode === 'history' && !isRouteLoading && routeData.logs.length === 0 && (
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[400] bg-white/95 px-4 py-2 rounded-xl shadow-md border border-slate-200 text-xs font-semibold text-slate-600">
+                                No recorded GPS points for this date/session.
                             </div>
-
-                            {/* Start & End Location Cards */}
-                            {(exportAddresses.start || exportAddresses.end) && (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-                                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '10px 12px' }}>
-                                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', marginBottom: '4px' }}>
-                                            Start Location (IN) • {formatTime(firstRoutePoint?.recorded_at || selectedSession?.clock_in)}
-                                        </div>
-                                        <div style={{ fontSize: '11px', color: '#0f172a', fontWeight: 600, lineHeight: 1.4 }}>
-                                            {exportAddresses.start || 'N/A'}
-                                        </div>
-                                        {firstRoutePoint && (
-                                            <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginTop: '4px' }}>
-                                                {firstRoutePoint.latitude.toFixed(5)}, {firstRoutePoint.longitude.toFixed(5)}
-                                                {firstRoutePoint.accuracy ? ` (±${Math.round(firstRoutePoint.accuracy)}m)` : ''}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '10px 12px' }}>
-                                        <div style={{ fontSize: '9px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', marginBottom: '4px' }}>
-                                            End / Latest Location (OUT) • {formatTime(lastRoutePoint?.recorded_at || selectedSession?.clock_out || selectedEmployee?.last_gps_at)}
-                                        </div>
-                                        <div style={{ fontSize: '11px', color: '#0f172a', fontWeight: 600, lineHeight: 1.4 }}>
-                                            {exportAddresses.end || 'N/A'}
-                                        </div>
-                                        {lastRoutePoint && (
-                                            <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginTop: '4px' }}>
-                                                {lastRoutePoint.latitude.toFixed(5)}, {lastRoutePoint.longitude.toFixed(5)}
-                                                {lastRoutePoint.accuracy ? ` (±${Math.round(lastRoutePoint.accuracy)}m)` : ''}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Key Waypoints Log Table (History Mode) */}
-                            {viewMode === 'history' && sampledWaypoints.length > 0 && (
-                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '10px' }}>
-                                    <div style={{ backgroundColor: '#f1f5f9', padding: '7px 12px', fontSize: '10px', fontWeight: 800, color: '#010a1f', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0' }}>
-                                        Recorded GPS Checkpoints ({sampledWaypoints.length} of {routeData.logs.length} points shown)
-                                    </div>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
-                                        <thead>
-                                            <tr style={{ backgroundColor: '#f8fafc', color: '#64748b', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
-                                                <th style={{ padding: '6px 10px', fontWeight: 700 }}>#</th>
-                                                <th style={{ padding: '6px 10px', fontWeight: 700 }}>Timestamp</th>
-                                                <th style={{ padding: '6px 10px', fontWeight: 700 }}>Coordinates (Lat, Lng)</th>
-                                                <th style={{ padding: '6px 10px', fontWeight: 700 }}>Accuracy</th>
-                                                <th style={{ padding: '6px 10px', fontWeight: 700, textAlign: 'right' }}>Segment</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {sampledWaypoints.map((pt, idx) => (
-                                                <tr key={pt.id || idx} style={{ borderBottom: idx < sampledWaypoints.length - 1 ? '1px solid #f1f5f9' : 'none', color: '#0f172a' }}>
-                                                    <td style={{ padding: '5px 10px', fontWeight: 700, color: '#0437cc' }}>#{pt.seq}</td>
-                                                    <td style={{ padding: '5px 10px', fontWeight: 600 }}>{formatTime(pt.recorded_at)}</td>
-                                                    <td style={{ padding: '5px 10px', fontFamily: 'monospace', color: '#334155' }}>
-                                                        {pt.latitude.toFixed(5)}, {pt.longitude.toFixed(5)}
-                                                    </td>
-                                                    <td style={{ padding: '5px 10px', color: '#64748b' }}>
-                                                        {pt.accuracy ? `±${Math.round(pt.accuracy)}m` : '—'}
-                                                    </td>
-                                                    <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 700, color: '#0437cc' }}>
-                                                        {pt.segment_distance_km > 0 ? `+${(pt.segment_distance_km * 1000).toFixed(0)}m` : 'Start'}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-
-                            {/* Official Footer */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '9px', color: '#94a3b8', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
-                                <span>AVG Payroll • Official Live GPS Audit Report</span>
-                                <span>Computer-generated record • Coordinates verified from emp_location_logs</span>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* USER ROUTE HISTORY TIMELINE (Interactive UI) */}
@@ -1155,6 +929,229 @@ const SuperAdminLiveTrackingCom = () => {
                     )}
                 </div>
             </div>
+
+            {/* ==================== OFF-SCREEN FULL-HEIGHT AUDIT REPORT FOR SCREENSHOT ==================== */}
+            {exportSnapshot && (
+                <div
+                    ref={exportReportRef}
+                    style={{
+                        position: 'fixed',
+                        left: '-10000px',
+                        top: 0,
+                        width: '1000px',
+                        backgroundColor: '#ffffff',
+                        padding: '24px',
+                        fontFamily: 'Arial, Helvetica, sans-serif',
+                        color: '#0f172a',
+                        zIndex: -1
+                    }}
+                >
+                    {/* Top Brand Banner */}
+                    <div
+                        style={{
+                            backgroundColor: '#010a1f',
+                            color: '#ffffff',
+                            padding: '18px 22px',
+                            borderRadius: '12px',
+                            borderBottom: '4px solid #0437cc',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '14px'
+                        }}
+                    >
+                        <div>
+                            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', color: '#93c5fd', textTransform: 'uppercase' }}>
+                                AVG PAYROLL • GPS TRACKING AUDIT REPORT
+                            </div>
+                            <div style={{ fontSize: '20px', fontWeight: 800, marginTop: '5px', color: '#ffffff' }}>
+                                {selectedEmployee
+                                    ? `${selectedEmployee.first_name} ${selectedEmployee.last_name} (${selectedEmployee.employee_id})`
+                                    : 'Active Employees Live Map'}
+                            </div>
+                            {selectedEmployee && (
+                                <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>
+                                    {[selectedEmployee.designation, selectedEmployee.company, selectedEmployee.branch, selectedEmployee.department]
+                                        .filter(Boolean)
+                                        .join('  •  ')}
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <div
+                                style={{
+                                    display: 'inline-table',
+                                    backgroundColor: viewMode === 'history' ? '#0437cc' : '#16a34a',
+                                    color: '#ffffff',
+                                    height: '24px',
+                                    padding: '0 12px',
+                                    borderRadius: '999px'
+                                }}
+                            >
+                                <span style={{ display: 'table-cell', verticalAlign: 'middle', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase' }}>
+                                    {viewMode === 'history' ? 'Route History' : 'Live Snapshot'}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#e2e8f0', marginTop: '6px', fontWeight: 700 }}>
+                                Date: {viewMode === 'history' ? historyDate : new Date().toLocaleDateString('en-CA')}
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
+                                Generated: {exportSnapshot.generatedAt}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 4-Metric KPI Strip */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '14px' }}>
+                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Distance Traveled</div>
+                            <div style={{ fontSize: '18px', fontWeight: 800, color: '#0437cc', marginTop: '4px' }}>
+                                {viewMode === 'history' ? `${routeData.totalDistanceKm} km` : `${metrics.totalCheckedIn} Active`}
+                            </div>
+                        </div>
+                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                                {viewMode === 'history' ? 'Total GPS Pings' : 'Recent GPS'}
+                            </div>
+                            <div style={{ fontSize: '18px', fontWeight: 800, color: '#010a1f', marginTop: '4px' }}>
+                                {viewMode === 'history' ? `${routeData.totalPoints} pts` : `${metrics.recentGps} Active`}
+                            </div>
+                        </div>
+                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Check-In Time</div>
+                            <div style={{ fontSize: '16px', fontWeight: 800, color: '#15803d', marginTop: '4px' }}>
+                                {formatTime(selectedSession?.clock_in || selectedEmployee?.clock_in || firstRoutePoint?.recorded_at)}
+                            </div>
+                        </div>
+                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                                {selectedSession?.clock_out ? 'Check-Out Time' : 'Last GPS Update'}
+                            </div>
+                            <div style={{ fontSize: '16px', fontWeight: 800, color: '#b91c1c', marginTop: '4px' }}>
+                                {formatTime(selectedSession?.clock_out || lastRoutePoint?.recorded_at || selectedEmployee?.last_gps_at)}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Captured High-Res Map Image */}
+                    <div style={{ border: '1px solid #cbd5e1', borderRadius: '12px', overflow: 'hidden', marginBottom: '12px', backgroundColor: '#f8fafc' }}>
+                        <img
+                            src={exportSnapshot.mapDataUrl}
+                            alt="GPS Route Map"
+                            style={{ width: '100%', height: 'auto', display: 'block' }}
+                        />
+                    </div>
+
+                    {/* Map Legend Bar */}
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            backgroundColor: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            padding: '8px 14px',
+                            fontSize: '10px',
+                            color: '#334155',
+                            marginBottom: '14px'
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', fontWeight: 700 }}>
+                            <span>
+                                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#16a34a', marginRight: '5px', verticalAlign: 'middle' }}></span>
+                                IN / Start Point
+                            </span>
+                            <span>
+                                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#dc2626', marginRight: '5px', verticalAlign: 'middle' }}></span>
+                                OUT / Latest Point
+                            </span>
+                            <span>
+                                <span style={{ display: 'inline-block', width: '16px', height: '3px', backgroundColor: '#0437cc', marginRight: '5px', verticalAlign: 'middle' }}></span>
+                                Recorded GPS Route
+                            </span>
+                        </div>
+                        <span style={{ color: '#64748b' }}>Map Data © OpenStreetMap contributors</span>
+                    </div>
+
+                    {/* Start & End Location Cards */}
+                    {(exportSnapshot.startAddr || exportSnapshot.endAddr) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                            <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '12px 14px' }}>
+                                <div style={{ fontSize: '10px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', marginBottom: '5px' }}>
+                                    Start Location (IN) • {formatTime(firstRoutePoint?.recorded_at || selectedSession?.clock_in)}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#0f172a', fontWeight: 600, lineHeight: 1.45 }}>
+                                    {exportSnapshot.startAddr || 'N/A'}
+                                </div>
+                                {firstRoutePoint && (
+                                    <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginTop: '5px' }}>
+                                        Lat: {firstRoutePoint.latitude.toFixed(5)}, Lng: {firstRoutePoint.longitude.toFixed(5)}
+                                        {firstRoutePoint.accuracy ? ` (±${Math.round(firstRoutePoint.accuracy)}m)` : ''}
+                                    </div>
+                                )}
+                            </div>
+                            <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px' }}>
+                                <div style={{ fontSize: '10px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', marginBottom: '5px' }}>
+                                    End / Latest Location (OUT) • {formatTime(lastRoutePoint?.recorded_at || selectedSession?.clock_out || selectedEmployee?.last_gps_at)}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#0f172a', fontWeight: 600, lineHeight: 1.45 }}>
+                                    {exportSnapshot.endAddr || 'N/A'}
+                                </div>
+                                {lastRoutePoint && (
+                                    <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginTop: '5px' }}>
+                                        Lat: {lastRoutePoint.latitude.toFixed(5)}, Lng: {lastRoutePoint.longitude.toFixed(5)}
+                                        {lastRoutePoint.accuracy ? ` (±${Math.round(lastRoutePoint.accuracy)}m)` : ''}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Recorded GPS Checkpoints Table */}
+                    {viewMode === 'history' && sampledWaypoints.length > 0 && (
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>
+                            <div style={{ backgroundColor: '#f1f5f9', padding: '8px 14px', fontSize: '10px', fontWeight: 800, color: '#010a1f', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0' }}>
+                                Recorded GPS Checkpoints ({sampledWaypoints.length} of {routeData.logs.length} points shown)
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                                <thead>
+                                    <tr style={{ backgroundColor: '#f8fafc', color: '#64748b', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
+                                        <th style={{ padding: '7px 12px', fontWeight: 700 }}>Point</th>
+                                        <th style={{ padding: '7px 12px', fontWeight: 700 }}>Timestamp</th>
+                                        <th style={{ padding: '7px 12px', fontWeight: 700 }}>Coordinates (Lat, Lng)</th>
+                                        <th style={{ padding: '7px 12px', fontWeight: 700 }}>Accuracy</th>
+                                        <th style={{ padding: '7px 12px', fontWeight: 700, textAlign: 'right' }}>Segment Distance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sampledWaypoints.map((pt, idx) => (
+                                        <tr key={pt.id || idx} style={{ borderBottom: idx < sampledWaypoints.length - 1 ? '1px solid #f1f5f9' : 'none', color: '#0f172a' }}>
+                                            <td style={{ padding: '6px 12px', fontWeight: 700, color: '#0437cc' }}>#{pt.seq}</td>
+                                            <td style={{ padding: '6px 12px', fontWeight: 600 }}>{formatTime(pt.recorded_at)}</td>
+                                            <td style={{ padding: '6px 12px', fontFamily: 'monospace', color: '#334155' }}>
+                                                {pt.latitude.toFixed(5)}, {pt.longitude.toFixed(5)}
+                                            </td>
+                                            <td style={{ padding: '6px 12px', color: '#64748b' }}>
+                                                {pt.accuracy ? `±${Math.round(pt.accuracy)}m` : '—'}
+                                            </td>
+                                            <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 700, color: '#0437cc' }}>
+                                                {pt.segment_distance_km > 0 ? `+${(pt.segment_distance_km * 1000).toFixed(0)}m` : 'Start'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Official Footer */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', color: '#64748b', paddingTop: '8px', borderTop: '1px solid #e2e8f0' }}>
+                        <span>AVG Payroll • Official Live GPS Audit Report</span>
+                        <span>Computer-generated record • Coordinates verified from emp_location_logs</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
