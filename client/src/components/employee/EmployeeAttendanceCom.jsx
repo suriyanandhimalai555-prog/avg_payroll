@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Countdown from 'react-countdown';
 import {
@@ -6,7 +7,7 @@ import {
     FaSignOutAlt, FaSignInAlt, FaTasks, FaFingerprint,
     FaBusinessTime, FaWalking, FaExclamationTriangle,
     FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp,
-    FaTimes, FaCheck, FaEdit, FaFilter, FaUmbrellaBeach, FaSyncAlt
+    FaTimes, FaCheck, FaEdit, FaFilter, FaUmbrellaBeach, FaSyncAlt, FaHandshake
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -43,6 +44,7 @@ const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
 
 const EmployeeAttendanceCom = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('today');
 
     const [loading, setLoading] = useState(true);
@@ -123,7 +125,6 @@ const EmployeeAttendanceCom = () => {
                         setGpsDenied(true);
                         setGpsErrorMsg('GPS Permission Denied');
                     } else {
-                        // Always prompt or warm up GPS on login
                         requestInitialPermission();
                     }
 
@@ -143,7 +144,6 @@ const EmployeeAttendanceCom = () => {
                     requestInitialPermission();
                 });
         } else {
-            // Safari / older browsers fallback
             requestInitialPermission();
         }
 
@@ -259,15 +259,13 @@ const EmployeeAttendanceCom = () => {
                         latitude,
                         longitude
                     );
-                    movedEnough = dist >= 30; // Moved at least 30 meters
+                    movedEnough = dist >= 30;
                 } else {
                     movedEnough = true;
                 }
 
-                // Always keep latest coordinates cached for tab-close keepalive ping
                 lastCoordsRef.current = { latitude, longitude, accuracy };
 
-                // Ping backend if >= 30 seconds elapsed OR moved >= 30 meters
                 if (timeElapsed >= 30000 || movedEnough) {
                     lastPingTimeRef.current = now;
 
@@ -347,7 +345,6 @@ const EmployeeAttendanceCom = () => {
             if (document.visibilityState === 'hidden') {
                 sendFinalKeepalivePing();
             } else if (document.visibilityState === 'visible') {
-                // Immediately refresh GPS when returning to the tab
                 lastPingTimeRef.current = 0;
                 setGpsRetryCount((prev) => prev + 1);
             }
@@ -373,7 +370,6 @@ const EmployeeAttendanceCom = () => {
         lastPingTimeRef.current = 0;
         lastCoordsRef.current = null;
 
-        // Trigger fresh browser prompt if needed and restart watcher
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 setLocationPermState('granted');
@@ -533,7 +529,6 @@ const EmployeeAttendanceCom = () => {
                 eodUpdate: eodInput
             }, getAuthConfig());
 
-            // Reset live tracking refs cleanly on checkout
             lastPingTimeRef.current = 0;
             lastCoordsRef.current = null;
 
@@ -1025,6 +1020,14 @@ const EmployeeAttendanceCom = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 w-full md:w-auto shrink-0">
+                        <Button
+                            variant="outline"
+                            icon={FaHandshake}
+                            onClick={() => navigate('/employee/client-visit')}
+                            className="w-full sm:w-auto shadow-sm text-sm py-2.5 rounded-xl border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white transition-all"
+                        >
+                            Log Client Visit
+                        </Button>
                         <Button
                             variant="outline"
                             icon={FaSignInAlt}

@@ -38,6 +38,7 @@ import empLeaveRoutes from './routes/employee/empLeaveRoutes.js';
 import empPayrollRoutes from './routes/employee/empPayrollRoutes.js';
 import empReimbursementRoutes from './routes/employee/empReimbursementRoutes.js';
 import empAssetRoutes from './routes/employee/empAssetRoutes.js';
+import empClientVisitRoutes from './routes/employee/empClientVisitRoutes.js';
 
 import initializeSASuperAdminModel from './models/superadmin/SASuperAdmin.js';
 import initializeSAEmployeeModel from './models/superadmin/SAEmployee.js';
@@ -58,6 +59,7 @@ import initializeAttendanceModel from './models/employee/EmpAttendance.js';
 import initializeLeaveModels from './models/employee/EmpLeave.js';
 import initializeReimbursementModels from './models/employee/EmpReimbursement.js';
 import initializeEmpAssetModel from './models/employee/EmpAsset.js';
+import initializeEmpClientVisitModel from './models/employee/EmpClientVisit.js';
 
 const initializeDatabase = async () => {
     try {
@@ -84,6 +86,7 @@ const initializeDatabase = async () => {
         await initializeLeaveModels();
         await initializeReimbursementModels();
         await initializeEmpAssetModel();
+        await initializeEmpClientVisitModel();
 
         console.log('All database models initialized and patched sequentially.');
     } catch (error) {
@@ -190,6 +193,7 @@ if (cluster.isPrimary) {
     app.use('/api/payroll', empPayrollRoutes);
     app.use('/api/reimbursements', empReimbursementRoutes);
     app.use('/api/assets', empAssetRoutes);
+    app.use('/api/client-visits', empClientVisitRoutes);
 
     app.listen(PORT, () => {
         console.log(`Worker ${process.pid} running and listening on port ${PORT}`);

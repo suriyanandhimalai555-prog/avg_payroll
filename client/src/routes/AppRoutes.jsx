@@ -98,6 +98,7 @@ import EmployeeLoansAdvances from '../pages/employee/EmployeeLoansAdvances';
 import EmployeeDocuments from '../pages/employee/EmployeeDocuments';
 import EmployeeNotifications from '../pages/employee/EmployeeNotifications';
 import EmployeeSettings from '../pages/employee/EmployeeSettings';
+import EmployeeClientVisit from '../pages/employee/EmployeeClientVisit';
 
 const AppRoutes = () => {
     return (
@@ -234,6 +235,7 @@ const AppRoutes = () => {
                 <Route path="virtual-id" element={<EmployeeVirtualIDCom />} />
                 <Route path="assets" element={<EmployeeAssets />} />
                 <Route path="attendance" element={<EmployeeAttendance />} />
+                <Route path="client-visit" element={<EmployeeClientVisit />} />
                 <Route path="leave" element={<EmployeeLeaveManagement />} />
                 <Route path="payroll" element={<EmployeePayroll />} />
                 <Route path="reimbursements" element={<EmployeeReimbursements />} />
