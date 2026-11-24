@@ -5,7 +5,8 @@ import {
     FaUserClock, FaRegClock, FaPlaneDeparture, FaRupeeSign,
     FaSignInAlt, FaSignOutAlt, FaFileInvoiceDollar, FaClipboardList,
     FaBell, FaCheckCircle, FaChartLine, FaTimesCircle, FaClock,
-    FaTimes, FaExclamationTriangle, FaBullseye, FaBolt, FaChevronRight
+    FaTimes, FaExclamationTriangle, FaBullseye, FaBolt, FaChevronRight,
+    FaMapMarkerAlt, FaHandshake
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -18,6 +19,34 @@ const getAuthConfig = () => {
             ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
         }
     };
+};
+
+// Timezone-safe YYYY-MM-DD extractor
+const getSafeDateStr = (dateVal) => {
+    if (!dateVal) return '';
+    if (typeof dateVal === 'string' && dateVal.includes('T')) return dateVal.split('T')[0];
+    const d = new Date(dateVal);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+};
+
+// Haversine distance in meters between two GPS coordinates
+const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const getGreeting = () => {
+    const hr = new Date().getHours();
+    if (hr < 12) return 'Good Morning';
+    if (hr < 17) return 'Good Afternoon';
+    return 'Good Evening';
 };
 
 const EmployeeDashboardCom = () => {
@@ -36,10 +65,18 @@ const EmployeeDashboardCom = () => {
     // Live Timer State
     const [completedMsToday, setCompletedMsToday] = useState(0);
 
-    // EOD Modals
+    // Live GPS Tracking Refs & State
+    const lastPingTimeRef = useRef(0);
+    const lastCoordsRef = useRef(null);
+    const [isLiveTracking, setIsLiveTracking] = useState(false);
+
+    // EOD & Late Reason Modals
     const [isEodModalOpen, setIsEodModalOpen] = useState(false);
     const [eodInput, setEodInput] = useState('');
     const [isSubmittingEod, setIsSubmittingEod] = useState(false);
+
+    const [isLateModalOpen, setIsLateModalOpen] = useState(false);
+    const [lateReasonInput, setLateReasonInput] = useState('');
 
     // --- Device Information Helper ---
     const getDeviceInfo = () => {
@@ -60,28 +97,32 @@ const EmployeeDashboardCom = () => {
         return `${osName} - ${browserName}`;
     };
 
-    // --- Geolocation Helper ---
+    // --- Geolocation Helper (Laptop/Wi-Fi friendly, returns structured coords + address) ---
     const fetchLocationData = () => {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             if (!navigator.geolocation) {
-                reject('Geolocation not supported by browser');
+                resolve({ address: 'Location Unavailable (Browser unsupported)', latitude: null, longitude: null, accuracy: null });
                 return;
             }
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
-                    const { latitude, longitude } = position.coords;
+                    const { latitude, longitude, accuracy } = position.coords;
                     try {
                         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
                         const data = await response.json();
-                        resolve(`${data.display_name} (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`);
-                    } catch (err) {
-                        resolve(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`);
+                        const address = data && data.display_name
+                            ? `${data.display_name} (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`
+                            : `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+                        resolve({ address, latitude, longitude, accuracy });
+                    } catch {
+                        resolve({ address: `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`, latitude, longitude, accuracy });
                     }
                 },
-                () => {
-                    reject('Location access is strictly required to punch in/out.');
+                (error) => {
+                    console.warn("Geolocation failed:", error.message);
+                    resolve({ address: 'Location Unavailable (Check Device Settings)', latitude: null, longitude: null, accuracy: null });
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 }
             );
         });
     };
@@ -97,41 +138,44 @@ const EmployeeDashboardCom = () => {
     };
 
     const fetchDashboardData = async () => {
-        if (!user || !user.employee_id) return;
+        if (!user || !user.employee_id || !localStorage.getItem('token')) {
+            setLoading(false);
+            return;
+        }
         const empIdStr = String(user.employee_id).trim();
 
         try {
-            const [attRes, profRes, leaveBalRes, leaveReqRes] = await Promise.all([
+            const [attRes, profRes, shiftRes, leaveBalRes, leaveReqRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${empIdStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/employee-profile/${empIdStr}`, getAuthConfig()).catch(() => ({ data: {} })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/shift/${empIdStr}`, getAuthConfig()).catch(() => ({ data: null })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${empIdStr}`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
-            const fetchedHistory = attRes.data?.history || [];
+            const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
             setFullHistory(fetchedHistory);
 
-            const todayDateStr = new Date().toLocaleDateString('en-CA');
-            const todays = fetchedHistory.filter(record => new Date(record.date).toLocaleDateString('en-CA') === todayDateStr);
+            const todayDateStr = getSafeDateStr(new Date());
+            const todays = fetchedHistory.filter(record => getSafeDateStr(record.date) === todayDateStr);
             setTodayLogs(todays);
 
             let previousMs = 0;
             todays.forEach(log => {
-                if (log.clock_out && log.total_hours) {
+                if (log.clock_out && log.total_hours && log.total_hours !== 'Missed Checkout') {
                     const [h, m] = log.total_hours.replace(' Hrs', '').split(':').map(Number);
                     if (!isNaN(h) && !isNaN(m)) previousMs += (h * 3600000) + (m * 60000);
                 }
             });
             setCompletedMsToday(previousMs);
 
-            // Extract shift details directly from profile data to prevent 403 errors
             const employeeProfile = profRes.data || {};
-            setShiftDetails(employeeProfile.shift_details || employeeProfile.shift || null);
+            setShiftDetails(shiftRes.data || employeeProfile.shift_details || employeeProfile.shift || null);
 
             setLeaveBalances(leaveBalRes.data || []);
 
             const recentLeaves = (leaveReqRes.data || [])
-                .filter(req => isThisWeek(req.created_at || req.start_date))
+                .filter(req => isThisWeek(req.created_at || req.start_date || req.from_date))
                 .slice(0, 3)
                 .map(req => ({
                     id: req.id,
@@ -158,9 +202,113 @@ const EmployeeDashboardCom = () => {
     // Derived States
     const activeSession = fullHistory.find(r => r.clock_in && !r.clock_out);
     const isClockedIn = !!activeSession;
-
-    const isPendingOldCheckout = isClockedIn && new Date(activeSession.date).toLocaleDateString('en-CA') !== new Date().toLocaleDateString('en-CA');
+    const isPendingOldCheckout = isClockedIn && getSafeDateStr(activeSession.date) !== getSafeDateStr(new Date());
     const hasWorkedToday = todayLogs.length > 0;
+
+    // ==================== LIVE GPS TRACKING WATCHER ON DASHBOARD ====================
+    useEffect(() => {
+        if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !user?.employee_id || !navigator.geolocation) {
+            setIsLiveTracking(false);
+            return;
+        }
+
+        const watchId = navigator.geolocation.watchPosition(
+            async (position) => {
+                setIsLiveTracking(true);
+                const { latitude, longitude, accuracy } = position.coords;
+                const now = Date.now();
+                const timeElapsed = now - lastPingTimeRef.current;
+
+                let movedEnough = false;
+                if (lastCoordsRef.current) {
+                    const dist = getDistanceMeters(
+                        lastCoordsRef.current.latitude,
+                        lastCoordsRef.current.longitude,
+                        latitude,
+                        longitude
+                    );
+                    movedEnough = dist >= 30;
+                } else {
+                    movedEnough = true;
+                }
+
+                lastCoordsRef.current = { latitude, longitude, accuracy };
+
+                if (timeElapsed >= 30000 || movedEnough) {
+                    lastPingTimeRef.current = now;
+                    try {
+                        await axios.post(
+                            `${import.meta.env.VITE_API_URL}/api/attendance/location-ping`,
+                            {
+                                employeeId: user.employee_id,
+                                attendanceId: activeSession.id,
+                                latitude,
+                                longitude,
+                                accuracy
+                            },
+                            getAuthConfig()
+                        );
+                    } catch (err) {
+                        console.warn('Dashboard live location ping failed:', err.message);
+                    }
+                }
+            },
+            () => {
+                setIsLiveTracking(false);
+            },
+            { enableHighAccuracy: false, maximumAge: 30000, timeout: 20000 }
+        );
+
+        return () => {
+            navigator.geolocation.clearWatch(watchId);
+            setIsLiveTracking(false);
+        };
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, user?.employee_id]);
+
+    // ==================== FINAL KEEPALIVE PING ON TAB CLOSE / MINIMIZE ====================
+    useEffect(() => {
+        if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !user?.employee_id) return;
+
+        const sendFinalKeepalivePing = () => {
+            const coords = lastCoordsRef.current;
+            const token = localStorage.getItem('token');
+            if (!coords || !token) return;
+
+            try {
+                fetch(`${import.meta.env.VITE_API_URL}/api/attendance/location-ping`, {
+                    method: 'POST',
+                    keepalive: true,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        employeeId: user.employee_id,
+                        attendanceId: activeSession.id,
+                        latitude: coords.latitude,
+                        longitude: coords.longitude,
+                        accuracy: coords.accuracy ?? null
+                    })
+                }).catch(() => {});
+            } catch {
+                // Ignore unload network errors
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                sendFinalKeepalivePing();
+            }
+        };
+
+        window.addEventListener('pagehide', sendFinalKeepalivePing);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('pagehide', sendFinalKeepalivePing);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, user?.employee_id]);
 
     // Safely parse target working hours from extracted shift details (fallback to 8)
     let parsedWorkingHours = 8;
@@ -192,10 +340,10 @@ const EmployeeDashboardCom = () => {
         for (let i = 4; i >= 0; i--) {
             const d = new Date();
             d.setDate(d.getDate() - i);
-            const dateStr = d.toLocaleDateString('en-CA');
+            const dateStr = getSafeDateStr(d);
             const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
 
-            const recordsForDay = fullHistory.filter(r => new Date(r.date).toLocaleDateString('en-CA') === dateStr);
+            const recordsForDay = fullHistory.filter(r => getSafeDateStr(r.date) === dateStr);
             let status = 'Absent';
             let totalDecimal = 0;
             let displayHrs = '0h 0m';
@@ -207,9 +355,9 @@ const EmployeeDashboardCom = () => {
 
                 let totalMins = 0;
                 recordsForDay.forEach(r => {
-                    if (r.total_hours) {
+                    if (r.total_hours && r.total_hours !== 'Missed Checkout' && r.total_hours !== 'In Progress') {
                         const [h, m] = r.total_hours.replace(' Hrs', '').split(':').map(Number);
-                        totalMins += (h * 60) + (m || 0);
+                        if (!isNaN(h)) totalMins += (h * 60) + (m || 0);
                     }
                 });
 
@@ -262,7 +410,7 @@ const EmployeeDashboardCom = () => {
     };
 
     // Handlers
-    const handleCheckIn = async () => {
+    const handleCheckIn = async (providedLateReason = null) => {
         if (isActionLoading) return;
         const now = new Date();
         const currentHour = now.getHours();
@@ -274,22 +422,40 @@ const EmployeeDashboardCom = () => {
 
         setIsActionLoading(true);
         try {
-            const locationData = await fetchLocationData();
+            const locObj = await fetchLocationData();
             const deviceData = getDeviceInfo();
-            const todayDate = now.toLocaleDateString('en-CA');
+            const todayDate = getSafeDateStr(now);
 
             await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
                 employeeId: user.employee_id,
                 todayDate: todayDate,
-                locationData: locationData,
-                deviceInfo: deviceData
+                locationData: locObj.address,
+                latitude: locObj.latitude,
+                longitude: locObj.longitude,
+                accuracy: locObj.accuracy,
+                deviceInfo: deviceData,
+                lateReason: providedLateReason
             }, getAuthConfig());
+
+            setIsLateModalOpen(false);
+            setLateReasonInput('');
             await fetchDashboardData();
         } catch (error) {
-            alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
+            if (error.response?.status === 428 && error.response?.data?.message === 'LATE_REASON_REQUIRED') {
+                setIsLateModalOpen(true);
+            } else {
+                alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
+            }
         } finally {
             setIsActionLoading(false);
         }
+    };
+
+    const submitLateCheckIn = () => {
+        if (!lateReasonInput.trim()) {
+            return alert('Please provide a reason for clocking in late.');
+        }
+        handleCheckIn(lateReasonInput);
     };
 
     const initiateCheckOut = () => setIsEodModalOpen(true);
@@ -301,18 +467,24 @@ const EmployeeDashboardCom = () => {
         setIsSubmittingEod(true);
         setIsActionLoading(true);
         try {
-            const locationData = await fetchLocationData();
+            const locObj = await fetchLocationData();
             const deviceData = getDeviceInfo();
             const recordToClose = activeSession;
-            const targetDate = new Date(recordToClose.date).toLocaleDateString('en-CA');
+            const targetDate = getSafeDateStr(recordToClose.date);
 
             await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
                 employeeId: user.employee_id,
                 todayDate: targetDate,
-                locationData: locationData,
+                locationData: locObj.address,
+                latitude: locObj.latitude,
+                longitude: locObj.longitude,
+                accuracy: locObj.accuracy,
                 deviceInfo: deviceData,
                 eodUpdate: eodInput
             }, getAuthConfig());
+
+            lastPingTimeRef.current = 0;
+            lastCoordsRef.current = null;
 
             setIsEodModalOpen(false);
             setEodInput('');
@@ -332,7 +504,8 @@ const EmployeeDashboardCom = () => {
     // Quick Actions Routing
     const quickActions = [
         { label: 'Attendance', desc: 'View logs & hours', icon: FaUserClock, action: () => navigate('/employee/attendance'), color: 'text-green-600', bg: 'bg-green-50', ring: 'group-hover:ring-green-200', accent: 'group-hover:border-green-200' },
-        { label: 'Apply Leave', desc: 'Request time off', icon: FaPlaneDeparture, action: () => navigate('/employee/leave'), color: 'text-[#0437cc]', bg: 'bg-blue-50', ring: 'group-hover:ring-blue-200', accent: 'group-hover:border-blue-200' },
+        { label: 'Log Client Visit', desc: 'Post meeting & photo', icon: FaHandshake, action: () => navigate('/employee/client-visit'), color: 'text-[#0437cc]', bg: 'bg-blue-50', ring: 'group-hover:ring-blue-200', accent: 'group-hover:border-blue-200' },
+        { label: 'Apply Leave', desc: 'Request time off', icon: FaPlaneDeparture, action: () => navigate('/employee/leave'), color: 'text-indigo-600', bg: 'bg-indigo-50', ring: 'group-hover:ring-indigo-200', accent: 'group-hover:border-indigo-200' },
         { label: 'My Payslips', desc: 'Download salary slips', icon: FaFileInvoiceDollar, action: () => navigate('/employee/payroll'), color: 'text-[#010a1f]', bg: 'bg-slate-100', ring: 'group-hover:ring-slate-300', accent: 'group-hover:border-slate-300' },
         { label: 'My Profile', desc: 'Manage your details', icon: FaClipboardList, action: () => navigate('/employee/profile'), color: 'text-[#f77704]', bg: 'bg-orange-50', ring: 'group-hover:ring-orange-200', accent: 'group-hover:border-orange-200' },
     ];
@@ -409,6 +582,57 @@ const EmployeeDashboardCom = () => {
                     .ring-anim { animation: ringDash 1.2s ease-out forwards; }
                 `}
             </style>
+
+            {/* ==================== LATE REASON MODAL ==================== */}
+            {isLateModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                    <div className="relative bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-400"></div>
+
+                        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-orange-50 to-amber-50/50">
+                            <div className="flex items-center gap-2.5 sm:gap-3">
+                                <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                                    <FaExclamationTriangle className="text-orange-600 text-xs sm:text-sm" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h2 className="text-sm sm:text-base font-bold text-orange-700 truncate">Late Login Detected</h2>
+                                    <p className="text-[10px] text-orange-500 font-medium">Please provide a reason to clock in</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsLateModalOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+
+                        <div className="p-4 sm:p-6">
+                            <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-3.5 sm:p-4">
+                                <p className="text-xs text-slate-600 leading-relaxed">
+                                    You are clocking in past your allowed grace time. <strong>Your status will be marked as &quot;Half Day Absent (Pending Approval)&quot;.</strong> Please provide a valid reason for the delay.
+                                </p>
+                            </div>
+
+                            <textarea
+                                value={lateReasonInput}
+                                onChange={(e) => setLateReasonInput(e.target.value)}
+                                placeholder="State your reason (e.g., Traffic, Medical emergency, Pre-approved late check-in)..."
+                                className="w-full h-28 p-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none text-slate-800 shadow-sm transition-all"
+                            ></textarea>
+
+                            <div className="pt-4">
+                                <Button
+                                    variant="primary"
+                                    fullWidth
+                                    onClick={submitLateCheckIn}
+                                    disabled={isActionLoading || !lateReasonInput.trim()}
+                                    className="py-3 bg-[#f77704] hover:bg-[#e06603] shadow-lg shadow-orange-500/25 text-sm rounded-xl"
+                                >
+                                    {isActionLoading ? 'Processing...' : 'Submit Reason & Clock In'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ==================== EOD CHECKOUT MODAL ==================== */}
             {isEodModalOpen && (
@@ -494,23 +718,37 @@ const EmployeeDashboardCom = () => {
                                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Off Duty</span>
                                 </span>
                             )}
+                            {isLiveTracking && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-100 text-[10px] font-bold text-[#0437cc] uppercase tracking-wider">
+                                    <FaMapMarkerAlt className="text-[9px]" /> Live GPS
+                                </span>
+                            )}
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                                 {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
                             </span>
                         </div>
                         <h1 className="text-lg sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">
-                            Good Morning, {user?.first_name} {user?.last_name} 👋
+                            {getGreeting()}, {user?.first_name} {user?.last_name} 👋
                         </h1>
                         <p className="text-xs sm:text-sm text-slate-500 mt-1 truncate">
-                            Have a productive day! Here's your daily overview.
+                            Have a productive day! Here&apos;s your daily overview.
                         </p>
                     </div>
-                    <div className="flex w-full sm:w-auto gap-3 shrink-0">
+                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2.5 sm:gap-3 shrink-0">
+                        <Button
+                            variant="outline"
+                            icon={FaHandshake}
+                            onClick={() => navigate('/employee/client-visit')}
+                            fullWidth
+                            className="sm:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm transition-all rounded-xl text-sm"
+                        >
+                            Log Client Visit
+                        </Button>
                         {!isClockedIn ? (
                             <Button
                                 variant="outline"
                                 icon={FaSignInAlt}
-                                onClick={handleCheckIn}
+                                onClick={() => handleCheckIn(null)}
                                 fullWidth
                                 disabled={isActionLoading}
                                 className="sm:w-auto border-green-500 text-green-600 hover:bg-green-500 hover:text-white shadow-sm transition-all rounded-xl text-sm"
@@ -833,7 +1071,7 @@ const EmployeeDashboardCom = () => {
                                 Quick Actions
                             </h2>
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
-                                4 Tools
+                                {quickActions.length} Tools
                             </span>
                         </div>
 
@@ -885,7 +1123,7 @@ const EmployeeDashboardCom = () => {
                                         </span>
                                     </div>
                                     <p className="text-xs text-slate-600 font-bold">No alerts this week</p>
-                                    <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">You're all caught up!</p>
+                                    <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">You&apos;re all caught up!</p>
                                 </div>
                             ) : (
                                 alerts.map((alert, i) => {
