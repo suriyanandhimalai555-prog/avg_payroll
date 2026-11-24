@@ -21,6 +21,52 @@ const getAuthConfig = () => ({
     }
 });
 
+// Converts unsupported Tailwind v4 oklch() colors to standard hex/rgba for html2canvas
+const sanitizeOklchForCanvas = (clonedDoc, rootEl) => {
+    const colorCanvas = document.createElement('canvas');
+    colorCanvas.width = 1;
+    colorCanvas.height = 1;
+    const ctx = colorCanvas.getContext('2d');
+
+    const replaceOklch = (val) => {
+        if (!val || typeof val !== 'string' || !val.includes('oklch')) return val;
+        return val.replace(/oklch\([^)]+\)/g, (match) => {
+            ctx.fillStyle = '#000000';
+            ctx.fillStyle = match;
+            return ctx.fillStyle;
+        });
+    };
+
+    const colorProps = [
+        'color',
+        'backgroundColor',
+        'borderTopColor',
+        'borderRightColor',
+        'borderBottomColor',
+        'borderLeftColor',
+        'outlineColor',
+        'textDecorationColor',
+        'boxShadow',
+        'backgroundImage',
+        'fill',
+        'stroke'
+    ];
+
+    const targets = [clonedDoc.documentElement, clonedDoc.body, rootEl, ...rootEl.querySelectorAll('*')];
+    const view = clonedDoc.defaultView || window;
+
+    targets.forEach((el) => {
+        if (!el || !el.style) return;
+        const computed = view.getComputedStyle(el);
+        colorProps.forEach((prop) => {
+            const val = computed[prop];
+            if (val && val.includes('oklch')) {
+                el.style[prop] = replaceOklch(val);
+            }
+        });
+    });
+};
+
 // Custom divIcon markers (avoids Vite default Leaflet asset path issues)
 const createStatusIcon = (status, isSelected = false) => {
     const color = status === 'ACTIVE' ? '#16a34a' : status === 'STALE' ? '#f59e0b' : '#64748b';
@@ -273,7 +319,7 @@ const SuperAdminLiveTrackingCom = () => {
         return null;
     }, [viewMode, routeData.logs, selectedSessionId, selectedEmployee]);
 
-    // ==================== TAKE MAP SCREENSHOT ====================
+    // ==================== TAKE MAP SCREENSHOT (OKLCH-SAFE) ====================
     const handleCaptureScreenshot = async () => {
         if (!mapCaptureRef.current) return;
         setIsCapturing(true);
@@ -283,7 +329,10 @@ const SuperAdminLiveTrackingCom = () => {
                 allowTaint: false,
                 backgroundColor: '#ffffff',
                 scale: 2,
-                logging: false
+                logging: false,
+                onclone: (clonedDoc, clonedEl) => {
+                    sanitizeOklchForCanvas(clonedDoc, clonedEl);
+                }
             });
 
             const safeEmp = selectedEmpId || 'LiveMap';
@@ -636,14 +685,17 @@ const SuperAdminLiveTrackingCom = () => {
                     </div>
 
                     {/* Capturable Map Wrapper (includes audit header for clean screenshots) */}
-                    <div ref={mapCaptureRef} className="flex-1 flex flex-col relative min-h-[380px] bg-white">
+                    <div ref={mapCaptureRef} style={{ backgroundColor: '#ffffff' }} className="flex-1 flex flex-col relative min-h-[380px]">
                         {/* Audit Strip Included in Screenshot */}
                         {selectedEmployee && (
-                            <div className="px-4 py-2 bg-[#010a1f] text-white flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                            <div
+                                style={{ backgroundColor: '#010a1f', color: '#ffffff' }}
+                                className="px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                            >
                                 <span className="font-bold">
                                     {selectedEmployee.first_name} {selectedEmployee.last_name} ({selectedEmployee.employee_id})
                                 </span>
-                                <span className="text-slate-300">
+                                <span style={{ color: '#cbd5e1' }}>
                                     {viewMode === 'history'
                                         ? `Route History • ${historyDate} • ${routeData.totalDistanceKm} km (${routeData.totalPoints} GPS pts)`
                                         : `Live View • ${new Date().toLocaleString('en-IN')}`}
@@ -731,7 +783,10 @@ const SuperAdminLiveTrackingCom = () => {
                             </MapContainer>
 
                             {viewMode === 'history' && !isRouteLoading && routeData.logs.length === 0 && (
-                                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[400] bg-white/95 px-4 py-2 rounded-xl shadow-md border border-slate-200 text-xs font-semibold text-slate-600">
+                                <div
+                                    style={{ backgroundColor: '#ffffff', color: '#475569', borderColor: '#e2e8f0' }}
+                                    className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[400] px-4 py-2 rounded-xl shadow-md border text-xs font-semibold"
+                                >
                                     No recorded GPS points for this date/session.
                                 </div>
                             )}
