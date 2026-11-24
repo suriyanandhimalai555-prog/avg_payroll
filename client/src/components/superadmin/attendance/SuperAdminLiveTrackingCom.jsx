@@ -14,8 +14,6 @@ import Select from '../../common/Select';
 import Input from '../../common/Input';
 import { useAuth } from '../../../context/AuthContext';
 
-const REPORT_FONT = '"DM Sans", sans-serif';
-
 const getAuthConfig = () => ({
     headers: {
         'Content-Type': 'application/json',
@@ -40,18 +38,8 @@ const sanitizeOklchForCanvas = (clonedDoc, rootEl) => {
     };
 
     const colorProps = [
-        'color',
-        'backgroundColor',
-        'borderTopColor',
-        'borderRightColor',
-        'borderBottomColor',
-        'borderLeftColor',
-        'outlineColor',
-        'textDecorationColor',
-        'boxShadow',
-        'backgroundImage',
-        'fill',
-        'stroke'
+        'color', 'backgroundColor', 'borderTopColor', 'borderRightColor', 'borderBottomColor',
+        'borderLeftColor', 'outlineColor', 'textDecorationColor', 'boxShadow', 'backgroundImage', 'fill', 'stroke'
     ];
 
     const targets = [clonedDoc.documentElement, clonedDoc.body, rootEl, ...rootEl.querySelectorAll('*')];
@@ -88,12 +76,6 @@ const resolveAddressQuick = async (lat, lng) => {
     }
 };
 
-// Strip trailing "(Lat: ..., Lng: ...)" if already present in stored clock-in address
-const cleanAddressText = (addr) => {
-    if (!addr) return '';
-    return String(addr).replace(/\s*\(Lat:\s*-?\d+(\.\d+)?,\s*Lng:\s*-?\d+(\.\d+)?\)\s*$/i, '').trim();
-};
-
 // Sample waypoints evenly for clean screenshot report tables (max 12 rows)
 const getSampledWaypoints = (logs, maxRows = 12) => {
     if (!logs || logs.length <= maxRows) {
@@ -121,13 +103,13 @@ const createStatusIcon = (status, isSelected = false) => {
     });
 };
 
-// Cleanly padded IN / OUT badges using DM Sans (renders centered in both browser & html2canvas)
+// Table-cell centered IN / OUT badges so html2canvas renders text centered cleanly
 const createRouteEndpointIcon = (type) => {
     const bg = type === 'start' ? '#16a34a' : '#dc2626';
     const label = type === 'start' ? 'IN' : 'OUT';
     return L.divIcon({
         className: 'custom-route-marker',
-        html: `<div style="box-sizing:border-box;width:44px;padding:4px 0;background:${bg};color:#ffffff;font-family:${REPORT_FONT};font-size:10px;font-weight:700;line-height:12px;text-align:center;letter-spacing:0.4px;border-radius:6px;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.35);">${label}</div>`,
+        html: `<div style="display:table;width:44px;height:24px;background:${bg};color:#ffffff;border-radius:6px;border:2px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.35);font-family:'DM Sans',sans-serif;"><span style="display:table-cell;vertical-align:middle;text-align:center;font-size:10px;font-weight:800;line-height:1;">${label}</span></div>`,
         iconSize: [44, 24],
         iconAnchor: [22, 12]
     });
@@ -381,11 +363,6 @@ const SuperAdminLiveTrackingCom = () => {
         setIsCapturing(true);
 
         try {
-            // Ensure DM Sans webfont is fully loaded before rendering canvases
-            if (document.fonts && document.fonts.ready) {
-                await document.fonts.ready;
-            }
-
             // Step 1: Capture the interactive map cleanly (without zoom controls)
             const mapCanvas = await html2canvas(liveMapBoxRef.current, {
                 useCORS: true,
@@ -403,8 +380,8 @@ const SuperAdminLiveTrackingCom = () => {
             const mapDataUrl = mapCanvas.toDataURL('image/png');
 
             // Step 2: Resolve Start & End street addresses
-            let startAddr = cleanAddressText(selectedSession?.clock_in_location || selectedEmployee?.clock_in_location || '');
-            let endAddr = cleanAddressText(selectedSession?.clock_out_location || '');
+            let startAddr = selectedSession?.clock_in_location || selectedEmployee?.clock_in_location || '';
+            let endAddr = selectedSession?.clock_out_location || '';
 
             if (viewMode === 'history' && routeData.logs.length > 0) {
                 const [resolvedStart, resolvedEnd] = await Promise.all([
@@ -415,11 +392,11 @@ const SuperAdminLiveTrackingCom = () => {
                             ? resolveAddressQuick(lastRoutePoint.latitude, lastRoutePoint.longitude)
                             : Promise.resolve('')
                 ]);
-                startAddr = cleanAddressText(resolvedStart) || `${firstRoutePoint.latitude.toFixed(5)}, ${firstRoutePoint.longitude.toFixed(5)}`;
-                endAddr = cleanAddressText(resolvedEnd) || `${lastRoutePoint.latitude.toFixed(5)}, ${lastRoutePoint.longitude.toFixed(5)}`;
+                startAddr = resolvedStart || `${firstRoutePoint.latitude.toFixed(5)}, ${firstRoutePoint.longitude.toFixed(5)}`;
+                endAddr = resolvedEnd || `${lastRoutePoint.latitude.toFixed(5)}, ${lastRoutePoint.longitude.toFixed(5)}`;
             } else if (viewMode === 'live' && selectedEmployee?.latitude != null) {
                 const resolvedLive = await resolveAddressQuick(selectedEmployee.latitude, selectedEmployee.longitude);
-                endAddr = cleanAddressText(resolvedLive) || `${selectedEmployee.latitude.toFixed(5)}, ${selectedEmployee.longitude.toFixed(5)}`;
+                endAddr = resolvedLive || `${selectedEmployee.latitude.toFixed(5)}, ${selectedEmployee.longitude.toFixed(5)}`;
             }
 
             // Step 3: Mount the full-height off-screen report with the captured map image
@@ -431,11 +408,11 @@ const SuperAdminLiveTrackingCom = () => {
             });
 
             // Wait for off-screen DOM and embedded map image to finish painting
-            await new Promise((resolve) => setTimeout(resolve, 250));
+            await new Promise((resolve) => setTimeout(resolve, 300));
 
             if (!exportReportRef.current) throw new Error('Report container not ready');
 
-            // Step 4: Capture the full-height off-screen report (zero clipping)
+            // Step 4: Capture the full-height off-screen report (zero clipping!)
             const reportCanvas = await html2canvas(exportReportRef.current, {
                 useCORS: true,
                 allowTaint: false,
@@ -443,6 +420,10 @@ const SuperAdminLiveTrackingCom = () => {
                 scale: 2,
                 logging: false,
                 onclone: (clonedDoc, clonedEl) => {
+                    // Ensure the DM Sans font is injected into the cloned iframe for html2canvas
+                    const style = clonedDoc.createElement('style');
+                    style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');`;
+                    clonedDoc.head.appendChild(style);
                     sanitizeOklchForCanvas(clonedDoc, clonedEl);
                 }
             });
@@ -952,10 +933,9 @@ const SuperAdminLiveTrackingCom = () => {
                         left: '-10000px',
                         top: 0,
                         width: '1000px',
-                        boxSizing: 'border-box',
                         backgroundColor: '#ffffff',
-                        padding: '28px',
-                        fontFamily: REPORT_FONT,
+                        padding: '24px',
+                        fontFamily: '"DM Sans", sans-serif', // FIXED: Applied DM Sans font
                         color: '#0f172a',
                         zIndex: -1
                     }}
@@ -965,86 +945,87 @@ const SuperAdminLiveTrackingCom = () => {
                         style={{
                             backgroundColor: '#010a1f',
                             color: '#ffffff',
-                            padding: '20px 24px',
-                            borderRadius: '14px',
+                            padding: '18px 22px',
+                            borderRadius: '12px',
                             borderBottom: '4px solid #0437cc',
                             display: 'flex',
                             justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: '16px',
-                            marginBottom: '16px'
+                            alignItems: 'flex-start', // FIXED: Align to top
+                            marginBottom: '14px'
                         }}
                     >
-                        <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.4px', color: '#93c5fd', textTransform: 'uppercase', lineHeight: '14px' }}>
+                        <div>
+                            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', color: '#93c5fd', textTransform: 'uppercase' }}>
                                 AVG PAYROLL • GPS TRACKING AUDIT REPORT
                             </div>
-                            <div style={{ fontSize: '21px', fontWeight: 800, marginTop: '6px', color: '#ffffff', lineHeight: '26px' }}>
+                            <div style={{ fontSize: '20px', fontWeight: 800, marginTop: '5px', color: '#ffffff' }}>
                                 {selectedEmployee
                                     ? `${selectedEmployee.first_name} ${selectedEmployee.last_name} (${selectedEmployee.employee_id})`
                                     : 'Active Employees Live Map'}
                             </div>
                             {selectedEmployee && (
-                                <div style={{ fontSize: '11.5px', color: '#cbd5e1', marginTop: '5px', lineHeight: '16px' }}>
+                                <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px', lineHeight: 1.4 }}>
                                     {[selectedEmployee.designation, selectedEmployee.company, selectedEmployee.branch, selectedEmployee.department]
                                         .filter(Boolean)
                                         .join('  •  ')}
                                 </div>
                             )}
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ textAlign: 'right' }}>
                             <div
                                 style={{
-                                    display: 'inline-block',
+                                    display: 'inline-table',
                                     backgroundColor: viewMode === 'history' ? '#0437cc' : '#16a34a',
                                     color: '#ffffff',
-                                    padding: '6px 14px',
-                                    borderRadius: '999px',
-                                    fontSize: '10px',
-                                    fontWeight: 700,
-                                    lineHeight: '12px',
-                                    letterSpacing: '0.6px',
-                                    textTransform: 'uppercase'
+                                    height: '24px',
+                                    padding: '0 12px',
+                                    borderRadius: '999px'
                                 }}
                             >
-                                {viewMode === 'history' ? 'Route History' : 'Live Snapshot'}
+                                <span style={{ display: 'table-cell', verticalAlign: 'middle', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase' }}>
+                                    {viewMode === 'history' ? 'Route History' : 'Live Snapshot'}
+                                </span>
                             </div>
-                            <div style={{ fontSize: '11.5px', color: '#e2e8f0', marginTop: '8px', fontWeight: 700, lineHeight: '16px' }}>
+                            <div style={{ fontSize: '11px', color: '#e2e8f0', marginTop: '6px', fontWeight: 700 }}>
                                 Date: {viewMode === 'history' ? historyDate : new Date().toLocaleDateString('en-CA')}
                             </div>
-                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '3px', lineHeight: '14px' }}>
+                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
                                 Generated: {exportSnapshot.generatedAt}
                             </div>
                         </div>
                     </div>
 
                     {/* 4-Metric KPI Strip */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
-                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
-                            <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: '14px' }}>Distance Traveled</div>
-                            <div style={{ fontSize: '19px', fontWeight: 800, color: '#0437cc', marginTop: '6px', lineHeight: '22px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '14px' }}>
+                        {/* Card 1 */}
+                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Distance Traveled</div>
+                            <div style={{ fontSize: '18px', fontWeight: 800, color: '#0437cc', marginTop: '4px' }}>
                                 {viewMode === 'history' ? `${routeData.totalDistanceKm} km` : `${metrics.totalCheckedIn} Active`}
                             </div>
                         </div>
-                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
-                            <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: '14px' }}>
+                        {/* Card 2 */}
+                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                                 {viewMode === 'history' ? 'Total GPS Pings' : 'Recent GPS'}
                             </div>
-                            <div style={{ fontSize: '19px', fontWeight: 800, color: '#010a1f', marginTop: '6px', lineHeight: '22px' }}>
+                            <div style={{ fontSize: '18px', fontWeight: 800, color: '#010a1f', marginTop: '4px' }}>
                                 {viewMode === 'history' ? `${routeData.totalPoints} pts` : `${metrics.recentGps} Active`}
                             </div>
                         </div>
-                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
-                            <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: '14px' }}>Check-In Time</div>
-                            <div style={{ fontSize: '17px', fontWeight: 800, color: '#15803d', marginTop: '6px', lineHeight: '22px' }}>
+                        {/* Card 3 */}
+                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Check-In Time</div>
+                            <div style={{ fontSize: '16px', fontWeight: 800, color: '#15803d', marginTop: '4px' }}>
                                 {formatTime(selectedSession?.clock_in || selectedEmployee?.clock_in || firstRoutePoint?.recorded_at)}
                             </div>
                         </div>
-                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
-                            <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: '14px' }}>
+                        {/* Card 4 */}
+                        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                                 {selectedSession?.clock_out ? 'Check-Out Time' : 'Last GPS Update'}
                             </div>
-                            <div style={{ fontSize: '17px', fontWeight: 800, color: '#b91c1c', marginTop: '6px', lineHeight: '22px' }}>
+                            <div style={{ fontSize: '16px', fontWeight: 800, color: '#b91c1c', marginTop: '4px' }}>
                                 {formatTime(selectedSession?.clock_out || lastRoutePoint?.recorded_at || selectedEmployee?.last_gps_at)}
                             </div>
                         </div>
@@ -1067,56 +1048,58 @@ const SuperAdminLiveTrackingCom = () => {
                             justifyContent: 'space-between',
                             backgroundColor: '#f8fafc',
                             border: '1px solid #e2e8f0',
-                            borderRadius: '10px',
-                            padding: '10px 16px',
-                            fontSize: '11px',
+                            borderRadius: '8px',
+                            padding: '8px 14px',
+                            fontSize: '10px',
                             color: '#334155',
-                            marginBottom: '16px'
+                            marginBottom: '14px'
                         }}
                     >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontWeight: 700 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', lineHeight: '14px' }}>
-                                <span style={{ width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#16a34a', display: 'inline-block' }}></span>
-                                <span>IN / Start Point</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', lineHeight: '14px' }}>
-                                <span style={{ width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#dc2626', display: 'inline-block' }}></span>
-                                <span>OUT / Latest Point</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', lineHeight: '14px' }}>
-                                <span style={{ width: '16px', height: '3px', borderRadius: '2px', backgroundColor: '#0437cc', display: 'inline-block' }}></span>
-                                <span>Recorded GPS Route</span>
-                            </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', fontWeight: 700 }}>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>
+                                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#16a34a', marginRight: '6px' }}></span>
+                                IN / Start Point
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>
+                                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '3px', backgroundColor: '#dc2626', marginRight: '6px' }}></span>
+                                OUT / Latest Point
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>
+                                <span style={{ display: 'inline-block', width: '16px', height: '3px', backgroundColor: '#0437cc', marginRight: '6px' }}></span>
+                                Recorded GPS Route
+                            </span>
                         </div>
-                        <span style={{ color: '#64748b', fontSize: '10px', lineHeight: '14px' }}>Map Data © OpenStreetMap contributors</span>
+                        <span style={{ color: '#64748b' }}>Map Data © OpenStreetMap contributors</span>
                     </div>
 
                     {/* Start & End Location Cards */}
                     {(exportSnapshot.startAddr || exportSnapshot.endAddr) && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                            <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '14px 16px' }}>
-                                <div style={{ fontSize: '10px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px', lineHeight: '14px' }}>
-                                    Start Location (IN) • {formatTime(firstRoutePoint?.recorded_at || selectedSession?.clock_in)}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                            <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '12px 14px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase' }}>Start Location (IN)</span>
+                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#15803d' }}>{formatTime(firstRoutePoint?.recorded_at || selectedSession?.clock_in)}</span>
                                 </div>
-                                <div style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600, lineHeight: '18px' }}>
+                                <div style={{ fontSize: '11px', color: '#0f172a', fontWeight: 600, lineHeight: 1.45 }}>
                                     {exportSnapshot.startAddr || 'N/A'}
                                 </div>
                                 {firstRoutePoint && (
-                                    <div style={{ fontSize: '10.5px', color: '#475569', marginTop: '6px', lineHeight: '14px' }}>
+                                    <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginTop: '6px' }}>
                                         Lat: {firstRoutePoint.latitude.toFixed(5)}, Lng: {firstRoutePoint.longitude.toFixed(5)}
                                         {firstRoutePoint.accuracy ? ` (±${Math.round(firstRoutePoint.accuracy)}m)` : ''}
                                     </div>
                                 )}
                             </div>
-                            <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px 16px' }}>
-                                <div style={{ fontSize: '10px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px', lineHeight: '14px' }}>
-                                    End / Latest Location (OUT) • {formatTime(lastRoutePoint?.recorded_at || selectedSession?.clock_out || selectedEmployee?.last_gps_at)}
+                            <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase' }}>End / Latest Location (OUT)</span>
+                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#b91c1c' }}>{formatTime(lastRoutePoint?.recorded_at || selectedSession?.clock_out || selectedEmployee?.last_gps_at)}</span>
                                 </div>
-                                <div style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600, lineHeight: '18px' }}>
+                                <div style={{ fontSize: '11px', color: '#0f172a', fontWeight: 600, lineHeight: 1.45 }}>
                                     {exportSnapshot.endAddr || 'N/A'}
                                 </div>
                                 {lastRoutePoint && (
-                                    <div style={{ fontSize: '10.5px', color: '#475569', marginTop: '6px', lineHeight: '14px' }}>
+                                    <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginTop: '6px' }}>
                                         Lat: {lastRoutePoint.latitude.toFixed(5)}, Lng: {lastRoutePoint.longitude.toFixed(5)}
                                         {lastRoutePoint.accuracy ? ` (±${Math.round(lastRoutePoint.accuracy)}m)` : ''}
                                     </div>
@@ -1127,44 +1110,33 @@ const SuperAdminLiveTrackingCom = () => {
 
                     {/* Recorded GPS Checkpoints Table */}
                     {viewMode === 'history' && sampledWaypoints.length > 0 && (
-                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
-                            <div style={{ backgroundColor: '#f1f5f9', padding: '10px 14px', fontSize: '10.5px', fontWeight: 800, color: '#010a1f', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0', lineHeight: '14px' }}>
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>
+                            <div style={{ backgroundColor: '#f1f5f9', padding: '8px 14px', fontSize: '10px', fontWeight: 800, color: '#010a1f', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0' }}>
                                 Recorded GPS Checkpoints ({sampledWaypoints.length} of {routeData.logs.length} points shown)
                             </div>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', fontFamily: REPORT_FONT }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                                 <thead>
                                     <tr style={{ backgroundColor: '#f8fafc', color: '#64748b', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
-                                        <th style={{ padding: '9px 14px', fontWeight: 700 }}>Point</th>
-                                        <th style={{ padding: '9px 14px', fontWeight: 700 }}>Timestamp</th>
-                                        <th style={{ padding: '9px 14px', fontWeight: 700 }}>Coordinates (Lat, Lng)</th>
-                                        <th style={{ padding: '9px 14px', fontWeight: 700 }}>Accuracy</th>
-                                        <th style={{ padding: '9px 14px', fontWeight: 700, textAlign: 'right' }}>Segment Distance</th>
+                                        <th style={{ padding: '10px 14px', fontWeight: 700, verticalAlign: 'middle' }}>Point</th>
+                                        <th style={{ padding: '10px 14px', fontWeight: 700, verticalAlign: 'middle' }}>Timestamp</th>
+                                        <th style={{ padding: '10px 14px', fontWeight: 700, verticalAlign: 'middle' }}>Coordinates (Lat, Lng)</th>
+                                        <th style={{ padding: '10px 14px', fontWeight: 700, verticalAlign: 'middle' }}>Accuracy</th>
+                                        <th style={{ padding: '10px 14px', fontWeight: 700, textAlign: 'right', verticalAlign: 'middle' }}>Segment Distance</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {sampledWaypoints.map((pt, idx) => (
-                                        <tr
-                                            key={pt.id || idx}
-                                            style={{
-                                                backgroundColor: idx % 2 === 1 ? '#f8fafc' : '#ffffff',
-                                                borderBottom: idx < sampledWaypoints.length - 1 ? '1px solid #e2e8f0' : 'none',
-                                                color: '#0f172a'
-                                            }}
-                                        >
-                                            <td style={{ padding: '8px 14px', fontWeight: 700, color: '#0437cc' }}>#{pt.seq}</td>
-                                            <td style={{ padding: '8px 14px', fontWeight: 600 }}>{formatTime(pt.recorded_at)}</td>
-                                            <td style={{ padding: '8px 14px', color: '#334155', fontVariantNumeric: 'tabular-nums' }}>
+                                        <tr key={pt.id || idx} style={{ borderBottom: idx < sampledWaypoints.length - 1 ? '1px solid #f1f5f9' : 'none', color: '#0f172a' }}>
+                                            <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0437cc', verticalAlign: 'middle' }}>#{pt.seq}</td>
+                                            <td style={{ padding: '10px 14px', fontWeight: 600, verticalAlign: 'middle' }}>{formatTime(pt.recorded_at)}</td>
+                                            <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#334155', verticalAlign: 'middle' }}>
                                                 {pt.latitude.toFixed(5)}, {pt.longitude.toFixed(5)}
                                             </td>
-                                            <td style={{ padding: '8px 14px', color: '#64748b' }}>
+                                            <td style={{ padding: '10px 14px', color: '#64748b', verticalAlign: 'middle' }}>
                                                 {pt.accuracy ? `±${Math.round(pt.accuracy)}m` : '—'}
                                             </td>
-                                            <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: pt.seq === 1 ? '#15803d' : pt.segment_distance_km > 0 ? '#0437cc' : '#94a3b8' }}>
-                                                {pt.seq === 1
-                                                    ? 'Start'
-                                                    : pt.segment_distance_km > 0
-                                                        ? `+${(pt.segment_distance_km * 1000).toFixed(0)}m`
-                                                        : '0m'}
+                                            <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#0437cc', verticalAlign: 'middle' }}>
+                                                {pt.segment_distance_km > 0 ? `+${(pt.segment_distance_km * 1000).toFixed(0)}m` : 'Start'}
                                             </td>
                                         </tr>
                                     ))}
@@ -1174,7 +1146,7 @@ const SuperAdminLiveTrackingCom = () => {
                     )}
 
                     {/* Official Footer */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', color: '#64748b', paddingTop: '10px', borderTop: '1px solid #e2e8f0', lineHeight: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', color: '#64748b', paddingTop: '10px', borderTop: '1px solid #e2e8f0' }}>
                         <span>AVG Payroll • Official Live GPS Audit Report</span>
                         <span>Computer-generated record • Coordinates verified from emp_location_logs</span>
                     </div>
