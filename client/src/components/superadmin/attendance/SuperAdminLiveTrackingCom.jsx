@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
+import html2canvas from 'html2canvas';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import {
     FaMapMarkerAlt, FaSearch, FaSyncAlt, FaUsers, FaCheckCircle,
     FaExclamationTriangle, FaSignOutAlt, FaRoute, FaBuilding,
-    FaSitemap, FaClock, FaCrosshairs, FaRoad, FaHistory
+    FaSitemap, FaClock, FaCrosshairs, FaRoad, FaHistory, FaCamera, FaListUl
 } from 'react-icons/fa';
 import Button from '../../common/Button';
 import Select from '../../common/Select';
@@ -44,19 +45,29 @@ const createRouteEndpointIcon = (type) => {
     });
 };
 
-// Pans/zooms map ONLY when selected employee changes (does NOT reset zoom on background polling)
-const MapFocusController = ({ targetCoords }) => {
+// Pans/zooms map on employee selection, and auto-fits full route bounds in history mode
+const MapFocusController = ({ targetCoords, routeLogs, viewMode }) => {
     const map = useMap();
     const lastTargetRef = useRef(null);
 
     useEffect(() => {
+        if (viewMode === 'history' && routeLogs && routeLogs.length > 1) {
+            const boundsKey = `bounds_${routeLogs[0].attendance_id}_${routeLogs.length}`;
+            if (lastTargetRef.current !== boundsKey) {
+                lastTargetRef.current = boundsKey;
+                const bounds = L.latLngBounds(routeLogs.map(p => [p.latitude, p.longitude]));
+                map.fitBounds(bounds, { padding: [45, 45], maxZoom: 16 });
+            }
+            return;
+        }
+
         if (!targetCoords) return;
         const key = `${targetCoords.id}_${targetCoords.mode}`;
         if (lastTargetRef.current !== key) {
             lastTargetRef.current = key;
             map.flyTo([targetCoords.lat, targetCoords.lng], 15, { duration: 0.8 });
         }
-    }, [targetCoords, map]);
+    }, [targetCoords, routeLogs, viewMode, map]);
 
     return null;
 };
@@ -64,8 +75,10 @@ const MapFocusController = ({ targetCoords }) => {
 const SuperAdminLiveTrackingCom = () => {
     const { user } = useAuth();
 
-    // Live Tracking State
+    // Live Tracking & All Employees State
     const [employees, setEmployees] = useState([]);
+    const [allEmployees, setAllEmployees] = useState([]);
+    const [listTab, setListTab] = useState('active'); // 'active' | 'all'
     const [metrics, setMetrics] = useState({
         totalCheckedIn: 0,
         recentGps: 0,
@@ -97,19 +110,26 @@ const SuperAdminLiveTrackingCom = () => {
     const [selectedSessionId, setSelectedSessionId] = useState('');
     const [routeData, setRouteData] = useState({ logs: [], totalDistanceKm: 0, totalPoints: 0 });
     const [isRouteLoading, setIsRouteLoading] = useState(false);
+    const [showTimeline, setShowTimeline] = useState(true);
 
-    const fetchOrgData = async () => {
+    // Screenshot Capture State
+    const mapCaptureRef = useRef(null);
+    const [isCapturing, setIsCapturing] = useState(false);
+
+    const fetchOrgAndDirectory = async () => {
         try {
-            const [compRes, branchRes, deptRes] = await Promise.all([
+            const [compRes, branchRes, deptRes, empRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] }))
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
             setCompanies(compRes.data || []);
             setBranches(branchRes.data || []);
             setDepartments(deptRes.data || []);
+            setAllEmployees((empRes.data || []).filter(e => e.status === 'Active'));
         } catch (err) {
-            console.error('Org fetch error:', err);
+            console.error('Org/Directory fetch error:', err);
         }
     };
 
@@ -147,19 +167,18 @@ const SuperAdminLiveTrackingCom = () => {
     };
 
     useEffect(() => {
-        if (user) fetchOrgData();
+        if (user) fetchOrgAndDirectory();
     }, [user]);
 
     useEffect(() => {
         if (!user) return;
         fetchLiveTracking(false);
-        // Authenticated polling every 15 seconds (cluster-safe real-time updates)
         const interval = setInterval(() => fetchLiveTracking(true), 15000);
         return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, filterCompany, filterBranch, filterDepartment]);
 
-    // Fetch historical sessions when switching to History mode or changing date/employee
+    // Fetch historical sessions when in History mode
     useEffect(() => {
         if (viewMode !== 'history' || !selectedEmpId || !historyDate) return;
 
@@ -190,7 +209,7 @@ const SuperAdminLiveTrackingCom = () => {
         loadSessions();
     }, [viewMode, selectedEmpId, historyDate]);
 
-    // Fetch GPS route points for selected historical session (reuses getSessionRoamingLogs)
+    // Fetch GPS route points for selected historical session
     useEffect(() => {
         if (viewMode !== 'history' || !selectedSessionId) return;
 
@@ -213,7 +232,7 @@ const SuperAdminLiveTrackingCom = () => {
         loadRoute();
     }, [viewMode, selectedSessionId]);
 
-    const filteredEmployees = useMemo(() => {
+    const filteredActiveEmployees = useMemo(() => {
         return employees.filter(emp => {
             if (filterStatus !== 'All' && emp.tracking_status !== filterStatus) return false;
             const q = searchTerm.toLowerCase();
@@ -223,10 +242,25 @@ const SuperAdminLiveTrackingCom = () => {
         });
     }, [employees, filterStatus, searchTerm]);
 
-    const selectedEmployee = useMemo(
-        () => employees.find(e => e.employee_id === selectedEmpId) || null,
-        [employees, selectedEmpId]
-    );
+    const filteredAllEmployees = useMemo(() => {
+        return allEmployees.filter(emp => {
+            if (filterCompany !== 'All' && emp.company !== filterCompany) return false;
+            if (filterBranch !== 'All' && emp.branch !== filterBranch) return false;
+            if (filterDepartment !== 'All' && emp.department !== filterDepartment) return false;
+            const q = searchTerm.toLowerCase();
+            return `${emp.first_name} ${emp.last_name} ${emp.employee_id} ${emp.branch} ${emp.department}`
+                .toLowerCase()
+                .includes(q);
+        });
+    }, [allEmployees, filterCompany, filterBranch, filterDepartment, searchTerm]);
+
+    const selectedEmployee = useMemo(() => {
+        return (
+            employees.find(e => e.employee_id === selectedEmpId) ||
+            allEmployees.find(e => e.employee_id === selectedEmpId) ||
+            null
+        );
+    }, [employees, allEmployees, selectedEmpId]);
 
     const mapFocusTarget = useMemo(() => {
         if (viewMode === 'history' && routeData.logs.length > 0) {
@@ -239,6 +273,33 @@ const SuperAdminLiveTrackingCom = () => {
         return null;
     }, [viewMode, routeData.logs, selectedSessionId, selectedEmployee]);
 
+    // ==================== TAKE MAP SCREENSHOT ====================
+    const handleCaptureScreenshot = async () => {
+        if (!mapCaptureRef.current) return;
+        setIsCapturing(true);
+        try {
+            const canvas = await html2canvas(mapCaptureRef.current, {
+                useCORS: true,
+                allowTaint: false,
+                backgroundColor: '#ffffff',
+                scale: 2,
+                logging: false
+            });
+
+            const safeEmp = selectedEmpId || 'LiveMap';
+            const datePart = viewMode === 'history' ? historyDate : new Date().toLocaleDateString('en-CA');
+            const link = document.createElement('a');
+            link.download = `GPS_${viewMode === 'history' ? 'Route' : 'Live'}_${safeEmp}_${datePart}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } catch (err) {
+            console.error('Map screenshot failed:', err);
+            alert('Could not capture map screenshot. Please wait for map tiles to finish loading and try again.');
+        } finally {
+            setIsCapturing(false);
+        }
+    };
+
     const formatTime = (ts) => !ts ? '—' : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     const getStatusBadge = (status) => {
@@ -247,7 +308,7 @@ const SuperAdminLiveTrackingCom = () => {
         return 'text-slate-600 bg-slate-100 border-slate-200';
     };
 
-    const defaultCenter = [12.9716, 77.5946]; // Bengaluru fallback when no pins exist
+    const defaultCenter = [12.9716, 77.5946];
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
@@ -322,8 +383,32 @@ const SuperAdminLiveTrackingCom = () => {
             {/* ==================== TWO-PANEL MAIN LAYOUT ==================== */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
-                {/* LEFT PANEL: FILTERS + EMPLOYEE LIST */}
-                <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden max-h-[700px]">
+                {/* LEFT PANEL: ACTIVE / ALL EMPLOYEES SWITCHER + FILTERS */}
+                <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden max-h-[760px]">
+                    {/* List Mode Tabs */}
+                    <div className="grid grid-cols-2 p-2 gap-1.5 bg-slate-100/80 border-b border-slate-200/70">
+                        <button
+                            onClick={() => setListTab('active')}
+                            className={`py-2 rounded-xl text-xs font-bold transition-all ${
+                                listTab === 'active'
+                                    ? 'bg-white text-[#0437cc] shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                        >
+                            Active Now ({employees.length})
+                        </button>
+                        <button
+                            onClick={() => setListTab('all')}
+                            className={`py-2 rounded-xl text-xs font-bold transition-all ${
+                                listTab === 'all'
+                                    ? 'bg-white text-[#0437cc] shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                        >
+                            All Employees ({allEmployees.length})
+                        </button>
+                    </div>
+
                     <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50">
                         <div className="relative">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
@@ -354,77 +439,131 @@ const SuperAdminLiveTrackingCom = () => {
                                 disabled={filterBranch === 'All'}
                                 options={[{ value: 'All', label: 'All Depts' }, ...departments.filter(d => d.branch_name === filterBranch).map(d => ({ value: d.department_name, label: d.department_name }))]}
                             />
-                            <Select
-                                value={filterStatus}
-                                onChange={(e) => setFilterStatus(e.target.value)}
-                                options={[
-                                    { value: 'All', label: 'All Statuses' },
-                                    { value: 'ACTIVE', label: 'Active GPS' },
-                                    { value: 'STALE', label: 'Stale GPS' },
-                                    { value: 'LOCATION UNAVAILABLE', label: 'Unavailable' }
-                                ]}
-                            />
+                            {listTab === 'active' && (
+                                <Select
+                                    value={filterStatus}
+                                    onChange={(e) => setFilterStatus(e.target.value)}
+                                    options={[
+                                        { value: 'All', label: 'All Statuses' },
+                                        { value: 'ACTIVE', label: 'Active GPS' },
+                                        { value: 'STALE', label: 'Stale GPS' },
+                                        { value: 'LOCATION UNAVAILABLE', label: 'Unavailable' }
+                                    ]}
+                                />
+                            )}
                         </div>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-3 space-y-2.5 custom-scrollbar">
-                        {isLoading ? (
-                            <div className="py-12 text-center text-xs font-bold text-slate-400">Loading active employees...</div>
-                        ) : filteredEmployees.length === 0 ? (
-                            <div className="py-12 text-center px-4">
-                                <FaMapMarkerAlt className="text-2xl text-slate-300 mx-auto mb-2" />
-                                <p className="text-xs font-bold text-slate-500">No active checked-in employees found.</p>
-                            </div>
-                        ) : (
-                            filteredEmployees.map(emp => {
-                                const isSelected = selectedEmpId === emp.employee_id;
-                                return (
-                                    <div
-                                        key={emp.employee_id}
-                                        onClick={() => { setSelectedEmpId(emp.employee_id); setViewMode('live'); }}
-                                        className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                            isSelected
-                                                ? 'border-[#0437cc] bg-blue-50/50 shadow-sm'
-                                                : 'border-slate-200 hover:border-slate-300 bg-white'
-                                        }`}
+                        {listTab === 'active' ? (
+                            isLoading ? (
+                                <div className="py-12 text-center text-xs font-bold text-slate-400">Loading active employees...</div>
+                            ) : filteredActiveEmployees.length === 0 ? (
+                                <div className="py-12 text-center px-4">
+                                    <FaMapMarkerAlt className="text-2xl text-slate-300 mx-auto mb-2" />
+                                    <p className="text-xs font-bold text-slate-500">No active checked-in employees found.</p>
+                                    <button
+                                        onClick={() => setListTab('all')}
+                                        className="mt-2 text-[11px] font-bold text-[#0437cc] hover:underline"
                                     >
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="min-w-0">
-                                                <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
-                                                    {emp.first_name} {emp.last_name}
-                                                </p>
-                                                <p className="text-[10px] font-mono font-bold text-[#0437cc]">{emp.employee_id}</p>
+                                        Browse All Employees for Route History
+                                    </button>
+                                </div>
+                            ) : (
+                                filteredActiveEmployees.map(emp => {
+                                    const isSelected = selectedEmpId === emp.employee_id;
+                                    return (
+                                        <div
+                                            key={emp.employee_id}
+                                            onClick={() => { setSelectedEmpId(emp.employee_id); setViewMode('live'); }}
+                                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                                                isSelected
+                                                    ? 'border-[#0437cc] bg-blue-50/50 shadow-sm'
+                                                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="min-w-0">
+                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                        {emp.first_name} {emp.last_name}
+                                                    </p>
+                                                    <p className="text-[10px] font-mono font-bold text-[#0437cc]">{emp.employee_id}</p>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 ${getStatusBadge(emp.tracking_status)}`}>
+                                                    {emp.tracking_status}
+                                                </span>
                                             </div>
-                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 ${getStatusBadge(emp.tracking_status)}`}>
-                                                {emp.tracking_status}
-                                            </span>
-                                        </div>
 
-                                        <div className="mt-2 space-y-1 text-[10px] text-slate-500">
-                                            <p className="flex items-center gap-1.5 truncate">
-                                                <FaBuilding className="shrink-0 text-slate-400" /> {emp.company} • {emp.branch}
-                                            </p>
-                                            <p className="flex items-center gap-1.5 truncate">
-                                                <FaSitemap className="shrink-0 text-slate-400" /> {emp.department}
-                                            </p>
-                                            <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 mt-1.5">
-                                                <span className="flex items-center gap-1">
-                                                    <FaClock className="text-green-500" /> In: {formatTime(emp.clock_in)}
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <FaCrosshairs className="text-[#0437cc]" /> {emp.last_gps_at ? formatTime(emp.last_gps_at) : 'No GPS'}
-                                                </span>
+                                            <div className="mt-2 space-y-1 text-[10px] text-slate-500">
+                                                <p className="flex items-center gap-1.5 truncate">
+                                                    <FaBuilding className="shrink-0 text-slate-400" /> {emp.company} • {emp.branch}
+                                                </p>
+                                                <p className="flex items-center gap-1.5 truncate">
+                                                    <FaSitemap className="shrink-0 text-slate-400" /> {emp.department}
+                                                </p>
+                                                <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 mt-1.5">
+                                                    <span className="flex items-center gap-1">
+                                                        <FaClock className="text-green-500" /> In: {formatTime(emp.clock_in)}
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <FaCrosshairs className="text-[#0437cc]" /> {emp.last_gps_at ? formatTime(emp.last_gps_at) : 'No GPS'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })
+                                    );
+                                })
+                            )
+                        ) : (
+                            filteredAllEmployees.length === 0 ? (
+                                <div className="py-12 text-center px-4 text-xs font-bold text-slate-400">
+                                    No employees match your filter.
+                                </div>
+                            ) : (
+                                filteredAllEmployees.map(emp => {
+                                    const isSelected = selectedEmpId === emp.employee_id;
+                                    const activeMatch = employees.find(a => a.employee_id === emp.employee_id);
+                                    return (
+                                        <div
+                                            key={emp.employee_id}
+                                            onClick={() => { setSelectedEmpId(emp.employee_id); setViewMode('history'); }}
+                                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                                                isSelected
+                                                    ? 'border-[#0437cc] bg-blue-50/50 shadow-sm'
+                                                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="min-w-0">
+                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                        {emp.first_name} {emp.last_name}
+                                                    </p>
+                                                    <p className="text-[10px] font-mono font-bold text-[#0437cc]">{emp.employee_id}</p>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 ${
+                                                    activeMatch ? 'text-green-700 bg-green-50 border-green-200' : 'text-slate-500 bg-slate-50 border-slate-200'
+                                                }`}>
+                                                    {activeMatch ? 'CHECKED IN' : 'HISTORY'}
+                                                </span>
+                                            </div>
+                                            <div className="mt-2 space-y-1 text-[10px] text-slate-500">
+                                                <p className="flex items-center gap-1.5 truncate">
+                                                    <FaBuilding className="shrink-0 text-slate-400" /> {emp.company || '—'} • {emp.branch || '—'}
+                                                </p>
+                                                <p className="flex items-center gap-1.5 truncate">
+                                                    <FaSitemap className="shrink-0 text-slate-400" /> {emp.department || '—'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )
                         )}
                     </div>
                 </div>
 
-                {/* RIGHT PANEL: INTERACTIVE LEAFLET MAP + ROUTE HISTORY */}
-                <div className="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden min-h-[560px] max-h-[700px]">
+                {/* RIGHT PANEL: INTERACTIVE LEAFLET MAP + SCREENSHOT + ROUTE HISTORY */}
+                <div className="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden min-h-[580px] max-h-[760px]">
 
                     {/* Map Toolbar */}
                     <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
@@ -445,6 +584,17 @@ const SuperAdminLiveTrackingCom = () => {
                                 }`}
                             >
                                 <FaHistory className="text-[10px]" /> Route History
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleCaptureScreenshot}
+                                disabled={isCapturing}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-60"
+                                title="Download PNG Screenshot of Map"
+                            >
+                                <FaCamera className="text-[11px]" />
+                                {isCapturing ? 'Capturing...' : 'Screenshot'}
                             </button>
                         </div>
 
@@ -472,86 +622,149 @@ const SuperAdminLiveTrackingCom = () => {
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-[#0437cc] text-xs font-bold border border-blue-100">
                                     <FaRoad /> {routeData.totalDistanceKm} km ({routeData.totalPoints} pts)
                                 </span>
+                                {routeData.logs.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowTimeline(prev => !prev)}
+                                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center gap-1"
+                                    >
+                                        <FaListUl className="text-[10px]" /> {showTimeline ? 'Hide Log' : 'Show Log'}
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
 
-                    {/* Map Canvas */}
-                    <div className="flex-1 relative z-10 min-h-[460px]">
-                        <MapContainer center={defaultCenter} zoom={12} className="w-full h-full min-h-[460px]">
-                            <TileLayer
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                            />
-                            <MapFocusController targetCoords={mapFocusTarget} />
+                    {/* Capturable Map Wrapper (includes audit header for clean screenshots) */}
+                    <div ref={mapCaptureRef} className="flex-1 flex flex-col relative min-h-[380px] bg-white">
+                        {/* Audit Strip Included in Screenshot */}
+                        {selectedEmployee && (
+                            <div className="px-4 py-2 bg-[#010a1f] text-white flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                <span className="font-bold">
+                                    {selectedEmployee.first_name} {selectedEmployee.last_name} ({selectedEmployee.employee_id})
+                                </span>
+                                <span className="text-slate-300">
+                                    {viewMode === 'history'
+                                        ? `Route History • ${historyDate} • ${routeData.totalDistanceKm} km (${routeData.totalPoints} GPS pts)`
+                                        : `Live View • ${new Date().toLocaleString('en-IN')}`}
+                                </span>
+                            </div>
+                        )}
 
-                            {/* LIVE MODE MARKERS */}
-                            {viewMode === 'live' && filteredEmployees
-                                .filter(e => e.latitude != null && e.longitude != null)
-                                .map(emp => (
-                                    <Marker
-                                        key={emp.employee_id}
-                                        position={[emp.latitude, emp.longitude]}
-                                        icon={createStatusIcon(emp.tracking_status, selectedEmpId === emp.employee_id)}
-                                        eventHandlers={{ click: () => setSelectedEmpId(emp.employee_id) }}
-                                    >
-                                        <Popup>
-                                            <div className="text-xs space-y-1 min-w-[180px]">
-                                                <p className="font-bold text-[#010a1f] text-sm">{emp.first_name} {emp.last_name}</p>
-                                                <p className="font-mono text-[#0437cc] font-bold">{emp.employee_id}</p>
-                                                <p><strong>Status:</strong> {emp.tracking_status}</p>
-                                                <p><strong>Check-In:</strong> {formatTime(emp.clock_in)}</p>
-                                                <p><strong>Last GPS:</strong> {formatTime(emp.last_gps_at)}</p>
-                                                {emp.accuracy != null && <p><strong>Accuracy:</strong> ±{Math.round(emp.accuracy)}m</p>}
-                                            </div>
-                                        </Popup>
-                                    </Marker>
-                                ))}
+                        <div className="flex-1 relative z-10 min-h-[360px]">
+                            <MapContainer
+                                center={defaultCenter}
+                                zoom={12}
+                                preferCanvas={true}
+                                className="w-full h-full min-h-[360px]"
+                            >
+                                <TileLayer
+                                    crossOrigin="anonymous"
+                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                />
+                                <MapFocusController
+                                    targetCoords={mapFocusTarget}
+                                    routeLogs={routeData.logs}
+                                    viewMode={viewMode}
+                                />
 
-                            {/* HISTORY ROUTE POLYLINE & ENDPOINTS */}
-                            {viewMode === 'history' && routeData.logs.length > 0 && (
-                                <>
-                                    <Polyline
-                                        positions={routeData.logs.map(p => [p.latitude, p.longitude])}
-                                        pathOptions={{ color: '#0437cc', weight: 4, opacity: 0.85 }}
-                                    />
-                                    <Marker
-                                        position={[routeData.logs[0].latitude, routeData.logs[0].longitude]}
-                                        icon={createRouteEndpointIcon('start')}
-                                    >
-                                        <Popup>
-                                            <div className="text-xs">
-                                                <p className="font-bold text-green-700">First Recorded Point</p>
-                                                <p>{formatTime(routeData.logs[0].recorded_at)}</p>
-                                            </div>
-                                        </Popup>
-                                    </Marker>
-                                    {routeData.logs.length > 1 && (
+                                {/* LIVE MODE MARKERS */}
+                                {viewMode === 'live' && filteredActiveEmployees
+                                    .filter(e => e.latitude != null && e.longitude != null)
+                                    .map(emp => (
                                         <Marker
-                                            position={[
-                                                routeData.logs[routeData.logs.length - 1].latitude,
-                                                routeData.logs[routeData.logs.length - 1].longitude
-                                            ]}
-                                            icon={createRouteEndpointIcon('end')}
+                                            key={emp.employee_id}
+                                            position={[emp.latitude, emp.longitude]}
+                                            icon={createStatusIcon(emp.tracking_status, selectedEmpId === emp.employee_id)}
+                                            eventHandlers={{ click: () => setSelectedEmpId(emp.employee_id) }}
                                         >
                                             <Popup>
-                                                <div className="text-xs">
-                                                    <p className="font-bold text-red-700">Last Recorded Point</p>
-                                                    <p>{formatTime(routeData.logs[routeData.logs.length - 1].recorded_at)}</p>
+                                                <div className="text-xs space-y-1 min-w-[180px]">
+                                                    <p className="font-bold text-[#010a1f] text-sm">{emp.first_name} {emp.last_name}</p>
+                                                    <p className="font-mono text-[#0437cc] font-bold">{emp.employee_id}</p>
+                                                    <p><strong>Status:</strong> {emp.tracking_status}</p>
+                                                    <p><strong>Check-In:</strong> {formatTime(emp.clock_in)}</p>
+                                                    <p><strong>Last GPS:</strong> {formatTime(emp.last_gps_at)}</p>
+                                                    {emp.accuracy != null && <p><strong>Accuracy:</strong> ±{Math.round(emp.accuracy)}m</p>}
                                                 </div>
                                             </Popup>
                                         </Marker>
-                                    )}
-                                </>
-                            )}
-                        </MapContainer>
+                                    ))}
 
-                        {viewMode === 'history' && !isRouteLoading && routeData.logs.length === 0 && (
-                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[400] bg-white/95 px-4 py-2 rounded-xl shadow-md border border-slate-200 text-xs font-semibold text-slate-600">
-                                No recorded GPS points for this date/session.
-                            </div>
-                        )}
+                                {/* HISTORY ROUTE POLYLINE & ENDPOINTS */}
+                                {viewMode === 'history' && routeData.logs.length > 0 && (
+                                    <>
+                                        <Polyline
+                                            positions={routeData.logs.map(p => [p.latitude, p.longitude])}
+                                            pathOptions={{ color: '#0437cc', weight: 4, opacity: 0.9 }}
+                                        />
+                                        <Marker
+                                            position={[routeData.logs[0].latitude, routeData.logs[0].longitude]}
+                                            icon={createRouteEndpointIcon('start')}
+                                        >
+                                            <Popup>
+                                                <div className="text-xs">
+                                                    <p className="font-bold text-green-700">First Recorded Point</p>
+                                                    <p>{formatTime(routeData.logs[0].recorded_at)}</p>
+                                                </div>
+                                            </Popup>
+                                        </Marker>
+                                        {routeData.logs.length > 1 && (
+                                            <Marker
+                                                position={[
+                                                    routeData.logs[routeData.logs.length - 1].latitude,
+                                                    routeData.logs[routeData.logs.length - 1].longitude
+                                                ]}
+                                                icon={createRouteEndpointIcon('end')}
+                                            >
+                                                <Popup>
+                                                    <div className="text-xs">
+                                                        <p className="font-bold text-red-700">Last Recorded Point</p>
+                                                        <p>{formatTime(routeData.logs[routeData.logs.length - 1].recorded_at)}</p>
+                                                    </div>
+                                                </Popup>
+                                            </Marker>
+                                        )}
+                                    </>
+                                )}
+                            </MapContainer>
+
+                            {viewMode === 'history' && !isRouteLoading && routeData.logs.length === 0 && (
+                                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[400] bg-white/95 px-4 py-2 rounded-xl shadow-md border border-slate-200 text-xs font-semibold text-slate-600">
+                                    No recorded GPS points for this date/session.
+                                </div>
+                            )}
+                        </div>
                     </div>
+
+                    {/* USER ROUTE HISTORY TIMELINE */}
+                    {viewMode === 'history' && showTimeline && routeData.logs.length > 0 && (
+                        <div className="border-t border-slate-200 bg-slate-50/70 max-h-[175px] overflow-y-auto p-3 custom-scrollbar">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                                {routeData.logs.map((pt, idx) => (
+                                    <div key={pt.id || idx} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] flex items-center justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-[#010a1f] flex items-center gap-1.5">
+                                                <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                                    idx === 0 ? 'bg-green-500' : idx === routeData.logs.length - 1 ? 'bg-red-500' : 'bg-[#0437cc]'
+                                                }`}></span>
+                                                #{idx + 1} • {formatTime(pt.recorded_at)}
+                                            </p>
+                                            <p className="font-mono text-slate-500 truncate mt-0.5">
+                                                {pt.latitude.toFixed(5)}, {pt.longitude.toFixed(5)}
+                                            </p>
+                                        </div>
+                                        {pt.segment_distance_km > 0 && (
+                                            <span className="font-bold text-[#0437cc] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 shrink-0 tabular-nums">
+                                                +{(pt.segment_distance_km * 1000).toFixed(0)}m
+                                            </span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
