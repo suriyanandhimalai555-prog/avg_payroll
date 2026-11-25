@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import {
     FaCalendarCheck, FaInfoCircle, FaSearch, FaFilter,
-    FaUserCheck, FaUserTimes, FaUserClock, FaLaptopHouse, FaHistory,
+    FaUserCheck, FaUserTimes, FaLaptopHouse, FaHistory,
     FaBuilding, FaSitemap, FaClock, FaEye, FaTimes, FaDesktop,
-    FaMobileAlt, FaMapMarkerAlt, FaMoneyBillWave, FaUmbrellaBeach, FaExclamationCircle,
-    FaFileExcel, FaDownload, FaUsers, FaCheckCircle, FaTimesCircle
+    FaMobileAlt, FaMapMarkerAlt, FaMoneyBillWave, FaUmbrellaBeach,
+    FaExclamationCircle, FaFileExcel, FaUsers, FaCheckCircle,
+    FaTimesCircle, FaChevronDown, FaChevronUp, FaCodeBranch
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Select from '../../../components/common/Select';
@@ -30,7 +31,7 @@ const SuperAdminAttendanceOverviewCom = () => {
     const [apiError, setApiError] = useState('');
 
     const [viewLog, setViewLog] = useState(null);
-    const [isActionLoading, setIsActionLoading] = useState(null); // stores the ID being approved/rejected
+    const [isActionLoading, setIsActionLoading] = useState(null);
 
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
@@ -42,6 +43,9 @@ const SuperAdminAttendanceOverviewCom = () => {
     const [filterDepartment, setFilterDepartment] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
+
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
 
     const fetchOrgData = async () => {
         try {
@@ -88,7 +92,6 @@ const SuperAdminAttendanceOverviewCom = () => {
         if (user) {
             fetchAttendanceData();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterDate, user]);
 
     const handleAction = async (action, recordId) => {
@@ -129,14 +132,133 @@ const SuperAdminAttendanceOverviewCom = () => {
         setSearchTerm('');
     };
 
-    const filteredRecords = attendanceData.filter(record => {
-        const matchSearch = `${record.first_name} ${record.last_name} ${record.employee_id}`.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCompany = filterCompany === 'All' ? true : record.company === filterCompany;
-        const matchBranch = filterBranch === 'All' ? true : record.branch === filterBranch;
-        const matchDepartment = filterDepartment === 'All' ? true : record.department === filterDepartment;
+    const filteredRecords = useMemo(() => {
+        return attendanceData.filter(record => {
+            const matchSearch = `${record.first_name} ${record.last_name} ${record.employee_id}`.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchCompany = filterCompany === 'All' ? true : record.company === filterCompany;
+            const matchBranch = filterBranch === 'All' ? true : record.branch === filterBranch;
+            const matchDepartment = filterDepartment === 'All' ? true : record.department === filterDepartment;
 
-        return matchSearch && matchCompany && matchBranch && matchDepartment;
-    });
+            return matchSearch && matchCompany && matchBranch && matchDepartment;
+        });
+    }, [attendanceData, searchTerm, filterCompany, filterBranch, filterDepartment]);
+
+    const groupedAttendance = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredRecords.forEach(record => {
+            const companyName = record.company?.trim() || 'Unassigned Company';
+            const branchName = record.branch?.trim() || 'Unassigned Branch';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    total: 0,
+                    present: 0,
+                    absent: 0,
+                    pending: 0,
+                    onLeave: 0,
+                    wfh: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.total += 1;
+            if (record.status === 'Present') compGroup.present += 1;
+            else if (record.status === 'Absent') compGroup.absent += 1;
+            else if (record.status === 'Absent (Pending Approval)') compGroup.pending += 1;
+            else if (record.status === 'On Leave') compGroup.onLeave += 1;
+            else if (record.status === 'WFH') compGroup.wfh += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    present: 0,
+                    absent: 0,
+                    pending: 0,
+                    onLeave: 0,
+                    wfh: 0,
+                    records: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+            if (record.status === 'Present') branchGroup.present += 1;
+            else if (record.status === 'Absent') branchGroup.absent += 1;
+            else if (record.status === 'Absent (Pending Approval)') branchGroup.pending += 1;
+            else if (record.status === 'On Leave') branchGroup.onLeave += 1;
+            else if (record.status === 'WFH') branchGroup.wfh += 1;
+            branchGroup.records.push(record);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredRecords]);
+
+    useEffect(() => {
+        if (groupedAttendance.length === 0) return;
+
+        const hasActiveFilter = searchTerm.trim() !== '' || filterCompany !== 'All' || filterBranch !== 'All' || filterDepartment !== 'All';
+
+        if (hasActiveFilter) {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedAttendance.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedAttendance[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedAttendance, searchTerm, filterCompany, filterBranch, filterDepartment]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedAttendance.length === 0) return false;
+        return groupedAttendance.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedAttendance, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedAttendance.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
 
     const formatTime = (timestamp) => {
         if (!timestamp) return '—';
@@ -223,7 +345,7 @@ const SuperAdminAttendanceOverviewCom = () => {
 
         try {
             const wb = XLSX.utils.book_new();
-            
+
             const overallRows = filteredRecords.map(buildExportRow);
             overallRows.push(buildSummaryTotals(filteredRecords));
             const overallSheet = XLSX.utils.json_to_sheet(overallRows);
@@ -286,7 +408,6 @@ const SuperAdminAttendanceOverviewCom = () => {
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* ==================== LOG MODAL ==================== */}
             {viewLog && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -360,7 +481,7 @@ const SuperAdminAttendanceOverviewCom = () => {
                                                 </span>
                                             )}
                                         </div>
-                                        
+
                                         {log.late_reason && (
                                             <div className="mt-2 mb-4 flex items-start gap-2 bg-orange-50 border border-orange-100 p-3 rounded-xl shadow-sm relative">
                                                 <FaExclamationCircle className="text-orange-500 text-xs shrink-0 mt-0.5" />
@@ -372,7 +493,6 @@ const SuperAdminAttendanceOverviewCom = () => {
                                         )}
 
                                         <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-
                                             <div className="space-y-3 bg-slate-50/70 p-4 rounded-xl border border-slate-100">
                                                 <div className="flex items-center gap-2.5 mb-3 pb-2.5 border-b border-slate-200">
                                                     <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
@@ -442,7 +562,6 @@ const SuperAdminAttendanceOverviewCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
             <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
                 <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-teal-100/40 rounded-full blur-3xl pointer-events-none"></div>
@@ -486,7 +605,6 @@ const SuperAdminAttendanceOverviewCom = () => {
                 </div>
             </div>
 
-            {/* ==================== INFO BANNER ==================== */}
             <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start shadow-sm overflow-hidden">
                 <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -501,7 +619,6 @@ const SuperAdminAttendanceOverviewCom = () => {
                 </div>
             </div>
 
-            {/* ==================== MESSAGES ==================== */}
             {successMsg && (
                 <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
                     <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
@@ -520,7 +637,6 @@ const SuperAdminAttendanceOverviewCom = () => {
                 </div>
             )}
 
-            {/* ==================== STAT CARDS ==================== */}
             {!isLoading && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 lg:gap-5">
                     {statCards.map((stat, i) => {
@@ -546,11 +662,9 @@ const SuperAdminAttendanceOverviewCom = () => {
                 </div>
             )}
 
-            {/* ==================== FILTERS + TABLE ==================== */}
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                {/* Filters */}
                 <div className="relative p-5 border-b border-slate-100">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-3">
                         <div className="flex items-center gap-3 min-w-0">
@@ -560,17 +674,30 @@ const SuperAdminAttendanceOverviewCom = () => {
                             <div className="min-w-0">
                                 <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Filter Directory</h2>
                                 <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                    {filteredRecords.length} of {attendanceData.length} {attendanceData.length === 1 ? 'record' : 'records'} match
+                                    {filteredRecords.length} of {attendanceData.length} {attendanceData.length === 1 ? 'record' : 'records'} across {groupedAttendance.length} {groupedAttendance.length === 1 ? 'company' : 'companies'}
                                 </p>
                             </div>
                         </div>
-                        <button
-                            onClick={clearFilters}
-                            disabled={filterCompany === 'All' && filterBranch === 'All' && filterDepartment === 'All' && !searchTerm}
-                            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors px-3 py-2 rounded-xl border border-slate-200 hover:bg-red-50 hover:border-red-200 disabled:hover:bg-transparent disabled:hover:border-slate-200 w-full sm:w-auto"
-                        >
-                            <FaTimes className="text-[10px]" /> Clear Filters
-                        </button>
+
+                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                            {groupedAttendance.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={handleToggleAll}
+                                    className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3 py-2 rounded-xl border border-blue-200 bg-white flex-1 sm:flex-none"
+                                >
+                                    {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                    {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                                </button>
+                            )}
+                            <button
+                                onClick={clearFilters}
+                                disabled={filterCompany === 'All' && filterBranch === 'All' && filterDepartment === 'All' && !searchTerm}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors px-3 py-2 rounded-xl border border-slate-200 hover:bg-red-50 hover:border-red-200 disabled:hover:bg-transparent disabled:hover:border-slate-200 flex-1 sm:flex-none"
+                            >
+                                <FaTimes className="text-[10px]" /> Clear Filters
+                            </button>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -638,14 +765,13 @@ const SuperAdminAttendanceOverviewCom = () => {
                     </div>
                 </div>
 
-                {/* Table */}
-                <div className="relative overflow-x-auto w-full custom-scrollbar">
+                <div className="p-4 sm:p-5 space-y-4">
                     {isLoading ? (
                         <div className="p-12 text-center">
                             <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
                             <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Calculating real-time data…</p>
                         </div>
-                    ) : filteredRecords.length === 0 ? (
+                    ) : groupedAttendance.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaCalendarCheck className="text-xl text-slate-300" />
@@ -655,101 +781,210 @@ const SuperAdminAttendanceOverviewCom = () => {
                             </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[1000px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Employee</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Org Placement</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Time Log</th>
-                                    <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Est. Daily Pay</th>
-                                    <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
-                                    <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredRecords.map((record, i) => (
-                                    <tr key={i} className="transition-colors group hover:bg-slate-50/60">
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
-                                                    {record.first_name?.charAt(0)}{record.last_name?.charAt(0)}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
-                                                        {record.first_name} {record.last_name}
-                                                    </p>
-                                                    <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
-                                                        {record.employee_id}
-                                                    </span>
-                                                </div>
+                        groupedAttendance.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
+
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
+                                                <FaBuilding className="text-sm" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Employee' : 'Employees'}
+                                                </p>
                                             </div>
-                                        </td>
-                                        <td className="px-5 py-4 min-w-0">
-                                            <p className="text-xs sm:text-sm font-bold text-slate-700 flex items-center gap-1.5 truncate">
-                                                <FaBuilding className="text-slate-400 text-[10px] shrink-0" />
-                                                <span className="truncate">{record.company}</span>
-                                            </p>
-                                            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
-                                                <FaSitemap className="text-slate-400 text-[9px] shrink-0" />
-                                                <span className="truncate">{record.department} <span className="text-slate-300 mx-0.5">•</span> {record.branch}</span>
-                                            </p>
-                                        </td>
-                                        <td className="px-5 py-4">
-                                            <div className="space-y-1.5">
-                                                <div className="flex justify-between w-32 gap-2">
-                                                    <span className="text-[11px] font-bold text-slate-500">In:</span>
-                                                    <span className={`text-[11px] font-bold ${record.first_clock_in ? 'text-slate-700' : 'text-slate-300'}`}>
-                                                        {formatTime(record.first_clock_in)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between w-32 gap-2">
-                                                    <span className="text-[11px] font-bold text-slate-500">Out:</span>
-                                                    <span className={`text-[11px] font-bold ${record.last_clock_out ? 'text-slate-700' : (record.is_working ? 'text-green-600 flex items-center gap-1' : 'text-slate-300')}`}>
-                                                        {record.is_working && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
-                                                        {record.is_working ? 'Working...' : formatTime(record.last_clock_out)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between w-32 gap-2 pt-1.5 border-t border-slate-100">
-                                                    <span className="text-[11px] font-bold text-slate-500">Hrs:</span>
-                                                    <span className="text-[11px] font-bold text-[#0437cc] tabular-nums">
-                                                        {record.is_working ? 'Working...' : (record.total_hours || '—')}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4 text-right">
-                                            {record.status === 'Absent' || record.status === 'On Leave' ? (
-                                                <span className="text-sm font-bold text-slate-300">—</span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-black text-green-700 bg-green-50 px-2.5 py-1 rounded-lg border border-green-200 whitespace-nowrap tabular-nums">
-                                                    <FaMoneyBillWave className="text-[10px] text-green-600" />
-                                                    {formatCurrency(record.calculated_pay)}
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                Present: {companyGroup.present + companyGroup.wfh}
+                                            </span>
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                                Absent: {companyGroup.absent}
+                                            </span>
+                                            {companyGroup.pending > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200">
+                                                    Pending: {companyGroup.pending}
                                                 </span>
                                             )}
-                                        </td>
-                                        <td className="px-5 py-4 text-center">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getStatusStyle(record.status)}`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(record.status)}`}></span>
-                                                {record.status}
+                                            {companyGroup.onLeave > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                    Leave: {companyGroup.onLeave}
+                                                </span>
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
                                             </span>
-                                        </td>
-                                        <td className="px-5 py-4 text-right">
-                                            <button
-                                                onClick={() => setViewLog(record)}
-                                                disabled={!record.daily_logs || record.daily_logs.length === 0}
-                                                className={`w-8 h-8 inline-flex items-center justify-center transition-colors rounded-lg ${record.daily_logs && record.daily_logs.length > 0
-                                                    ? 'text-slate-400 hover:text-[#0437cc] hover:bg-blue-50'
-                                                    : 'text-slate-300 cursor-not-allowed'
-                                                    }`}
-                                                title="View Full Log"
-                                            >
-                                                <FaEye className="text-xs" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        </div>
+                                    </button>
+
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.total} {branchGroup.total === 1 ? 'Employee' : 'Employees'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-100">
+                                                                    {branchGroup.present + branchGroup.wfh} Present
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-100">
+                                                                    {branchGroup.absent} Absent
+                                                                </span>
+                                                                {branchGroup.pending > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-100">
+                                                                        {branchGroup.pending} Pending
+                                                                    </span>
+                                                                )}
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto w-full custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[900px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-5 py-3 font-bold whitespace-nowrap">Employee</th>
+                                                                            <th className="px-5 py-3 font-bold whitespace-nowrap">Department & Shift</th>
+                                                                            <th className="px-5 py-3 font-bold whitespace-nowrap">Time Log</th>
+                                                                            <th className="px-5 py-3 font-bold text-right whitespace-nowrap">Est. Daily Pay</th>
+                                                                            <th className="px-5 py-3 font-bold text-center whitespace-nowrap">Status</th>
+                                                                            <th className="px-5 py-3 font-bold text-right whitespace-nowrap">Actions</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.records.map((record, i) => (
+                                                                            <tr key={record.employee_id || i} className="transition-colors group hover:bg-slate-50/60">
+                                                                                <td className="px-5 py-3.5">
+                                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
+                                                                                            {record.first_name?.charAt(0)}{record.last_name?.charAt(0)}
+                                                                                        </div>
+                                                                                        <div className="min-w-0">
+                                                                                            <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                                                {record.first_name} {record.last_name}
+                                                                                            </p>
+                                                                                            <span className="inline-block mt-0.5 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                                                                {record.employee_id}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-3.5 min-w-0">
+                                                                                    <p className="text-xs sm:text-sm font-bold text-slate-700 flex items-center gap-1.5 truncate">
+                                                                                        <FaSitemap className="text-slate-400 text-[10px] shrink-0" />
+                                                                                        <span className="truncate">{record.department || '—'}</span>
+                                                                                    </p>
+                                                                                    <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
+                                                                                        <FaClock className="text-slate-400 text-[9px] shrink-0" />
+                                                                                        <span className="truncate">{record.shift || 'General Shift'}</span>
+                                                                                    </p>
+                                                                                </td>
+                                                                                <td className="px-5 py-3.5">
+                                                                                    <div className="space-y-1">
+                                                                                        <div className="flex justify-between w-32 gap-2">
+                                                                                            <span className="text-[11px] font-bold text-slate-500">In:</span>
+                                                                                            <span className={`text-[11px] font-bold ${record.first_clock_in ? 'text-slate-700' : 'text-slate-300'}`}>
+                                                                                                {formatTime(record.first_clock_in)}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className="flex justify-between w-32 gap-2">
+                                                                                            <span className="text-[11px] font-bold text-slate-500">Out:</span>
+                                                                                            <span className={`text-[11px] font-bold ${record.last_clock_out ? 'text-slate-700' : (record.is_working ? 'text-green-600 flex items-center gap-1' : 'text-slate-300')}`}>
+                                                                                                {record.is_working && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
+                                                                                                {record.is_working ? 'Working...' : formatTime(record.last_clock_out)}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className="flex justify-between w-32 gap-2 pt-1 border-t border-slate-100">
+                                                                                            <span className="text-[11px] font-bold text-slate-500">Hrs:</span>
+                                                                                            <span className="text-[11px] font-bold text-[#0437cc] tabular-nums">
+                                                                                                {record.is_working ? 'Working...' : (record.total_hours || '—')}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-3.5 text-right">
+                                                                                    {record.status === 'Absent' || record.status === 'On Leave' ? (
+                                                                                        <span className="text-sm font-bold text-slate-300">—</span>
+                                                                                    ) : (
+                                                                                        <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-black text-green-700 bg-green-50 px-2.5 py-1 rounded-lg border border-green-200 whitespace-nowrap tabular-nums">
+                                                                                            <FaMoneyBillWave className="text-[10px] text-green-600" />
+                                                                                            {formatCurrency(record.calculated_pay)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="px-5 py-3.5 text-center">
+                                                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getStatusStyle(record.status)}`}>
+                                                                                        <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(record.status)}`}></span>
+                                                                                        {record.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-3.5 text-right">
+                                                                                    <button
+                                                                                        onClick={() => setViewLog(record)}
+                                                                                        disabled={!record.daily_logs || record.daily_logs.length === 0}
+                                                                                        className={`w-8 h-8 inline-flex items-center justify-center transition-colors rounded-lg ${record.daily_logs && record.daily_logs.length > 0
+                                                                                            ? 'text-slate-400 hover:text-[#0437cc] hover:bg-blue-50'
+                                                                                            : 'text-slate-300 cursor-not-allowed'
+                                                                                            }`}
+                                                                                        title="View Full Log"
+                                                                                    >
+                                                                                        <FaEye className="text-xs" />
+                                                                                    </button>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

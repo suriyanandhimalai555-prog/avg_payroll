@@ -1,12 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaWallet, FaInfoCircle, FaSearch, FaFilter, FaClock,
     FaFileInvoiceDollar, FaCheckCircle, FaTimesCircle, FaMoneyBillWave,
     FaPlane, FaUtensils, FaBed, FaTags, FaEye, FaTimes, FaFilePdf, FaUserTie,
-    FaArrowRight
+    FaArrowRight, FaBuilding, FaCodeBranch, FaChevronDown, FaChevronUp
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
+
+const getAuthConfig = () => ({
+    headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+    }
+});
 
 const SuperAdminExpensesReimbursementsCom = () => {
     const [claims, setClaims] = useState([]);
@@ -18,6 +25,9 @@ const SuperAdminExpensesReimbursementsCom = () => {
     const [apiError, setApiError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
 
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
+
     const [viewRecord, setViewRecord] = useState(null);
     const [fullScreenReceipt, setFullScreenReceipt] = useState(null);
 
@@ -26,10 +36,28 @@ const SuperAdminExpensesReimbursementsCom = () => {
         setApiError('');
 
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-reimbursements/overview`);
-            setClaims(response.data.claims || []);
-            setMetrics(response.data.metrics || { total: 0, pending: 0, approved: 0, rejected: 0, paid: 0 });
-            setCategories(response.data.categories || { travel: 0, food: 0, accommodation: 0, other: 0 });
+            const [reimbRes, empRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-reimbursements/overview`, getAuthConfig()),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }))
+            ]);
+
+            const empLookup = new Map();
+            (empRes.data || []).forEach(emp => {
+                if (emp.employee_id) empLookup.set(String(emp.employee_id), emp);
+            });
+
+            const enrichedClaims = (reimbRes.data.claims || []).map(claim => {
+                const empInfo = empLookup.get(String(claim.employee_id)) || {};
+                return {
+                    ...claim,
+                    company: claim.company || empInfo.company || 'Unassigned Company',
+                    branch: claim.branch || empInfo.branch || 'Unassigned Branch'
+                };
+            });
+
+            setClaims(enrichedClaims);
+            setMetrics(reimbRes.data.metrics || { total: 0, pending: 0, approved: 0, rejected: 0, paid: 0 });
+            setCategories(reimbRes.data.categories || { travel: 0, food: 0, accommodation: 0, other: 0 });
         } catch (error) {
             console.error('Failed to load reimbursement data', error);
             setApiError('Failed to load expense records. Please try again later.');
@@ -42,10 +70,129 @@ const SuperAdminExpensesReimbursementsCom = () => {
         fetchReimbursementData();
     }, []);
 
-    const filteredClaims = claims.filter(claim => {
-        const searchString = `${claim.first_name} ${claim.last_name} ${claim.employee_id} ${claim.claim_id} ${claim.expense_type}`.toLowerCase();
-        return searchString.includes(searchTerm.toLowerCase());
-    });
+    const filteredClaims = useMemo(() => {
+        const q = searchTerm.toLowerCase();
+        return claims.filter(claim => {
+            const searchString = `${claim.first_name} ${claim.last_name} ${claim.employee_id} ${claim.claim_id} ${claim.expense_type} ${claim.company} ${claim.branch}`.toLowerCase();
+            return searchString.includes(q);
+        });
+    }, [claims, searchTerm]);
+
+    const groupedClaims = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredClaims.forEach(claim => {
+            const companyName = claim.company?.trim() || 'Unassigned Company';
+            const branchName = claim.branch?.trim() || 'Unassigned Branch';
+            const amountVal = parseFloat(claim.amount) || 0;
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    total: 0,
+                    totalAmount: 0,
+                    pending: 0,
+                    approved: 0,
+                    paid: 0,
+                    rejected: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.total += 1;
+            compGroup.totalAmount += amountVal;
+            if (claim.status === 'Pending') compGroup.pending += 1;
+            else if (claim.status === 'Approved') compGroup.approved += 1;
+            else if (claim.status === 'Paid') compGroup.paid += 1;
+            else if (claim.status === 'Rejected') compGroup.rejected += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    totalAmount: 0,
+                    pending: 0,
+                    approved: 0,
+                    paid: 0,
+                    rejected: 0,
+                    records: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+            branchGroup.totalAmount += amountVal;
+            if (claim.status === 'Pending') branchGroup.pending += 1;
+            else if (claim.status === 'Approved') branchGroup.approved += 1;
+            else if (claim.status === 'Paid') branchGroup.paid += 1;
+            else if (claim.status === 'Rejected') branchGroup.rejected += 1;
+            branchGroup.records.push(claim);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredClaims]);
+
+    useEffect(() => {
+        if (groupedClaims.length === 0) return;
+
+        if (searchTerm.trim() !== '') {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedClaims.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedClaims[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedClaims, searchTerm]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedClaims.length === 0) return false;
+        return groupedClaims.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedClaims, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedClaims.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
 
     const formatCurrency = (amount) => {
         if (amount === undefined || amount === null) return '—';
@@ -75,13 +222,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
         return 'bg-slate-400';
     };
 
-    const getStatusIcon = (status) => {
-        if (status === 'Paid') return <FaMoneyBillWave className="shrink-0" />;
-        if (status === 'Approved') return <FaCheckCircle className="shrink-0" />;
-        if (status === 'Rejected') return <FaTimesCircle className="shrink-0" />;
-        return <FaClock className="shrink-0" />;
-    };
-
     const getCategoryGradient = (type) => {
         const str = (type || '').toLowerCase();
         if (str.includes('travel')) return 'from-[#0437cc] to-[#1f56d6]';
@@ -94,9 +234,11 @@ const SuperAdminExpensesReimbursementsCom = () => {
 
     const handleAction = async (id, actionType) => {
         try {
-            await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-reimbursements/status/${id}`, {
-                status: actionType
-            });
+            await axios.put(
+                `${import.meta.env.VITE_API_URL}/api/sa-reimbursements/status/${id}`,
+                { status: actionType },
+                getAuthConfig()
+            );
             setSuccessMsg(`Claim has been marked as ${actionType}.`);
             fetchReimbursementData();
             setTimeout(() => setSuccessMsg(''), 4000);
@@ -106,11 +248,11 @@ const SuperAdminExpensesReimbursementsCom = () => {
         }
     };
 
-    const isPdf = (base64String) => {
-        return base64String && base64String.startsWith('data:application/pdf');
+    const isPdf = (fileRef) => {
+        if (!fileRef || typeof fileRef !== 'string') return false;
+        return fileRef.startsWith('data:application/pdf') || /\.pdf(\?|$)/i.test(fileRef);
     };
 
-    // ==================== SHIMMER ====================
     if (isLoading) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden animate-pulse">
@@ -188,7 +330,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* ==================== FULLSCREEN RECEIPT VIEWER ==================== */}
             {fullScreenReceipt && (
                 <div
                     className="fixed inset-0 z-[200] flex items-center justify-center bg-[#010a1f]/95 backdrop-blur-md p-4 animate-in fade-in duration-200"
@@ -201,7 +342,7 @@ const SuperAdminExpensesReimbursementsCom = () => {
                         <FaTimes className="text-base" />
                     </button>
                     {isPdf(fullScreenReceipt) ? (
-                        <iframe src={fullScreenReceipt} className="w-full max-w-4xl h-[85vh] bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}></iframe>
+                        <iframe src={fullScreenReceipt} title="Receipt PDF" className="w-full max-w-4xl h-[85vh] bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}></iframe>
                     ) : (
                         <img
                             src={fullScreenReceipt}
@@ -213,7 +354,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
                 </div>
             )}
 
-            {/* ==================== VIEW MODAL ==================== */}
             {viewRecord && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -238,8 +378,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
                         </div>
 
                         <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-
-                            {/* Employee Banner */}
                             <div className="relative flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 overflow-hidden">
                                 <div className="absolute -top-6 -right-6 w-20 h-20 bg-blue-200/30 rounded-full blur-2xl pointer-events-none"></div>
                                 <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-black text-lg shadow-md shadow-[#0437cc]/25 shrink-0">
@@ -252,6 +390,9 @@ const SuperAdminExpensesReimbursementsCom = () => {
                                     <span className="inline-flex items-center gap-1.5 mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-md tracking-wide">
                                         <FaUserTie className="text-[8px]" /> {viewRecord.employee_id}
                                     </span>
+                                    <p className="text-[10px] text-slate-500 font-medium mt-1 truncate">
+                                        {viewRecord.company} • {viewRecord.branch}
+                                    </p>
                                 </div>
                             </div>
 
@@ -309,7 +450,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
             <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
                 <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
@@ -335,9 +475,10 @@ const SuperAdminExpensesReimbursementsCom = () => {
                         <Button
                             variant="outline"
                             icon={FaFilter}
+                            onClick={fetchReimbursementData}
                             className="w-full sm:w-auto border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs sm:text-sm py-2"
                         >
-                            Filter Data
+                            Refresh Data
                         </Button>
                         <Button
                             variant="primary"
@@ -350,7 +491,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
                 </div>
             </div>
 
-            {/* ==================== INFO BANNER ==================== */}
             <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start shadow-sm overflow-hidden">
                 <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -379,7 +519,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
                 </div>
             </div>
 
-            {/* ==================== MESSAGES ==================== */}
             {successMsg && (
                 <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
                     <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
@@ -398,7 +537,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
                 </div>
             )}
 
-            {/* ==================== METRIC CARDS ==================== */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
                 {statCards.map((stat, i) => {
                     const Icon = stat.icon;
@@ -422,7 +560,6 @@ const SuperAdminExpensesReimbursementsCom = () => {
                 })}
             </div>
 
-            {/* ==================== CATEGORY BREAKDOWN ==================== */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                 {[
                     { label: 'Travel', value: categories.travel, icon: FaPlane, gradient: 'from-[#0437cc] to-[#1f56d6]', glow: 'shadow-[#0437cc]/25' },
@@ -447,11 +584,10 @@ const SuperAdminExpensesReimbursementsCom = () => {
                 })}
             </div>
 
-            {/* ==================== MASTER TABLE ==================== */}
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/40">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
                             <FaFileInvoiceDollar className="text-sm" />
@@ -459,7 +595,7 @@ const SuperAdminExpensesReimbursementsCom = () => {
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Global Expense Claims</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredClaims.length} of {claims.length} {claims.length === 1 ? 'record' : 'records'}
+                                {filteredClaims.length} of {claims.length} {claims.length === 1 ? 'record' : 'records'} across {groupedClaims.length} {groupedClaims.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
@@ -469,20 +605,27 @@ const SuperAdminExpensesReimbursementsCom = () => {
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <input
                                 type="text"
-                                placeholder="Search employee, ID or category…"
+                                placeholder="Search employee, ID, branch…"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 transition-all"
                             />
                         </div>
-                        <span className="bg-[#0437cc]/10 text-[#0437cc] text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-full border border-[#0437cc]/20 shrink-0 w-max self-start sm:self-auto">
-                            {filteredClaims.length} Records
-                        </span>
+                        {groupedClaims.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="relative overflow-x-auto custom-scrollbar">
-                    {filteredClaims.length === 0 ? (
+                <div className="p-4 sm:p-5 space-y-4">
+                    {groupedClaims.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaFileInvoiceDollar className="text-xl text-slate-300" />
@@ -492,112 +635,230 @@ const SuperAdminExpensesReimbursementsCom = () => {
                             </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[920px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Employee</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Claim Details</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Amount</th>
-                                    <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
-                                    <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredClaims.map((claim, i) => (
-                                    <tr key={i} className="transition-colors group hover:bg-slate-50/60">
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getCategoryGradient(claim.expense_type)} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md group-hover:scale-105 transition-transform`}>
-                                                    {claim.first_name?.charAt(0)}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
-                                                        {claim.first_name} {claim.last_name}
-                                                    </p>
-                                                    <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
-                                                        {claim.employee_id}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className={`shrink-0 w-6 h-6 rounded-md bg-gradient-to-br ${getCategoryGradient(claim.expense_type)} flex items-center justify-center text-white font-bold text-[9px] shadow-sm`}>
-                                                    {claim.expense_type?.charAt(0)?.toUpperCase()}
-                                                </span>
-                                                <p className="text-xs sm:text-sm font-bold text-slate-700 capitalize truncate">{claim.expense_type}</p>
-                                            </div>
-                                            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate max-w-[220px]" title={claim.description}>{claim.description}</p>
-                                            <div className="flex items-center gap-2 mt-1.5">
-                                                <span className="text-[10px] font-semibold text-slate-500 whitespace-nowrap">{formatDate(claim.expense_date)}</span>
-                                                <span className="text-slate-300">•</span>
-                                                <span className="text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">
-                                                    {claim.claim_id}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4">
-                                            <p className="text-xs sm:text-sm font-black text-[#010a1f] tabular-nums whitespace-nowrap">{formatCurrency(claim.amount)}</p>
-                                        </td>
-                                        <td className="px-5 py-4 text-center">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getStatusStyle(claim.status)}`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(claim.status)}`}></span>
-                                                {claim.status}
+                        groupedClaims.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
+
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
+                                                <FaBuilding className="text-sm" />
                                             </span>
-                                        </td>
-                                        <td className="px-5 py-4 text-right">
-                                            <div className="flex gap-1 justify-end items-center">
-                                                <button
-                                                    onClick={() => setViewRecord(claim)}
-                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
-                                                    title="View Full Details"
-                                                >
-                                                    <FaEye className="text-xs" />
-                                                </button>
-
-                                                {claim.status === 'Pending' && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handleAction(claim.id, 'Approved')}
-                                                            className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#0437cc] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-                                                            title="Approve Claim"
-                                                        >
-                                                            <FaCheckCircle className="text-[10px]" />
-                                                            Approve
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleAction(claim.id, 'Rejected')}
-                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
-                                                            title="Reject Claim"
-                                                        >
-                                                            <FaTimesCircle className="text-xs" />
-                                                        </button>
-                                                    </>
-                                                )}
-
-                                                {claim.status === 'Approved' && (
-                                                    <button
-                                                        onClick={() => handleAction(claim.id, 'Paid')}
-                                                        className="inline-flex items-center gap-1.5 text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-                                                        title="Mark as Paid"
-                                                    >
-                                                        <FaMoneyBillWave className="text-[10px]" />
-                                                        Pay
-                                                    </button>
-                                                )}
-
-                                                {(claim.status === 'Paid' || claim.status === 'Rejected') && (
-                                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                                                        Processed
-                                                    </span>
-                                                )}
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Claim' : 'Claims'}
+                                                </p>
                                             </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 tabular-nums">
+                                                Total: {formatCurrency(companyGroup.totalAmount)}
+                                            </span>
+                                            {companyGroup.pending > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-50 text-[#f77704] border border-orange-200">
+                                                    Pending: {companyGroup.pending}
+                                                </span>
+                                            )}
+                                            {companyGroup.approved > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-200">
+                                                    Approved: {companyGroup.approved}
+                                                </span>
+                                            )}
+                                            {companyGroup.paid > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                    Paid: {companyGroup.paid}
+                                                </span>
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.total} {branchGroup.total === 1 ? 'Claim' : 'Claims'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 tabular-nums">
+                                                                    {formatCurrency(branchGroup.totalAmount)}
+                                                                </span>
+                                                                {branchGroup.pending > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-[#f77704] border border-orange-100">
+                                                                        {branchGroup.pending} Pending
+                                                                    </span>
+                                                                )}
+                                                                {branchGroup.approved > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-100">
+                                                                        {branchGroup.approved} Approved
+                                                                    </span>
+                                                                )}
+                                                                {branchGroup.paid > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-100">
+                                                                        {branchGroup.paid} Paid
+                                                                    </span>
+                                                                )}
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[880px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Employee</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Claim Details</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Amount</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.records.map((claim, i) => (
+                                                                            <tr key={claim.id || i} className="transition-colors group hover:bg-slate-50/60">
+                                                                                <td className="px-5 py-4">
+                                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getCategoryGradient(claim.expense_type)} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md group-hover:scale-105 transition-transform`}>
+                                                                                            {claim.first_name?.charAt(0)}
+                                                                                        </div>
+                                                                                        <div className="min-w-0">
+                                                                                            <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                                                {claim.first_name} {claim.last_name}
+                                                                                            </p>
+                                                                                            <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                                                                {claim.employee_id}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 min-w-0">
+                                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                                        <span className={`shrink-0 w-6 h-6 rounded-md bg-gradient-to-br ${getCategoryGradient(claim.expense_type)} flex items-center justify-center text-white font-bold text-[9px] shadow-sm`}>
+                                                                                            {claim.expense_type?.charAt(0)?.toUpperCase()}
+                                                                                        </span>
+                                                                                        <p className="text-xs sm:text-sm font-bold text-slate-700 capitalize truncate">{claim.expense_type}</p>
+                                                                                    </div>
+                                                                                    <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate max-w-[220px]" title={claim.description}>{claim.description}</p>
+                                                                                    <div className="flex items-center gap-2 mt-1.5">
+                                                                                        <span className="text-[10px] font-semibold text-slate-500 whitespace-nowrap">{formatDate(claim.expense_date)}</span>
+                                                                                        <span className="text-slate-300">•</span>
+                                                                                        <span className="text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">
+                                                                                            {claim.claim_id}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-xs sm:text-sm font-black text-[#010a1f] tabular-nums whitespace-nowrap">{formatCurrency(claim.amount)}</p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getStatusStyle(claim.status)}`}>
+                                                                                        <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(claim.status)}`}></span>
+                                                                                        {claim.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-right">
+                                                                                    <div className="flex gap-1 justify-end items-center">
+                                                                                        <button
+                                                                                            onClick={() => setViewRecord(claim)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
+                                                                                            title="View Full Details"
+                                                                                        >
+                                                                                            <FaEye className="text-xs" />
+                                                                                        </button>
+
+                                                                                        {claim.status === 'Pending' && (
+                                                                                            <>
+                                                                                                <button
+                                                                                                    onClick={() => handleAction(claim.id, 'Approved')}
+                                                                                                    className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#0437cc] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                                                                                                    title="Approve Claim"
+                                                                                                >
+                                                                                                    <FaCheckCircle className="text-[10px]" />
+                                                                                                    Approve
+                                                                                                </button>
+                                                                                                <button
+                                                                                                    onClick={() => handleAction(claim.id, 'Rejected')}
+                                                                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
+                                                                                                    title="Reject Claim"
+                                                                                                >
+                                                                                                    <FaTimesCircle className="text-xs" />
+                                                                                                </button>
+                                                                                            </>
+                                                                                        )}
+
+                                                                                        {claim.status === 'Approved' && (
+                                                                                            <button
+                                                                                                onClick={() => handleAction(claim.id, 'Paid')}
+                                                                                                className="inline-flex items-center gap-1.5 text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                                                                                                title="Mark as Paid"
+                                                                                            >
+                                                                                                <FaMoneyBillWave className="text-[10px]" />
+                                                                                                Pay
+                                                                                            </button>
+                                                                                        )}
+
+                                                                                        {(claim.status === 'Paid' || claim.status === 'Rejected') && (
+                                                                                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
+                                                                                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                                                                                Processed
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

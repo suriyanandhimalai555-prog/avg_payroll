@@ -2,14 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaUsers, FaInfoCircle, FaSearch, FaUser, FaMoneyCheckAlt,
-    FaEye, FaSitemap, FaBriefcase, FaFilter,
+    FaEye, FaBriefcase, FaFilter, FaBuilding, FaCodeBranch,
     FaIdBadge, FaTimes, FaHistory, FaClock, FaPlusCircle, FaMinusCircle,
     FaCheckCircle, FaUniversity, FaPhoneAlt, FaLaptop, FaMobileAlt, FaKey, FaBox,
     FaDownload, FaChevronDown, FaChevronUp, FaExclamationTriangle, FaSignInAlt, FaSignOutAlt, FaMapMarkerAlt, FaDesktop
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 
-// Helper for asset icons
 const getAssetIcon = (type) => {
     switch (type) {
         case 'Laptop': return <FaLaptop className="text-blue-500" />;
@@ -20,7 +19,6 @@ const getAssetIcon = (type) => {
     }
 };
 
-// Helper for asset icon tile backgrounds
 const getAssetIconBg = (type) => {
     switch (type) {
         case 'Laptop': return 'bg-blue-50 border-blue-100';
@@ -47,7 +45,9 @@ const SuperAdminEmployeeManagementCom = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [apiError, setApiError] = useState('');
 
-    // Attendance Modal States
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
+
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
     const [selectedEmp, setSelectedEmp] = useState(null);
     const [attendanceRecords, setAttendanceRecords] = useState([]);
@@ -55,17 +55,14 @@ const SuperAdminEmployeeManagementCom = () => {
     const [approvingId, setApprovingId] = useState(null);
     const [expandedDates, setExpandedDates] = useState([]);
 
-    // Dossier Modal States
     const [isDossierModalOpen, setIsDossierModalOpen] = useState(false);
     const [viewEmployee, setViewEmployee] = useState(null);
 
-    // Assets Modal States
     const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
     const [selectedEmpForAssets, setSelectedEmpForAssets] = useState(null);
     const [empAssets, setEmpAssets] = useState([]);
     const [loadingAssets, setLoadingAssets] = useState(false);
 
-    // Fullscreen Image Viewer State
     const [fullScreenImage, setFullScreenImage] = useState(null);
 
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
@@ -83,6 +80,7 @@ const SuperAdminEmployeeManagementCom = () => {
 
             const hrData = (hrRes.data || []).map(u => ({
                 ...u,
+                _uid: `HR-${u.id}`,
                 _roleType: 'HR Admin',
                 _roleColor: 'text-purple-700 bg-purple-50 border-purple-200',
                 _displayId: u.hr_id || `HR-${String(u.id).padStart(3, '0')}`,
@@ -92,6 +90,7 @@ const SuperAdminEmployeeManagementCom = () => {
 
             const mgrData = (mgrRes.data || []).map(u => ({
                 ...u,
+                _uid: `MGR-${u.id}`,
                 _roleType: 'Manager',
                 _roleColor: 'text-[#f77704] bg-orange-50 border-orange-200',
                 _displayId: `MGR-${String(u.id).padStart(3, '0')}`,
@@ -101,6 +100,7 @@ const SuperAdminEmployeeManagementCom = () => {
 
             const empData = (empRes.data || []).map(u => ({
                 ...u,
+                _uid: `EMP-${u.id}`,
                 _roleType: 'Employee',
                 _roleColor: 'text-[#0437cc] bg-blue-50 border-blue-200',
                 _displayId: u.employee_id,
@@ -108,8 +108,7 @@ const SuperAdminEmployeeManagementCom = () => {
                 _manager: u.manager || 'Unassigned'
             }));
 
-            let combined = [...hrData, ...mgrData, ...empData].sort((a, b) => new Date(b._joining) - new Date(a._joining));
-
+            const combined = [...hrData, ...mgrData, ...empData].sort((a, b) => new Date(b._joining) - new Date(a._joining));
             setEmployees(combined);
         } catch (error) {
             console.error('Failed to load master employee directory', error);
@@ -125,10 +124,8 @@ const SuperAdminEmployeeManagementCom = () => {
 
     useEffect(() => {
         fetchEmployees();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ==================== ATTENDANCE MODAL & GROUPING LOGIC ====================
     const handleViewAttendance = async (emp) => {
         setSelectedEmp(emp);
         setIsAttendanceModalOpen(true);
@@ -139,7 +136,7 @@ const SuperAdminEmployeeManagementCom = () => {
             const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${targetId}`, getAuthConfig());
             setAttendanceRecords(res.data.history || []);
         } catch (err) {
-            console.error("Failed to fetch attendance", err);
+            console.error('Failed to fetch attendance', err);
             setAttendanceRecords([]);
         } finally {
             setLoadingAttendance(false);
@@ -219,11 +216,10 @@ const SuperAdminEmployeeManagementCom = () => {
         }
     };
 
-    // ==================== EXCEL / CSV EXPORT LOGIC ====================
     const handleExportExcel = () => {
         if (!attendanceRecords || attendanceRecords.length === 0) return;
 
-        let csvContent = "Date,Session No,Clock In,Clock Out,Location In,Location Out,Device In,Device Out,Late Minutes,Total Hours,Status,EOD Update\n";
+        let csvContent = 'Date,Session No,Clock In,Clock Out,Location In,Location Out,Device In,Device Out,Late Minutes,Total Hours,Status,EOD Update\n';
 
         groupedHistory.forEach(group => {
             group.sessions.forEach((record, index) => {
@@ -247,15 +243,14 @@ const SuperAdminEmployeeManagementCom = () => {
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `Attendance_${selectedEmp.first_name}_${selectedEmp.last_name}_${new Date().toISOString().split('T')[0]}.csv`);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `Attendance_${selectedEmp.first_name}_${selectedEmp.last_name}_${new Date().toISOString().split('T')[0]}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
-    // ==================== MODAL VIEW HANDLERS ====================
     const handleViewDossier = (emp) => {
         setViewEmployee(emp);
         setIsDossierModalOpen(true);
@@ -278,17 +273,127 @@ const SuperAdminEmployeeManagementCom = () => {
 
             setEmpAssets(parsedAssets || []);
         } catch (err) {
-            console.error("Failed to fetch assets", err);
+            console.error('Failed to fetch assets', err);
             setEmpAssets([]);
         } finally {
             setLoadingAssets(false);
         }
     };
 
-    const filteredEmployees = employees.filter(emp => {
-        const searchString = `${emp.first_name} ${emp.last_name} ${emp._displayId} ${emp.department || 'All Departments'} ${emp.designation} ${emp._roleType} ${emp.branch} ${emp.company}`.toLowerCase();
-        return searchString.includes(searchTerm.toLowerCase());
-    });
+    const filteredEmployees = useMemo(() => {
+        const q = searchTerm.toLowerCase();
+        return employees.filter(emp => {
+            const searchString = `${emp.first_name} ${emp.last_name} ${emp._displayId} ${emp.department || 'All Departments'} ${emp.designation} ${emp._roleType} ${emp.branch} ${emp.company}`.toLowerCase();
+            return searchString.includes(q);
+        });
+    }, [employees, searchTerm]);
+
+    const groupedEmployees = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredEmployees.forEach(emp => {
+            const companyName = emp.company?.trim() || 'Unassigned Company';
+            const branchName = emp.branch?.trim() || 'Unassigned Branch';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    total: 0,
+                    hrCount: 0,
+                    mgrCount: 0,
+                    empCount: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.total += 1;
+            if (emp._roleType === 'HR Admin') compGroup.hrCount += 1;
+            else if (emp._roleType === 'Manager') compGroup.mgrCount += 1;
+            else compGroup.empCount += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    hrCount: 0,
+                    mgrCount: 0,
+                    empCount: 0,
+                    records: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+            if (emp._roleType === 'HR Admin') branchGroup.hrCount += 1;
+            else if (emp._roleType === 'Manager') branchGroup.mgrCount += 1;
+            else branchGroup.empCount += 1;
+            branchGroup.records.push(emp);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredEmployees]);
+
+    useEffect(() => {
+        if (groupedEmployees.length === 0) return;
+
+        if (searchTerm.trim() !== '') {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedEmployees.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedEmployees[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedEmployees, searchTerm]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedEmployees.length === 0) return false;
+        return groupedEmployees.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedEmployees, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedEmployees.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
 
     const formatCurrency = (amount) => {
         if (amount === undefined || amount === null) return '₹0';
@@ -311,11 +416,9 @@ const SuperAdminEmployeeManagementCom = () => {
     const totalManagers = employees.filter(e => e._roleType === 'Manager').length;
     const totalEmployees = employees.filter(e => e._roleType === 'Employee').length;
 
-    // ==================== SHIMMER SKELETON ====================
     if (isLoading) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden relative animate-pulse">
-                {/* Header Shimmer - Non-Sticky */}
                 <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
                         <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
@@ -330,7 +433,6 @@ const SuperAdminEmployeeManagementCom = () => {
                     </div>
                 </div>
 
-                {/* Stat Cards Grid Shimmer */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
                     {[1, 2, 3, 4].map(i => (
                         <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
@@ -345,7 +447,6 @@ const SuperAdminEmployeeManagementCom = () => {
 
                 <div className="bg-slate-100 rounded-2xl h-24 sm:h-20 w-full border border-slate-200"></div>
 
-                {/* Table Shimmer */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
                     <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-3 w-1/3">
@@ -386,7 +487,6 @@ const SuperAdminEmployeeManagementCom = () => {
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden relative">
 
-            {/* ==================== FULLSCREEN IMAGE VIEWER ==================== */}
             {fullScreenImage && (
                 <div
                     className="fixed inset-0 z-[200] flex items-center justify-center bg-[#010a1f]/95 backdrop-blur-md p-4 animate-in fade-in duration-200"
@@ -407,7 +507,6 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
             )}
 
-            {/* ==================== ASSETS MODAL ==================== */}
             {isAssetModalOpen && selectedEmpForAssets && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -452,7 +551,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                         <div key={idx} className="relative bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col shadow-sm overflow-hidden">
                                             <div className="absolute -top-8 -right-8 w-24 h-24 bg-teal-100/30 rounded-full blur-2xl pointer-events-none"></div>
 
-                                            {/* Header */}
                                             <div className="relative flex items-center gap-3 mb-4 pb-3 border-b border-slate-200">
                                                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-lg border ${getAssetIconBg(asset.asset_type)} shadow-sm`}>
                                                     {getAssetIcon(asset.asset_type)}
@@ -463,7 +561,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Thumbnail Gallery */}
                                             {asset.parsedPhotos && asset.parsedPhotos.length > 0 && (
                                                 <div className="relative flex gap-2 overflow-x-auto custom-scrollbar pb-3 mb-3 border-b border-slate-100">
                                                     {asset.parsedPhotos.map((photo, pIdx) => (
@@ -481,7 +578,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                                 </div>
                                             )}
 
-                                            {/* Details */}
                                             <div className="relative space-y-2.5 flex-1 text-[11px] sm:text-xs">
                                                 <div className="flex justify-between items-center">
                                                     <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Serial Number</span>
@@ -519,7 +615,6 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
             )}
 
-            {/* ==================== ATTENDANCE ACCORDION MODAL ==================== */}
             {isAttendanceModalOpen && selectedEmp && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -619,8 +714,8 @@ const SuperAdminEmployeeManagementCom = () => {
                                                         </td>
                                                         <td className="px-5 py-3.5 text-center">
                                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${group.status === 'Present' ? 'text-teal-700 bg-teal-50 border-teal-200' :
-                                                                    group.status?.includes('Pending') ? 'text-orange-700 bg-orange-50 border-orange-200' :
-                                                                        'text-red-700 bg-red-50 border-red-200'
+                                                                group.status?.includes('Pending') ? 'text-orange-700 bg-orange-50 border-orange-200' :
+                                                                    'text-red-700 bg-red-50 border-red-200'
                                                                 }`}>
                                                                 <span className={`w-1.5 h-1.5 rounded-full ${group.status === 'Present' ? 'bg-teal-500' : group.status?.includes('Pending') ? 'bg-orange-500' : 'bg-red-500'}`}></span>
                                                                 {group.status}
@@ -636,7 +731,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                                         </td>
                                                     </tr>
 
-                                                    {/* Expanded Session View */}
                                                     {expandedDates.includes(group.dateStr) && (
                                                         <tr>
                                                             <td colSpan="6" className="bg-gradient-to-b from-[#f8fafc] to-white border-b border-slate-100 px-5 py-4">
@@ -680,14 +774,12 @@ const SuperAdminEmployeeManagementCom = () => {
                                                                                 </div>
                                                                             </div>
 
-                                                                            {/* Total Hours & Late Approval Action */}
                                                                             <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center gap-2">
                                                                                 <div className="flex items-center gap-2">
                                                                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Duration:</span>
                                                                                     <span className="text-sm font-bold text-[#0437cc]">{session.total_hours || 'In Progress'}</span>
                                                                                 </div>
 
-                                                                                {/* Late Approval Button specifically for this session */}
                                                                                 {session.status?.includes('Pending') && (
                                                                                     <button
                                                                                         onClick={(e) => { e.stopPropagation(); handleApproveAttendance(session.id); }}
@@ -716,7 +808,6 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
             )}
 
-            {/* ==================== EMPLOYEE DOSSIER MODAL ==================== */}
             {isDossierModalOpen && viewEmployee && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -741,8 +832,6 @@ const SuperAdminEmployeeManagementCom = () => {
                         </div>
 
                         <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5 sm:space-y-6">
-
-                            {/* Profile Banner */}
                             <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 overflow-hidden">
                                 <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -772,7 +861,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                 </div>
                             </div>
 
-                            {/* Core Info Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {[
                                     { label: 'Company & Branch', value: `${viewEmployee.company || 'N/A'} — ${viewEmployee.branch || 'N/A'}` },
@@ -800,9 +888,7 @@ const SuperAdminEmployeeManagementCom = () => {
                                 </div>
                             </div>
 
-                            {/* Bank & Emergency */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-                                {/* Bank */}
                                 <div className="relative bg-gradient-to-br from-purple-50/60 to-white border border-purple-100 rounded-2xl p-4 sm:p-5 overflow-hidden">
                                     <div className="absolute -top-8 -right-8 w-24 h-24 bg-purple-200/20 rounded-full blur-2xl pointer-events-none"></div>
                                     <div className="relative flex items-center gap-2.5 mb-4 pb-3 border-b border-purple-100">
@@ -819,7 +905,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                     </div>
                                 </div>
 
-                                {/* Emergency */}
                                 <div className="relative bg-gradient-to-br from-red-50/60 to-white border border-red-100 rounded-2xl p-4 sm:p-5 overflow-hidden">
                                     <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
                                     <div className="relative flex items-center gap-2.5 mb-4 pb-3 border-b border-red-100">
@@ -836,7 +921,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                 </div>
                             </div>
 
-                            {/* Salary Breakdown */}
                             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
                                 <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-200">
                                     <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shadow-sm">
@@ -846,8 +930,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-
-                                    {/* Earnings */}
                                     <div className="relative bg-gradient-to-br from-green-50/80 to-white p-4 rounded-2xl border border-green-100 overflow-hidden">
                                         <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
                                         <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-green-100">
@@ -873,7 +955,6 @@ const SuperAdminEmployeeManagementCom = () => {
                                         </div>
                                     </div>
 
-                                    {/* Deductions */}
                                     <div className="relative bg-gradient-to-br from-red-50/80 to-white p-4 rounded-2xl border border-red-100 overflow-hidden">
                                         <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
                                         <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-red-100">
@@ -904,7 +985,6 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
             )}
 
-            {/* ==================== PAGE HEADER ==================== */}
             <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
                 <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
@@ -928,9 +1008,10 @@ const SuperAdminEmployeeManagementCom = () => {
                         <Button
                             variant="outline"
                             icon={FaFilter}
+                            onClick={fetchEmployees}
                             className="w-full sm:w-auto border-slate-200 text-slate-600 hover:bg-slate-50 text-xs sm:text-sm py-2 rounded-xl"
                         >
-                            Filter
+                            Refresh
                         </Button>
                         <Button
                             variant="primary"
@@ -942,7 +1023,6 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
             </div>
 
-            {/* ==================== STAT CARDS ==================== */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
                 {[
                     { label: 'Total Records', count: employees.length, icon: FaUsers, gradient: 'from-[#0437cc] to-[#1f56d6]', glow: 'shadow-[#0437cc]/25' },
@@ -966,7 +1046,6 @@ const SuperAdminEmployeeManagementCom = () => {
                 })}
             </div>
 
-            {/* ==================== INFO BANNER ==================== */}
             <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start shadow-sm overflow-hidden">
                 <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -976,12 +1055,11 @@ const SuperAdminEmployeeManagementCom = () => {
                 <div className="relative min-w-0">
                     <p className="text-sm font-bold text-[#010a1f]">Master Directory Aggregation</p>
                     <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                        This master table automatically aggregates records from the <strong className="text-[#010a1f]">HR</strong>, <strong className="text-[#010a1f]">Manager</strong>, and <strong className="text-[#010a1f]">Employee</strong> modules into a single, unified view. Review hierarchy, track unified compensation, and audit active network statuses here.
+                        This master directory automatically aggregates records from the <strong className="text-[#010a1f]">HR</strong>, <strong className="text-[#010a1f]">Manager</strong>, and <strong className="text-[#010a1f]">Employee</strong> modules grouped by Company and Branch. Review hierarchy, track unified compensation, and audit active network statuses here.
                     </p>
                 </div>
             </div>
 
-            {/* ==================== ERROR ==================== */}
             {apiError && (
                 <div className="relative bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
                     <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-red-200 shrink-0">
@@ -991,11 +1069,10 @@ const SuperAdminEmployeeManagementCom = () => {
                 </div>
             )}
 
-            {/* ==================== MASTER LIST ==================== */}
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/40">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
                             <FaBriefcase className="text-sm" />
@@ -1003,25 +1080,37 @@ const SuperAdminEmployeeManagementCom = () => {
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Master Organizational Directory</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredEmployees.length} of {employees.length} {employees.length === 1 ? 'record' : 'records'}
+                                {filteredEmployees.length} of {employees.length} {employees.length === 1 ? 'record' : 'records'} across {groupedEmployees.length} {groupedEmployees.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
 
-                    <div className="relative w-full md:w-72 shrink-0">
-                        <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
-                        <input
-                            type="text"
-                            placeholder="Search name, ID or dept…"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
-                        />
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto shrink-0">
+                        <div className="relative w-full md:w-72">
+                            <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                            <input
+                                type="text"
+                                placeholder="Search name, ID, dept, branch…"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 transition-all"
+                            />
+                        </div>
+                        {groupedEmployees.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="relative overflow-x-auto w-full custom-scrollbar flex-1">
-                    {filteredEmployees.length === 0 ? (
+                <div className="p-4 sm:p-5 space-y-4">
+                    {groupedEmployees.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaUsers className="text-xl text-slate-300" />
@@ -1031,106 +1120,217 @@ const SuperAdminEmployeeManagementCom = () => {
                             </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[900px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Member Details</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Role & Hierarchy</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Org Placement</th>
-                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Compensation</th>
-                                    <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
-                                    <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredEmployees.map((emp, i) => (
-                                    <tr key={i} className="transition-colors group hover:bg-slate-50/60">
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center font-bold text-xs shrink-0 border border-slate-200 overflow-hidden text-slate-600 shadow-sm group-hover:scale-105 transition-transform">
-                                                    {emp.profile_photo ? (
-                                                        <img src={emp.profile_photo} alt="Profile" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <>{emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}</>
-                                                    )}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{emp.first_name} {emp.last_name}</p>
-                                                    <span className="inline-block mt-1 text-[10px] font-mono font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md tracking-wide truncate">
-                                                        {emp._displayId}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4 min-w-0">
-                                            <div className="mb-1.5">
-                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border ${emp._roleColor}`}>
-                                                    {emp._roleType}
-                                                </span>
-                                            </div>
-                                            <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{emp.designation || 'Not Assigned'}</p>
-                                        </td>
-                                        <td className="px-5 py-4 min-w-0">
-                                            <p className="text-xs sm:text-sm font-semibold text-slate-700 truncate">{emp.department || 'Not Assigned'}</p>
-                                            <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
-                                                <FaSitemap className="text-[9px] shrink-0" />
-                                                <span className="truncate">{emp.branch || 'Not Assigned'}</span>
-                                            </p>
-                                        </td>
-                                        <td className="px-5 py-4">
-                                            <p className="text-xs sm:text-sm font-bold text-green-700 flex items-center gap-1.5 whitespace-nowrap tabular-nums">
-                                                {formatCurrency(emp.basic_salary)}
-                                                <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Basic</span>
-                                            </p>
-                                            <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 whitespace-nowrap">
-                                                Joined: {formatDate(emp._joining)}
-                                            </p>
-                                        </td>
-                                        <td className="px-5 py-4 text-center">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${emp.status === 'Active'
-                                                ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                : emp.status === 'Pending Activation'
-                                                    ? 'text-orange-700 bg-orange-50 border-orange-200'
-                                                    : emp.status === 'Suspended'
-                                                        ? 'text-red-700 bg-red-50 border-red-200'
-                                                        : 'text-slate-600 bg-slate-100 border-slate-200'
-                                                }`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500'
-                                                    : emp.status === 'Pending Activation' ? 'bg-orange-500'
-                                                        : emp.status === 'Suspended' ? 'bg-red-500' : 'bg-slate-400'
-                                                    }`}></span>
-                                                {emp.status}
+                        groupedEmployees.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
+
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
+                                                <FaBuilding className="text-sm" />
                                             </span>
-                                        </td>
-                                        <td className="px-5 py-4 text-right">
-                                            <div className="flex gap-1 justify-end">
-                                                <button
-                                                    onClick={() => handleViewAssets(emp)}
-                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-teal-600 transition-colors rounded-lg hover:bg-teal-50"
-                                                    title="View Assigned Assets"
-                                                >
-                                                    <FaLaptop className="text-xs" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleViewDossier(emp)}
-                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
-                                                    title="View Detailed Dossier"
-                                                >
-                                                    <FaUser className="text-xs" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleViewAttendance(emp)}
-                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
-                                                    title="View Attendance & Login History"
-                                                >
-                                                    <FaHistory className="text-xs" />
-                                                </button>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Member' : 'Members'}
+                                                </p>
                                             </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            {companyGroup.hrCount > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                    HR: {companyGroup.hrCount}
+                                                </span>
+                                            )}
+                                            {companyGroup.mgrCount > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-50 text-[#f77704] border border-orange-200">
+                                                    Managers: {companyGroup.mgrCount}
+                                                </span>
+                                            )}
+                                            {companyGroup.empCount > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-200">
+                                                    Employees: {companyGroup.empCount}
+                                                </span>
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.total} {branchGroup.total === 1 ? 'Member' : 'Members'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                {branchGroup.hrCount > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100">
+                                                                        {branchGroup.hrCount} HR
+                                                                    </span>
+                                                                )}
+                                                                {branchGroup.mgrCount > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-[#f77704] border border-orange-100">
+                                                                        {branchGroup.mgrCount} Mgr
+                                                                    </span>
+                                                                )}
+                                                                {branchGroup.empCount > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-100">
+                                                                        {branchGroup.empCount} Emp
+                                                                    </span>
+                                                                )}
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[840px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Member Details</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Role & Hierarchy</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Department</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Compensation</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.records.map((emp, i) => (
+                                                                            <tr key={emp._uid || i} className="transition-colors group hover:bg-slate-50/60">
+                                                                                <td className="px-5 py-4">
+                                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center font-bold text-xs shrink-0 border border-slate-200 overflow-hidden text-slate-600 shadow-sm group-hover:scale-105 transition-transform">
+                                                                                            {emp.profile_photo ? (
+                                                                                                <img src={emp.profile_photo} alt="Profile" className="w-full h-full object-cover" />
+                                                                                            ) : (
+                                                                                                <>{emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}</>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="min-w-0">
+                                                                                            <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{emp.first_name} {emp.last_name}</p>
+                                                                                            <span className="inline-block mt-1 text-[10px] font-mono font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md tracking-wide truncate">
+                                                                                                {emp._displayId}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 min-w-0">
+                                                                                    <div className="mb-1.5">
+                                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border ${emp._roleColor}`}>
+                                                                                            {emp._roleType}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{emp.designation || 'Not Assigned'}</p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 min-w-0">
+                                                                                    <p className="text-xs sm:text-sm font-semibold text-slate-700 truncate">{emp.department || 'Not Assigned'}</p>
+                                                                                    <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
+                                                                                        Reports to: {emp._manager}
+                                                                                    </p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-xs sm:text-sm font-bold text-green-700 flex items-center gap-1.5 whitespace-nowrap tabular-nums">
+                                                                                        {formatCurrency(emp.basic_salary)}
+                                                                                        <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Basic</span>
+                                                                                    </p>
+                                                                                    <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 whitespace-nowrap">
+                                                                                        Joined: {formatDate(emp._joining)}
+                                                                                    </p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${emp.status === 'Active'
+                                                                                        ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                                                                        : emp.status === 'Pending Activation'
+                                                                                            ? 'text-orange-700 bg-orange-50 border-orange-200'
+                                                                                            : emp.status === 'Suspended'
+                                                                                                ? 'text-red-700 bg-red-50 border-red-200'
+                                                                                                : 'text-slate-600 bg-slate-100 border-slate-200'
+                                                                                        }`}>
+                                                                                        <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500'
+                                                                                            : emp.status === 'Pending Activation' ? 'bg-orange-500'
+                                                                                                : emp.status === 'Suspended' ? 'bg-red-500' : 'bg-slate-400'
+                                                                                            }`}></span>
+                                                                                        {emp.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-right">
+                                                                                    <div className="flex gap-1 justify-end">
+                                                                                        <button
+                                                                                            onClick={() => handleViewAssets(emp)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-teal-600 transition-colors rounded-lg hover:bg-teal-50"
+                                                                                            title="View Assigned Assets"
+                                                                                        >
+                                                                                            <FaLaptop className="text-xs" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleViewDossier(emp)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
+                                                                                            title="View Detailed Dossier"
+                                                                                        >
+                                                                                            <FaUser className="text-xs" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleViewAttendance(emp)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
+                                                                                            title="View Attendance & Login History"
+                                                                                        >
+                                                                                            <FaHistory className="text-xs" />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

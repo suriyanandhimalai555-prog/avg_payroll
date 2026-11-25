@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaBuilding, FaInfoCircle, FaCheck, FaTimes,
     FaSitemap, FaUserTie, FaCode, FaNetworkWired, FaUsers,
-    FaEye, FaEdit, FaTrash, FaSearch, FaFilter
+    FaEye, FaEdit, FaTrash, FaSearch, FaFilter,
+    FaChevronDown, FaChevronUp, FaCodeBranch
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -57,6 +58,9 @@ const SuperAdminDepartmentsCom = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
 
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
+
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -77,14 +81,26 @@ const SuperAdminDepartmentsCom = () => {
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-departments`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
-            setBranches(branchRes.data || []);
-            setDepartments(deptRes.data || []);
+            const branchList = branchRes.data || [];
+            const branchMap = new Map();
+            branchList.forEach(b => branchMap.set(String(b.id), b));
 
-            if (branchRes.data && branchRes.data.length > 0 && !isEditing) {
-                setFormData(prev => ({ ...prev, branchId: branchRes.data[0].id }));
+            const enrichedDepts = (deptRes.data || []).map(dept => {
+                const parentBranch = branchMap.get(String(dept.branch_id)) || {};
+                return {
+                    ...dept,
+                    branch_name: dept.branch_name || parentBranch.branch_name || 'Unassigned Branch',
+                    company_name: dept.company_name || parentBranch.company_name || 'Unassigned Company'
+                };
+            });
+
+            setBranches(branchList);
+            setDepartments(enrichedDepts);
+
+            if (branchList.length > 0 && !isEditing) {
+                setFormData(prev => ({ ...prev, branchId: prev.branchId || branchList[0].id }));
             }
             setApiError('');
-
         } catch (error) {
             console.error('Failed to load core data', error);
         } finally {
@@ -99,7 +115,6 @@ const SuperAdminDepartmentsCom = () => {
         } else {
             setIsLoading(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleInputChange = (e) => {
@@ -175,7 +190,7 @@ const SuperAdminDepartmentsCom = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this department? It may impact associated employees.")) return;
+        if (!window.confirm('Are you sure you want to delete this department? It may impact associated employees.')) return;
         try {
             await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-departments/${id}`, getAuthConfig());
             fetchCoreData();
@@ -191,17 +206,124 @@ const SuperAdminDepartmentsCom = () => {
         setIsViewModalOpen(true);
     };
 
-    const filteredDepartments = departments.filter(dept => {
-        const searchStr = `${dept.department_name} ${dept.department_code} ${dept.branch_name}`.toLowerCase();
-        const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === 'All' || dept.status === statusFilter;
-        return matchesSearch && matchesStatus;
-    });
+    const filteredDepartments = useMemo(() => {
+        const q = searchTerm.toLowerCase();
+        return departments.filter(dept => {
+            const searchStr = `${dept.department_name} ${dept.department_code} ${dept.department_head} ${dept.branch_name} ${dept.company_name}`.toLowerCase();
+            const matchesSearch = searchStr.includes(q);
+            const matchesStatus = statusFilter === 'All' || dept.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        });
+    }, [departments, searchTerm, statusFilter]);
+
+    const groupedDepartments = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredDepartments.forEach(dept => {
+            const companyName = dept.company_name?.trim() || 'Unassigned Company';
+            const branchName = dept.branch_name?.trim() || 'Unassigned Branch';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    total: 0,
+                    active: 0,
+                    inactive: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.total += 1;
+            if (dept.status === 'Active') compGroup.active += 1;
+            else compGroup.inactive += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    active: 0,
+                    inactive: 0,
+                    records: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+            if (dept.status === 'Active') branchGroup.active += 1;
+            else branchGroup.inactive += 1;
+            branchGroup.records.push(dept);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredDepartments]);
+
+    useEffect(() => {
+        if (groupedDepartments.length === 0) return;
+
+        const hasActiveFilter = searchTerm.trim() !== '' || statusFilter !== 'All';
+
+        if (hasActiveFilter) {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedDepartments.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedDepartments[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedDepartments, searchTerm, statusFilter]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedDepartments.length === 0) return false;
+        return groupedDepartments.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedDepartments, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedDepartments.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
 
     if (isLoading) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
-                {/* Non-Sticky Header Shimmer */}
                 <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
                         <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
@@ -218,7 +340,6 @@ const SuperAdminDepartmentsCom = () => {
 
                 <div className="bg-slate-100 rounded-2xl h-24 w-full border border-slate-200"></div>
 
-                {/* Form Shimmer */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <div className="md:col-span-2 lg:col-span-3 space-y-2">
                         <div className="h-4 bg-slate-200 rounded w-1/6"></div>
@@ -232,7 +353,6 @@ const SuperAdminDepartmentsCom = () => {
                     ))}
                 </div>
 
-                {/* List Table Shimmer */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
                     <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-3 w-1/3">
@@ -293,7 +413,6 @@ const SuperAdminDepartmentsCom = () => {
                         </div>
 
                         <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
-
                             <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4">
                                 <h3 className="text-lg sm:text-xl font-bold text-[#010a1f] truncate">{viewDept.department_name}</h3>
                                 <span className="inline-block mt-2 text-[11px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2.5 py-1 rounded-lg tracking-wide">
@@ -477,7 +596,7 @@ const SuperAdminDepartmentsCom = () => {
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/40">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
                             <FaUsers className="text-sm" />
@@ -485,120 +604,224 @@ const SuperAdminDepartmentsCom = () => {
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Active Departments</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredDepartments.length} of {departments.length} {departments.length === 1 ? 'department' : 'departments'}
+                                {filteredDepartments.length} of {departments.length} {departments.length === 1 ? 'department' : 'departments'} across {groupedDepartments.length} {groupedDepartments.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto shrink-0">
                         <div className="relative w-full sm:w-64">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <input
                                 type="text"
-                                placeholder="Search dept or branch…"
+                                placeholder="Search dept, company, branch…"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 transition-all"
                             />
                         </div>
-                        <div className="relative w-full sm:w-40">
+                        <div className="relative w-full sm:w-36">
                             <FaFilter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white cursor-pointer transition-all appearance-none"
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 cursor-pointer transition-all appearance-none"
                             >
                                 <option value="All">All Status</option>
                                 <option value="Active">Active</option>
                                 <option value="Inactive">Inactive</option>
                             </select>
                         </div>
+                        {groupedDepartments.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="relative overflow-x-auto">
-                    {filteredDepartments.length === 0 ? (
+                <div className="p-4 sm:p-5 space-y-4">
+                    {groupedDepartments.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaNetworkWired className="text-xl text-slate-300" />
                             </div>
                             <p className="text-xs sm:text-sm font-semibold text-slate-400">
-                                {searchTerm ? 'No departments match your search criteria.' : 'No departments created yet.'}
+                                {searchTerm || statusFilter !== 'All' ? 'No departments match your search criteria.' : 'No departments created yet.'}
                             </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[800px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-3.5 font-bold">Department & Code</th>
-                                    <th className="px-5 py-3.5 font-bold">Parent Branch</th>
-                                    <th className="px-5 py-3.5 font-bold">Department Head</th>
-                                    <th className="px-5 py-3.5 font-bold text-center">Status</th>
-                                    <th className="px-5 py-3.5 font-bold text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredDepartments.map((dept, i) => (
-                                    <tr
-                                        key={i}
-                                        className={`transition-colors group ${isEditing && editId === dept.id
-                                            ? 'bg-orange-50/60'
-                                            : 'hover:bg-slate-50/60'
-                                            }`}
+                        groupedDepartments.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
+
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
                                     >
-                                        <td className="px-5 py-4">
-                                            <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{dept.department_name}</p>
-                                            <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
-                                                {dept.department_code}
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
+                                                <FaBuilding className="text-sm" />
                                             </span>
-                                        </td>
-                                        <td className="px-5 py-4 min-w-0">
-                                            <p className="text-xs sm:text-sm font-semibold text-slate-600 flex items-center gap-1.5 truncate">
-                                                <FaBuilding className="text-slate-400 text-[10px] shrink-0" />
-                                                <span className="truncate">{dept.branch_name}</span>
-                                            </p>
-                                        </td>
-                                        <td className="px-5 py-4 min-w-0">
-                                            <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{dept.department_head}</p>
-                                        </td>
-                                        <td className="px-5 py-4 text-center">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${dept.status === 'Active'
-                                                ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                : 'text-red-700 bg-red-50 border-red-200'
-                                                }`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${dept.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
-                                                {dept.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-5 py-4 text-right">
-                                            <div className="flex gap-1 justify-end">
-                                                <button
-                                                    onClick={() => handleView(dept)}
-                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
-                                                    title="View Dept"
-                                                >
-                                                    <FaEye className="text-xs" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleEdit(dept)}
-                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
-                                                    title="Edit Dept"
-                                                >
-                                                    <FaEdit className="text-xs" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(dept.id)}
-                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
-                                                    title="Delete Dept"
-                                                >
-                                                    <FaTrash className="text-xs" />
-                                                </button>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Department' : 'Departments'}
+                                                </p>
                                             </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                Active: {companyGroup.active}
+                                            </span>
+                                            {companyGroup.inactive > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                                    Inactive: {companyGroup.inactive}
+                                                </span>
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.total} {branchGroup.total === 1 ? 'Department' : 'Departments'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-100">
+                                                                    {branchGroup.active} Active
+                                                                </span>
+                                                                {branchGroup.inactive > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-100">
+                                                                        {branchGroup.inactive} Inactive
+                                                                    </span>
+                                                                )}
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[700px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-5 py-3.5 font-bold">Department & Code</th>
+                                                                            <th className="px-5 py-3.5 font-bold">Department Head</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-center">Status</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-right">Actions</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.records.map((dept, i) => (
+                                                                            <tr
+                                                                                key={dept.id || i}
+                                                                                className={`transition-colors group ${isEditing && editId === dept.id
+                                                                                    ? 'bg-orange-50/60'
+                                                                                    : 'hover:bg-slate-50/60'
+                                                                                    }`}
+                                                                            >
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{dept.department_name}</p>
+                                                                                    <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                                                        {dept.department_code}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 min-w-0">
+                                                                                    <p className="text-xs sm:text-sm font-bold text-slate-700 flex items-center gap-1.5 truncate">
+                                                                                        <FaUserTie className="text-[#f77704] text-[10px] shrink-0" />
+                                                                                        <span className="truncate">{dept.department_head}</span>
+                                                                                    </p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${dept.status === 'Active'
+                                                                                        ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                                                                        : 'text-red-700 bg-red-50 border-red-200'
+                                                                                        }`}>
+                                                                                        <span className={`w-1.5 h-1.5 rounded-full ${dept.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
+                                                                                        {dept.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-right">
+                                                                                    <div className="flex gap-1 justify-end">
+                                                                                        <button
+                                                                                            onClick={() => handleView(dept)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
+                                                                                            title="View Dept"
+                                                                                        >
+                                                                                            <FaEye className="text-xs" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleEdit(dept)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
+                                                                                            title="Edit Dept"
+                                                                                        >
+                                                                                            <FaEdit className="text-xs" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleDelete(dept.id)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                                                                                            title="Delete Dept"
+                                                                                        >
+                                                                                            <FaTrash className="text-xs" />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

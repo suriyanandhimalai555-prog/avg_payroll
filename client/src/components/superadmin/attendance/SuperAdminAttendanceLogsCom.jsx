@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import {
     FaHistory, FaSearch, FaFilter, FaDownload, FaBuilding, FaSitemap,
-    FaRegCalendarAlt, FaSignInAlt, FaSignOutAlt, FaMapMarkerAlt, FaDesktop,
-    FaClock, FaChevronDown, FaChevronUp, FaCheck, FaExclamationTriangle,
-    FaCalendarDay, FaUserClock, FaTasks
+    FaSignInAlt, FaSignOutAlt, FaMapMarkerAlt, FaDesktop,
+    FaChevronDown, FaChevronUp, FaExclamationTriangle,
+    FaCalendarDay, FaUserClock, FaTasks, FaCodeBranch
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Select from '../../../components/common/Select';
@@ -28,18 +28,18 @@ const SuperAdminAttendanceLogsCom = () => {
     const [apiError, setApiError] = useState('');
     const [expandedRows, setExpandedRows] = useState([]);
 
-    // Organizational Filters
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
+
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
     const [departments, setDepartments] = useState([]);
 
-    // Active Filters
     const [filterCompany, setFilterCompany] = useState('All');
     const [filterBranch, setFilterBranch] = useState('All');
     const [filterDepartment, setFilterDepartment] = useState('All');
     const [searchTerm, setSearchTerm] = useState('');
-    
-    // Date Range Filters (Default: Last 7 Days)
+
     const [startDate, setStartDate] = useState(() => {
         const d = new Date();
         d.setDate(d.getDate() - 7);
@@ -67,13 +67,11 @@ const SuperAdminAttendanceLogsCom = () => {
     const fetchAttendanceLogs = async () => {
         setIsLoading(true);
         setApiError('');
-        
+
         try {
-            // Fetch all employees to map data
             const empRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig()).catch(() => ({ data: [] }));
             const employees = empRes.data || [];
-            
-            // Build query params
+
             const params = new URLSearchParams({
                 start_date: startDate,
                 end_date: endDate
@@ -82,18 +80,16 @@ const SuperAdminAttendanceLogsCom = () => {
             if (filterBranch !== 'All') params.append('branch', filterBranch);
             if (filterDepartment !== 'All') params.append('department', filterDepartment);
 
-            // Fetch raw logs
             const logRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-attendance/history?${params.toString()}`, getAuthConfig());
-            
-            // Group raw sessions into Date -> Employee records
+
             const rawLogs = logRes.data || [];
             const groupedMap = {};
-            
+
             rawLogs.forEach(log => {
                 const dateKey = new Date(log.date).toLocaleDateString('en-CA');
                 const empKey = log.employee_id;
                 const compositeKey = `${dateKey}_${empKey}`;
-                
+
                 if (!groupedMap[compositeKey]) {
                     const empInfo = employees.find(e => e.employee_id === empKey) || {};
                     groupedMap[compositeKey] = {
@@ -102,9 +98,9 @@ const SuperAdminAttendanceLogsCom = () => {
                         employee_id: empKey,
                         first_name: empInfo.first_name || 'Unknown',
                         last_name: empInfo.last_name || '',
-                        company: empInfo.company || 'Unknown',
-                        branch: empInfo.branch || 'Unknown',
-                        department: empInfo.department || 'Unknown',
+                        company: empInfo.company || 'Unassigned Company',
+                        branch: empInfo.branch || 'Unassigned Branch',
+                        department: empInfo.department || 'Unassigned',
                         shift: empInfo.shift || 'Unknown',
                         sessions: [],
                         first_clock_in: null,
@@ -117,7 +113,6 @@ const SuperAdminAttendanceLogsCom = () => {
                 groupedMap[compositeKey].sessions.push(log);
             });
 
-            // Process Groups
             let mTotalPunches = 0;
             let mLatePunches = 0;
             let mTotalMins = 0;
@@ -125,11 +120,11 @@ const SuperAdminAttendanceLogsCom = () => {
             const processedLogs = Object.values(groupedMap).map(group => {
                 group.sessions.sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
                 group.first_clock_in = group.sessions[0].clock_in;
-                
+
                 const lastSession = group.sessions[group.sessions.length - 1];
                 group.last_clock_out = lastSession.clock_out;
                 group.is_working = !lastSession.clock_out;
-                
+
                 mTotalPunches += group.sessions.length;
 
                 let groupTotalMins = 0;
@@ -195,7 +190,6 @@ const SuperAdminAttendanceLogsCom = () => {
         if (user) {
             fetchAttendanceLogs();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, filterCompany, filterBranch, filterDepartment]);
 
     const handleSearchClick = () => {
@@ -218,12 +212,12 @@ const SuperAdminAttendanceLogsCom = () => {
         setFilterBranch('All');
         setFilterDepartment('All');
         setSearchTerm('');
-        
+
         const d = new Date();
         d.setDate(d.getDate() - 7);
         setStartDate(d.toLocaleDateString('en-CA'));
         setEndDate(new Date().toLocaleDateString('en-CA'));
-        
+
         setTimeout(() => fetchAttendanceLogs(), 50);
     };
 
@@ -231,10 +225,121 @@ const SuperAdminAttendanceLogsCom = () => {
         setExpandedRows(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
     };
 
-    const filteredLogs = attendanceLogs.filter(log => {
-        const searchStr = `${log.first_name} ${log.last_name} ${log.employee_id}`.toLowerCase();
-        return searchStr.includes(searchTerm.toLowerCase());
-    });
+    const filteredLogs = useMemo(() => {
+        return attendanceLogs.filter(log => {
+            const searchStr = `${log.first_name} ${log.last_name} ${log.employee_id}`.toLowerCase();
+            return searchStr.includes(searchTerm.toLowerCase());
+        });
+    }, [attendanceLogs, searchTerm]);
+
+    const groupedLogs = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredLogs.forEach(log => {
+            const companyName = log.company?.trim() || 'Unassigned Company';
+            const branchName = log.branch?.trim() || 'Unassigned Branch';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    totalLogs: 0,
+                    totalSessions: 0,
+                    lateCount: 0,
+                    pendingCount: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.totalLogs += 1;
+            compGroup.totalSessions += log.sessions.length;
+            if (log.status === 'Late') compGroup.lateCount += 1;
+            if (log.status?.includes('Pending')) compGroup.pendingCount += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    totalLogs: 0,
+                    totalSessions: 0,
+                    lateCount: 0,
+                    pendingCount: 0,
+                    logs: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.totalLogs += 1;
+            branchGroup.totalSessions += log.sessions.length;
+            if (log.status === 'Late') branchGroup.lateCount += 1;
+            if (log.status?.includes('Pending')) branchGroup.pendingCount += 1;
+            branchGroup.logs.push(log);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredLogs]);
+
+    useEffect(() => {
+        if (groupedLogs.length === 0) return;
+
+        const hasActiveFilter = searchTerm.trim() !== '' || filterCompany !== 'All' || filterBranch !== 'All' || filterDepartment !== 'All';
+
+        if (hasActiveFilter) {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedLogs.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedLogs[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedLogs, searchTerm, filterCompany, filterBranch, filterDepartment]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedLogs.length === 0) return false;
+        return groupedLogs.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedLogs, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedLogs.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
 
     const formatTime = (timestamp) => {
         if (!timestamp) return '—';
@@ -289,7 +394,7 @@ const SuperAdminAttendanceLogsCom = () => {
 
             const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Attendance Logs");
+            XLSX.utils.book_append_sheet(wb, ws, 'Attendance Logs');
             XLSX.writeFile(wb, `AVG_Attendance_Logs_${startDate}_to_${endDate}.xlsx`);
 
         } catch (error) {
@@ -300,8 +405,7 @@ const SuperAdminAttendanceLogsCom = () => {
 
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
-            
-            {/* ==================== PAGE HEADER ==================== */}
+
             <div className="relative bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
                 <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
@@ -337,10 +441,14 @@ const SuperAdminAttendanceLogsCom = () => {
                 </div>
             </div>
 
-            {/* ==================== FILTERS & METRICS ==================== */}
+            {apiError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-xs sm:text-sm font-semibold">
+                    {apiError}
+                </div>
+            )}
+
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-5 sm:gap-6">
-                
-                {/* Filter Panel */}
+
                 <div className="xl:col-span-3 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
                     <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                         <div className="flex items-center gap-2.5">
@@ -402,13 +510,12 @@ const SuperAdminAttendanceLogsCom = () => {
                     </div>
                 </div>
 
-                {/* Metrics Summary */}
                 <div className="xl:col-span-1 bg-gradient-to-br from-[#010a1f] to-slate-800 rounded-2xl shadow-lg border border-slate-700 p-5 sm:p-6 overflow-hidden relative flex flex-col justify-center">
                     <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#0437cc]/30 rounded-full blur-3xl pointer-events-none"></div>
                     <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-[#f77704]/20 rounded-full blur-3xl pointer-events-none"></div>
 
                     <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest mb-5">Period Overview</h3>
-                    
+
                     <div className="space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-700/50 pb-3">
                             <div className="flex items-center gap-2 text-slate-300">
@@ -435,15 +542,35 @@ const SuperAdminAttendanceLogsCom = () => {
                 </div>
             </div>
 
-            {/* ==================== RESULTS TABLE ==================== */}
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
-                <div className="relative overflow-x-auto w-full custom-scrollbar flex-1 min-h-[400px]">
+                <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/40">
+                    <div className="min-w-0">
+                        <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                            Company & Branch Attendance Logs
+                        </h2>
+                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                            {filteredLogs.length} {filteredLogs.length === 1 ? 'log' : 'logs'} across {groupedLogs.length} {groupedLogs.length === 1 ? 'company' : 'companies'}
+                        </p>
+                    </div>
+                    {groupedLogs.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={handleToggleAll}
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2 rounded-xl border border-blue-200 bg-white w-full sm:w-auto shrink-0"
+                        >
+                            {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                            {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                        </button>
+                    )}
+                </div>
+
+                <div className="p-4 sm:p-5 space-y-4 min-h-[400px]">
                     {isLoading ? (
                         <div className="p-16 text-center flex flex-col items-center justify-center">
                             <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mb-3"></div>
                             <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Fetching secure logs…</p>
                         </div>
-                    ) : filteredLogs.length === 0 ? (
+                    ) : groupedLogs.length === 0 ? (
                         <div className="p-16 text-center flex flex-col items-center justify-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mb-3">
                                 <FaHistory className="text-xl text-slate-300" />
@@ -451,188 +578,288 @@ const SuperAdminAttendanceLogsCom = () => {
                             <p className="text-xs sm:text-sm font-semibold text-slate-500">No attendance logs found for the selected parameters.</p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[900px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-4 font-bold whitespace-nowrap">Employee & Date</th>
-                                    <th className="px-5 py-4 font-bold whitespace-nowrap">Org Structure</th>
-                                    <th className="px-5 py-4 font-bold whitespace-nowrap">First In / Last Out</th>
-                                    <th className="px-5 py-4 font-bold whitespace-nowrap">Total Hrs</th>
-                                    <th className="px-5 py-4 font-bold text-center whitespace-nowrap">Status</th>
-                                    <th className="px-5 py-4 font-bold text-right whitespace-nowrap">Details</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredLogs.map((group, i) => (
-                                    <React.Fragment key={i}>
-                                        <tr 
-                                            className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
-                                            onClick={() => toggleRow(group.compositeKey)}
-                                        >
-                                            <td className="px-5 py-3.5">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20">
-                                                        {group.first_name.charAt(0)}{group.last_name.charAt(0)}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-xs sm:text-[13px] font-bold text-[#010a1f] truncate">{group.first_name} {group.last_name}</p>
-                                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                                            <span className="text-[10px] font-mono font-bold text-slate-500">{group.employee_id}</span>
-                                                            <span className="text-slate-300">•</span>
-                                                            <span className="text-[10px] font-semibold text-[#0437cc] flex items-center gap-1"><FaCalendarDay className="text-[9px]" /> {formatDate(group.date)}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-3.5 min-w-0">
-                                                <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 truncate mb-0.5">
-                                                    <FaBuilding className="text-slate-400 text-[10px] shrink-0" />
-                                                    <span className="truncate">{group.company}</span>
+                        groupedLogs.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
+
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
+                                                <FaBuilding className="text-sm" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.totalLogs} {companyGroup.totalLogs === 1 ? 'Log' : 'Logs'}
                                                 </p>
-                                                <p className="text-[10px] text-slate-500 flex items-center gap-1.5 truncate">
-                                                    <FaSitemap className="text-slate-400 text-[9px] shrink-0" />
-                                                    <span className="truncate">{group.department} <span className="text-slate-300 mx-0.5">•</span> {group.branch}</span>
-                                                </p>
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                <div className="space-y-1">
-                                                    <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                                                        <FaSignInAlt className="text-green-500 text-[9px]" />
-                                                        {formatTime(group.first_clock_in)}
-                                                    </p>
-                                                    <p className={`text-[11px] font-bold flex items-center gap-1.5 ${group.last_clock_out ? 'text-slate-700' : 'text-green-600'}`}>
-                                                        <FaSignOutAlt className={`${group.last_clock_out ? 'text-red-400' : 'text-green-500'} text-[9px]`} />
-                                                        {group.is_working ? 'Working...' : formatTime(group.last_clock_out)}
-                                                    </p>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                <p className={`text-xs font-bold whitespace-nowrap tabular-nums ${group.calculated_total_hours || group.is_working ? 'text-[#0437cc]' : 'text-slate-400'}`}>
-                                                    {group.is_working ? (group.calculated_total_hours ? `${group.calculated_total_hours} (+)` : 'In Progress') : (group.calculated_total_hours || '—')}
-                                                </p>
-                                                {group.sessions.length > 1 && (
-                                                    <span className="text-[9px] text-[#0437cc] font-bold bg-blue-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-blue-100">
-                                                        {group.sessions.length} Sessions
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-5 py-3.5 text-center">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap border ${getStatusStyle(group.status)}`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(group.status)}`}></span>
-                                                    {group.status}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-200">
+                                                Sessions: {companyGroup.totalSessions}
+                                            </span>
+                                            {companyGroup.lateCount > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                                    Late: {companyGroup.lateCount}
                                                 </span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-right">
-                                                <button className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all ${expandedRows.includes(group.compositeKey)
-                                                    ? 'bg-[#0437cc] text-white'
-                                                    : 'bg-slate-50 text-slate-400 group-hover:bg-white group-hover:border group-hover:border-slate-200'
-                                                    }`}>
-                                                    {expandedRows.includes(group.compositeKey) ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
-                                                </button>
-                                            </td>
-                                        </tr>
+                                            )}
+                                            {companyGroup.pendingCount > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200">
+                                                    Pending: {companyGroup.pendingCount}
+                                                </span>
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </button>
 
-                                        {/* Expanded Session Details */}
-                                        {expandedRows.includes(group.compositeKey) && (
-                                            <tr>
-                                                <td colSpan="6" className="bg-gradient-to-b from-slate-50/50 to-white border-b border-slate-100 px-5 py-5">
-                                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                                        {group.sessions.map((session, sIdx) => (
-                                                            <div key={sIdx} className="relative bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
-                                                                <span className="absolute -top-2.5 left-4 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2.5 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
-                                                                    Session {sIdx + 1}
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
                                                                 </span>
-
-                                                                <div className="mt-1 grid grid-cols-2 gap-4">
-                                                                    {/* In Block */}
-                                                                    <div className="min-w-0">
-                                                                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2 mb-2">
-                                                                            <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center shrink-0">
-                                                                                <FaSignInAlt className="text-green-500 text-[9px]" />
-                                                                            </span>
-                                                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Clock In</p>
-                                                                            {session.late_minutes > 0 && (
-                                                                                <span className="ml-auto text-[9px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded border border-red-100 tabular-nums">
-                                                                                    {session.late_minutes}m Late
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                        <p className="text-sm font-bold text-slate-800 tabular-nums">{formatTime(session.clock_in)}</p>
-                                                                        <p className="text-[10px] text-slate-500 mt-1.5 flex items-start gap-1.5 line-clamp-2" title={session.clock_in_location || session.location_in}>
-                                                                            <FaMapMarkerAlt className="shrink-0 text-slate-300 mt-0.5" />
-                                                                            {session.clock_in_location || session.location_in || 'N/A'}
-                                                                        </p>
-                                                                        <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5 truncate">
-                                                                            <FaDesktop className="shrink-0 text-slate-300" />
-                                                                            {session.clock_in_device || session.device_in || 'N/A'}
-                                                                        </p>
-                                                                    </div>
-                                                                    
-                                                                    {/* Out Block */}
-                                                                    <div className="min-w-0 border-l border-slate-100 pl-4">
-                                                                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2 mb-2">
-                                                                            <span className="w-5 h-5 rounded-md bg-red-50 flex items-center justify-center shrink-0">
-                                                                                <FaSignOutAlt className="text-red-400 text-[9px]" />
-                                                                            </span>
-                                                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Clock Out</p>
-                                                                        </div>
-                                                                        {session.clock_out ? (
-                                                                            <>
-                                                                                <p className="text-sm font-bold text-slate-800 tabular-nums">{formatTime(session.clock_out)}</p>
-                                                                                <p className="text-[10px] text-slate-500 mt-1.5 flex items-start gap-1.5 line-clamp-2" title={session.clock_out_location || session.location_out}>
-                                                                                    <FaMapMarkerAlt className="shrink-0 text-slate-300 mt-0.5" />
-                                                                                    {session.clock_out_location || session.location_out || 'N/A'}
-                                                                                </p>
-                                                                                <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5 truncate">
-                                                                                    <FaDesktop className="shrink-0 text-slate-300" />
-                                                                                    {session.clock_out_device || session.device_out || 'N/A'}
-                                                                                </p>
-                                                                            </>
-                                                                        ) : (
-                                                                            <div className="h-full flex flex-col justify-center py-2">
-                                                                                <p className="text-xs font-bold text-green-600 flex items-center gap-1.5">
-                                                                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                                                                                    Active Session
-                                                                                </p>
-                                                                                <p className="text-[9px] text-slate-400 mt-1">Pending clock out action</p>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.totalLogs} {branchGroup.totalLogs === 1 ? 'Log' : 'Logs'} • {branchGroup.totalSessions} {branchGroup.totalSessions === 1 ? 'Session' : 'Sessions'}
+                                                                    </p>
                                                                 </div>
-
-                                                                {/* EOD / Late Reason Divider Block */}
-                                                                {(session.late_reason || session.eod_update) && (
-                                                                    <div className="mt-4 pt-3 border-t border-slate-100 space-y-3">
-                                                                        {session.late_reason && (
-                                                                            <div className="bg-orange-50/50 p-2.5 rounded-lg border border-orange-100 flex items-start gap-2">
-                                                                                <FaExclamationTriangle className="text-orange-400 shrink-0 mt-0.5 text-[10px]" />
-                                                                                <div>
-                                                                                    <span className="text-[9px] font-bold text-orange-800 uppercase tracking-wider block mb-0.5">Late Reason</span>
-                                                                                    <span className="text-[11px] text-slate-600 italic">"{session.late_reason}"</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-                                                                        {session.eod_update && (
-                                                                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-start gap-2">
-                                                                                <FaTasks className="text-slate-400 shrink-0 mt-0.5 text-[10px]" />
-                                                                                <div>
-                                                                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">EOD Report</span>
-                                                                                    <span className="text-[11px] text-slate-600 whitespace-pre-wrap">{session.eod_update}</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                )}
                                                             </div>
-                                                        ))}
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                {branchGroup.lateCount > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-100">
+                                                                        {branchGroup.lateCount} Late
+                                                                    </span>
+                                                                )}
+                                                                {branchGroup.pendingCount > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-100">
+                                                                        {branchGroup.pendingCount} Pending
+                                                                    </span>
+                                                                )}
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto w-full custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[880px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Employee & Date</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Department & Shift</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">First In / Last Out</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Total Hrs</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Details</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.logs.map((group) => (
+                                                                            <React.Fragment key={group.compositeKey}>
+                                                                                <tr
+                                                                                    className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
+                                                                                    onClick={() => toggleRow(group.compositeKey)}
+                                                                                >
+                                                                                    <td className="px-5 py-3.5">
+                                                                                        <div className="flex items-center gap-3 min-w-0">
+                                                                                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20">
+                                                                                                {group.first_name.charAt(0)}{group.last_name.charAt(0)}
+                                                                                            </div>
+                                                                                            <div className="min-w-0">
+                                                                                                <p className="text-xs sm:text-[13px] font-bold text-[#010a1f] truncate">{group.first_name} {group.last_name}</p>
+                                                                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                                                                    <span className="text-[10px] font-mono font-bold text-slate-500">{group.employee_id}</span>
+                                                                                                    <span className="text-slate-300">•</span>
+                                                                                                    <span className="text-[10px] font-semibold text-[#0437cc] flex items-center gap-1"><FaCalendarDay className="text-[9px]" /> {formatDate(group.date)}</span>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td className="px-5 py-3.5 min-w-0">
+                                                                                        <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 truncate mb-0.5">
+                                                                                            <FaSitemap className="text-slate-400 text-[10px] shrink-0" />
+                                                                                            <span className="truncate">{group.department}</span>
+                                                                                        </p>
+                                                                                        <p className="text-[10px] text-slate-500 truncate">
+                                                                                            {group.shift}
+                                                                                        </p>
+                                                                                    </td>
+                                                                                    <td className="px-5 py-3.5">
+                                                                                        <div className="space-y-1">
+                                                                                            <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                                                                                                <FaSignInAlt className="text-green-500 text-[9px]" />
+                                                                                                {formatTime(group.first_clock_in)}
+                                                                                            </p>
+                                                                                            <p className={`text-[11px] font-bold flex items-center gap-1.5 ${group.last_clock_out ? 'text-slate-700' : 'text-green-600'}`}>
+                                                                                                <FaSignOutAlt className={`${group.last_clock_out ? 'text-red-400' : 'text-green-500'} text-[9px]`} />
+                                                                                                {group.is_working ? 'Working...' : formatTime(group.last_clock_out)}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td className="px-5 py-3.5">
+                                                                                        <p className={`text-xs font-bold whitespace-nowrap tabular-nums ${group.calculated_total_hours || group.is_working ? 'text-[#0437cc]' : 'text-slate-400'}`}>
+                                                                                            {group.is_working ? (group.calculated_total_hours ? `${group.calculated_total_hours} (+)` : 'In Progress') : (group.calculated_total_hours || '—')}
+                                                                                        </p>
+                                                                                        {group.sessions.length > 1 && (
+                                                                                            <span className="text-[9px] text-[#0437cc] font-bold bg-blue-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-blue-100">
+                                                                                                {group.sessions.length} Sessions
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </td>
+                                                                                    <td className="px-5 py-3.5 text-center">
+                                                                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap border ${getStatusStyle(group.status)}`}>
+                                                                                            <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(group.status)}`}></span>
+                                                                                            {group.status}
+                                                                                        </span>
+                                                                                    </td>
+                                                                                    <td className="px-5 py-3.5 text-right">
+                                                                                        <button className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all ${expandedRows.includes(group.compositeKey)
+                                                                                            ? 'bg-[#0437cc] text-white'
+                                                                                            : 'bg-slate-50 text-slate-400 group-hover:bg-white group-hover:border group-hover:border-slate-200'
+                                                                                            }`}>
+                                                                                            {expandedRows.includes(group.compositeKey) ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
+                                                                                        </button>
+                                                                                    </td>
+                                                                                </tr>
+
+                                                                                {expandedRows.includes(group.compositeKey) && (
+                                                                                    <tr>
+                                                                                        <td colSpan="6" className="bg-gradient-to-b from-slate-50/50 to-white border-b border-slate-100 px-5 py-5">
+                                                                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                                                                {group.sessions.map((session, sIdx) => (
+                                                                                                    <div key={sIdx} className="relative bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                                                                                                        <span className="absolute -top-2.5 left-4 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2.5 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                                                                                                            Session {sIdx + 1}
+                                                                                                        </span>
+
+                                                                                                        <div className="mt-1 grid grid-cols-2 gap-4">
+                                                                                                            <div className="min-w-0">
+                                                                                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2 mb-2">
+                                                                                                                    <span className="w-5 h-5 rounded-md bg-green-50 flex items-center justify-center shrink-0">
+                                                                                                                        <FaSignInAlt className="text-green-500 text-[9px]" />
+                                                                                                                    </span>
+                                                                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Clock In</p>
+                                                                                                                    {session.late_minutes > 0 && (
+                                                                                                                        <span className="ml-auto text-[9px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded border border-red-100 tabular-nums">
+                                                                                                                            {session.late_minutes}m Late
+                                                                                                                        </span>
+                                                                                                                    )}
+                                                                                                                </div>
+                                                                                                                <p className="text-sm font-bold text-slate-800 tabular-nums">{formatTime(session.clock_in)}</p>
+                                                                                                                <p className="text-[10px] text-slate-500 mt-1.5 flex items-start gap-1.5 line-clamp-2" title={session.clock_in_location || session.location_in}>
+                                                                                                                    <FaMapMarkerAlt className="shrink-0 text-slate-300 mt-0.5" />
+                                                                                                                    {session.clock_in_location || session.location_in || 'N/A'}
+                                                                                                                </p>
+                                                                                                                <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5 truncate">
+                                                                                                                    <FaDesktop className="shrink-0 text-slate-300" />
+                                                                                                                    {session.clock_in_device || session.device_in || 'N/A'}
+                                                                                                                </p>
+                                                                                                            </div>
+
+                                                                                                            <div className="min-w-0 border-l border-slate-100 pl-4">
+                                                                                                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2 mb-2">
+                                                                                                                    <span className="w-5 h-5 rounded-md bg-red-50 flex items-center justify-center shrink-0">
+                                                                                                                        <FaSignOutAlt className="text-red-400 text-[9px]" />
+                                                                                                                    </span>
+                                                                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Clock Out</p>
+                                                                                                                </div>
+                                                                                                                {session.clock_out ? (
+                                                                                                                    <>
+                                                                                                                        <p className="text-sm font-bold text-slate-800 tabular-nums">{formatTime(session.clock_out)}</p>
+                                                                                                                        <p className="text-[10px] text-slate-500 mt-1.5 flex items-start gap-1.5 line-clamp-2" title={session.clock_out_location || session.location_out}>
+                                                                                                                            <FaMapMarkerAlt className="shrink-0 text-slate-300 mt-0.5" />
+                                                                                                                            {session.clock_out_location || session.location_out || 'N/A'}
+                                                                                                                        </p>
+                                                                                                                        <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5 truncate">
+                                                                                                                            <FaDesktop className="shrink-0 text-slate-300" />
+                                                                                                                            {session.clock_out_device || session.device_out || 'N/A'}
+                                                                                                                        </p>
+                                                                                                                    </>
+                                                                                                                ) : (
+                                                                                                                    <div className="h-full flex flex-col justify-center py-2">
+                                                                                                                        <p className="text-xs font-bold text-green-600 flex items-center gap-1.5">
+                                                                                                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                                                                                                            Active Session
+                                                                                                                        </p>
+                                                                                                                        <p className="text-[9px] text-slate-400 mt-1">Pending clock out action</p>
+                                                                                                                    </div>
+                                                                                                                )}
+                                                                                                            </div>
+                                                                                                        </div>
+
+                                                                                                        {(session.late_reason || session.eod_update) && (
+                                                                                                            <div className="mt-4 pt-3 border-t border-slate-100 space-y-3">
+                                                                                                                {session.late_reason && (
+                                                                                                                    <div className="bg-orange-50/50 p-2.5 rounded-lg border border-orange-100 flex items-start gap-2">
+                                                                                                                        <FaExclamationTriangle className="text-orange-400 shrink-0 mt-0.5 text-[10px]" />
+                                                                                                                        <div>
+                                                                                                                            <span className="text-[9px] font-bold text-orange-800 uppercase tracking-wider block mb-0.5">Late Reason</span>
+                                                                                                                            <span className="text-[11px] text-slate-600 italic">"{session.late_reason}"</span>
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                )}
+                                                                                                                {session.eod_update && (
+                                                                                                                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-start gap-2">
+                                                                                                                        <FaTasks className="text-slate-400 shrink-0 mt-0.5 text-[10px]" />
+                                                                                                                        <div>
+                                                                                                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">EOD Report</span>
+                                                                                                                            <span className="text-[11px] text-slate-600 whitespace-pre-wrap">{session.eod_update}</span>
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                )}
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                ))}
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                )}
+                                                                            </React.Fragment>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </tbody>
-                        </table>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

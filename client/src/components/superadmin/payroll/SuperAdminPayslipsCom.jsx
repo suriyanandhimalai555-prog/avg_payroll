@@ -5,15 +5,13 @@ import autoTable from 'jspdf-autotable';
 import {
     FaFileInvoice, FaInfoCircle, FaSearch, FaDownload,
     FaEye, FaEnvelope, FaFileInvoiceDollar, FaFilter, FaPaperPlane,
-    FaTimes, FaUsers, FaCheckCircle, FaClock,
-    FaCalendarAlt, FaChevronDown, FaChevronUp, FaBuilding
+    FaTimes, FaCheckCircle, FaClock, FaCalendarAlt,
+    FaChevronDown, FaChevronUp, FaBuilding, FaCodeBranch
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 
-// Base64 Placeholder Logo
 const COMPANY_LOGO_BASE64 = "https://avgwork.avgprimetech.com/assets/icon-C5ZMRYg3.png";
 
-// Inject DM Sans via @import — does not affect page layout
 if (typeof document !== 'undefined' && !document.getElementById('dm-sans-import')) {
     const styleEl = document.createElement('style');
     styleEl.id = 'dm-sans-import';
@@ -31,9 +29,6 @@ const getAuthConfig = () => {
     };
 };
 
-// ---------------------------------------------------------------------------
-// Font / Image helpers for jsPDF
-// ---------------------------------------------------------------------------
 const fetchAsBase64 = async (url) => {
     const res = await fetch(url, { mode: 'cors', cache: 'force-cache' });
     if (!res.ok) throw new Error('Fetch failed: ' + res.status);
@@ -60,7 +55,7 @@ const getDMSansBase64 = () => {
             try {
                 const b64 = await fetchAsBase64(url);
                 if (b64 && b64.length > 1000) return b64;
-            } catch (e) { /* try next */ }
+            } catch (e) { }
         }
         return null;
     })();
@@ -87,7 +82,6 @@ const loadImageAsBase64 = (url) =>
         } catch (e) { resolve(null); }
     });
 
-// Number → Indian words
 const numberToWordsIndian = (num) => {
     if (num === undefined || num === null || isNaN(num)) return '(Rupees Zero Only)';
     const n = Number(num);
@@ -128,25 +122,22 @@ const numberToWordsIndian = (num) => {
     return words;
 };
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 const SuperAdminPayslipsCom = () => {
     const [payslips, setPayslips] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isEmailing, setIsEmailing] = useState(false);
-    
+
     const [searchTerm, setSearchTerm] = useState('');
     const [apiError, setApiError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
-    const [expandedBranches, setExpandedBranches] = useState([]);
 
-    // PDF Preview State
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
+
     const [previewUrl, setPreviewUrl] = useState(null);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isBuildingPdf, setIsBuildingPdf] = useState(false);
 
-    // Fetch from the new sa-payslips API
     const fetchPayslips = async () => {
         setIsLoading(true);
         setApiError('');
@@ -165,30 +156,133 @@ const SuperAdminPayslipsCom = () => {
         fetchPayslips();
     }, []);
 
-    const filteredPayslips = payslips.filter(record => {
-        const searchString = `${record.employee_name} ${record.employee_id} ${record.monthLabel} ${record.company} ${record.branch} ${record.status}`.toLowerCase();
-        return searchString.includes(searchTerm.toLowerCase());
-    });
+    const filteredPayslips = useMemo(() => {
+        return payslips.filter(record => {
+            const searchString = `${record.employee_name} ${record.employee_id} ${record.monthLabel} ${record.pay_month} ${record.company} ${record.branch} ${record.status}`.toLowerCase();
+            return searchString.includes(searchTerm.toLowerCase());
+        });
+    }, [payslips, searchTerm]);
 
     const groupedPayslips = useMemo(() => {
-        const groups = {};
+        const companyMap = new Map();
+
         filteredPayslips.forEach(record => {
-            const comp = record.company || 'Unassigned Company';
-            const br = record.branch || 'Unassigned Branch';
-            if (!groups[comp]) groups[comp] = {};
-            if (!groups[comp][br]) groups[comp][br] = [];
-            groups[comp][br].push(record);
+            const companyName = record.company?.trim() || 'Unassigned Company';
+            const branchName = record.branch?.trim() || 'Unassigned Branch';
+            const netVal = parseFloat(record.netSalary) || 0;
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    total: 0,
+                    sent: 0,
+                    viewed: 0,
+                    generated: 0,
+                    totalNet: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.total += 1;
+            compGroup.totalNet += netVal;
+            if (record.status === 'Sent') compGroup.sent += 1;
+            else if (record.status === 'Viewed') compGroup.viewed += 1;
+            else if (record.status === 'Generated') compGroup.generated += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    sent: 0,
+                    viewed: 0,
+                    generated: 0,
+                    totalNet: 0,
+                    records: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+            branchGroup.totalNet += netVal;
+            if (record.status === 'Sent') branchGroup.sent += 1;
+            else if (record.status === 'Viewed') branchGroup.viewed += 1;
+            else if (record.status === 'Generated') branchGroup.generated += 1;
+            branchGroup.records.push(record);
         });
-        return groups;
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
     }, [filteredPayslips]);
 
-    const toggleBranchAccordion = (branchKey) => {
-        setExpandedBranches(prev => prev.includes(branchKey) ? prev.filter(k => k !== branchKey) : [...prev, branchKey]);
+    useEffect(() => {
+        if (groupedPayslips.length === 0) return;
+
+        if (searchTerm.trim() !== '') {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedPayslips.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedPayslips[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedPayslips, searchTerm]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedPayslips.length === 0) return false;
+        return groupedPayslips.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedPayslips, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedPayslips.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
     };
 
     const formatCurrency = (amount) => {
         if (amount === undefined || amount === null) return '—';
         return `${parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    const formatCompactCurrency = (amount) => {
+        if (amount === undefined || amount === null) return '₹0';
+        return `₹${Math.round(parseFloat(amount) || 0).toLocaleString('en-IN')}`;
     };
 
     const getStatusStyle = (status) => {
@@ -218,13 +312,9 @@ const SuperAdminPayslipsCom = () => {
         }
     };
 
-    // -----------------------------------------------------------------------
-    // Clean A4 Payslip PDF Generator — maps real DB data
-    // -----------------------------------------------------------------------
     const buildPayslipPDF = async (record) => {
         const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
         const pageW = 210;
-        const pageH = 297;
         const margin = 15;
         const contentW = pageW - margin * 2;
 
@@ -356,9 +446,6 @@ const SuperAdminPayslipsCom = () => {
 
         const tableStartY = infoY + leftRows.length * 6.5 + 8;
 
-        const gross = Number(record.grossSalary) || 0;
-        const totalDeductions = Number(record.totalDeductions) || 0;
-
         const earningsArr = [
             { label: 'Basic Salary', amount: record.earnings?.basic || 0 },
             { label: 'House Rent Allowance', amount: record.earnings?.hra || 0 },
@@ -373,14 +460,14 @@ const SuperAdminPayslipsCom = () => {
             { label: 'EPF Deduction', amount: record.deductions?.epf || 0 },
             { label: 'ESI Deduction', amount: record.deductions?.esi || 0 },
             { label: 'Professional Tax', amount: record.deductions?.pt || 0 },
-            { label: 'TDS Deduction', amount: record.deductions?.tds || 0 }, 
+            { label: 'TDS Deduction', amount: record.deductions?.tds || 0 },
             { label: 'Health Insurance', amount: record.deductions?.healthInsurance || 0 }
         ].filter(d => d.amount > 0);
 
         const maxRows = Math.max(earningsArr.length, combinedDeductions.length);
         const bodyData = [];
 
-        for(let i=0; i<maxRows; i++){
+        for (let i = 0; i < maxRows; i++) {
             bodyData.push([
                 earningsArr[i] ? earningsArr[i].label : '',
                 earningsArr[i] ? `Rs. ${parseFloat(earningsArr[i].amount).toLocaleString('en-IN')}` : '',
@@ -414,7 +501,7 @@ const SuperAdminPayslipsCom = () => {
                 0: { cellWidth: 60 },
                 1: { cellWidth: 33, halign: 'right' },
                 2: { cellWidth: 55 },
-                3: { cellWidth: 32, halign: 'right', textColor: [220, 38, 38] }, 
+                3: { cellWidth: 32, halign: 'right', textColor: [220, 38, 38] },
             },
             head: [['EARNINGS', 'AMOUNT', 'DEDUCTIONS', 'AMOUNT']],
             body: bodyData,
@@ -439,7 +526,7 @@ const SuperAdminPayslipsCom = () => {
         doc.text('Gross Salary', margin + 4, y + 5.4);
         doc.text(`₹${formatCurrency(record.grossSalary)}`, margin + 89, y + 5.4, { align: 'right' });
         doc.text('Total Deductions', margin + 97, y + 5.4);
-        doc.setTextColor(220, 38, 38); 
+        doc.setTextColor(220, 38, 38);
         doc.text(`₹${formatCurrency(record.totalDeductions)}`, pageW - margin - 4, y + 5.4, { align: 'right' });
 
         y += rowH;
@@ -523,25 +610,22 @@ const SuperAdminPayslipsCom = () => {
         return doc;
     };
 
-    // -----------------------------------------------------------------------
-    // Single Email Logic
-    // -----------------------------------------------------------------------
     const handleSendEmail = async (record) => {
         if (!record.email) return alert("Employee doesn't have a registered email.");
-        
+
         setIsEmailing(true);
         setApiError('');
         try {
             const doc = await buildPayslipPDF(record);
-            const pdfBase64 = btoa(doc.output()); 
+            const pdfBase64 = btoa(doc.output());
 
-            await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-payslips/send`, { 
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-payslips/send`, {
                 record,
-                pdfBase64 
+                pdfBase64
             }, getAuthConfig());
-            
+
             setPayslips(prev => prev.map(p => p.id === record.id ? { ...p, status: 'Sent' } : p));
-            
+
             setSuccessMsg(`Payslip successfully emailed to ${record.employee_name}.`);
             setTimeout(() => setSuccessMsg(''), 4000);
         } catch (error) {
@@ -553,12 +637,9 @@ const SuperAdminPayslipsCom = () => {
         }
     };
 
-    // -----------------------------------------------------------------------
-    // Bulk Email Logic
-    // -----------------------------------------------------------------------
     const handleBulkSendEmails = async () => {
         const pendingRecords = payslips.filter(p => p.status === 'Generated' && p.email);
-        
+
         if (pendingRecords.length === 0) {
             return alert('No pending payslips to send (or missing emails).');
         }
@@ -577,11 +658,11 @@ const SuperAdminPayslipsCom = () => {
             }));
 
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-payslips/send-bulk`, { records: recordsWithPdfs }, getAuthConfig());
-            
-            setPayslips(prev => prev.map(p => 
+
+            setPayslips(prev => prev.map(p =>
                 (p.status === 'Generated' && p.email) ? { ...p, status: 'Sent' } : p
             ));
-            
+
             setSuccessMsg(response.data.message || `Successfully dispatched ${pendingRecords.length} emails with PDF attachments.`);
             setTimeout(() => setSuccessMsg(''), 5000);
         } catch (error) {
@@ -613,11 +694,11 @@ const SuperAdminPayslipsCom = () => {
             setIsBuildingPdf(true);
             const doc = await buildPayslipPDF(record);
             const blobUrl = doc.output('bloburl');
-            
+
             if (record.status !== 'Sent') {
                 setPayslips(prev => prev.map(p => p.id === record.id ? { ...p, status: 'Viewed' } : p));
             }
-            
+
             setPreviewUrl(blobUrl);
             setIsPreviewOpen(true);
         } catch (err) {
@@ -647,7 +728,6 @@ const SuperAdminPayslipsCom = () => {
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* ==================== PDF PREVIEW MODAL ==================== */}
             {isPreviewOpen && previewUrl && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center bg-[#010a1f]/90 backdrop-blur-md p-3 sm:p-6 animate-in fade-in duration-200">
                     <div className="relative w-full max-w-5xl h-[92vh] flex flex-col bg-white rounded-3xl shadow-2xl overflow-hidden">
@@ -696,7 +776,6 @@ const SuperAdminPayslipsCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
             <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
                 <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
@@ -739,7 +818,6 @@ const SuperAdminPayslipsCom = () => {
                 </div>
             </div>
 
-            {/* ==================== INFO BANNER ==================== */}
             <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start shadow-sm overflow-hidden">
                 <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -754,7 +832,6 @@ const SuperAdminPayslipsCom = () => {
                 </div>
             </div>
 
-            {/* ==================== STAT CARDS ==================== */}
             {!isLoading && payslips.length > 0 && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
                     {statCards.map((stat, i) => {
@@ -777,7 +854,6 @@ const SuperAdminPayslipsCom = () => {
                 </div>
             )}
 
-            {/* ==================== MESSAGES ==================== */}
             {successMsg && (
                 <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
                     <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
@@ -796,11 +872,10 @@ const SuperAdminPayslipsCom = () => {
                 </div>
             )}
 
-            {/* ==================== MASTER TABLE ==================== */}
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-10">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/40">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
                             <FaFileInvoiceDollar className="text-sm" />
@@ -808,7 +883,7 @@ const SuperAdminPayslipsCom = () => {
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Generated Payslips Directory</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredPayslips.length} of {payslips.length} {payslips.length === 1 ? 'record' : 'records'}
+                                {filteredPayslips.length} of {payslips.length} {payslips.length === 1 ? 'record' : 'records'} across {groupedPayslips.length} {groupedPayslips.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
@@ -821,22 +896,29 @@ const SuperAdminPayslipsCom = () => {
                                 placeholder="Search employee, ID, branch…"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 transition-all"
                             />
                         </div>
-                        <span className="bg-[#0437cc]/10 text-[#0437cc] text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-full border border-[#0437cc]/20 shrink-0 w-max self-start sm:self-auto">
-                            {filteredPayslips.length} Records
-                        </span>
+                        {groupedPayslips.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="p-5">
+                <div className="p-4 sm:p-5 space-y-4">
                     {isLoading ? (
                         <div className="p-12 text-center">
                             <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
                             <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading payslip records…</p>
                         </div>
-                    ) : filteredPayslips.length === 0 ? (
+                    ) : groupedPayslips.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaFileInvoice className="text-xl text-slate-300" />
@@ -846,142 +928,201 @@ const SuperAdminPayslipsCom = () => {
                             </p>
                         </div>
                     ) : (
-                        <div className="space-y-6">
-                            {Object.keys(groupedPayslips).map(company => (
-                                <div key={company} className="relative">
-                                    <h3 className="text-sm sm:text-base font-black text-[#010a1f] mb-3 pb-2 border-b border-slate-200 sticky top-0 bg-white z-10 pt-2">
-                                        {company}
-                                    </h3>
-                                    
-                                    <div className="space-y-4">
-                                        {Object.keys(groupedPayslips[company]).map(branch => {
-                                            const branchPayslips = groupedPayslips[company][branch];
-                                            const branchKey = `${company}_${branch}`;
-                                            const isExpanded = expandedBranches.includes(branchKey);
+                        groupedPayslips.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
 
-                                            return (
-                                                <div key={branchKey} className={`border rounded-2xl overflow-hidden transition-all duration-300 ${isExpanded ? 'border-[#0437cc]/30 shadow-md shadow-[#0437cc]/5' : 'border-slate-200 hover:border-slate-300'}`}>
-                                                    
-                                                    {/* Branch Header Row */}
-                                                    <div className={`px-4 py-3 flex flex-row items-center justify-between gap-3 cursor-pointer transition-colors ${isExpanded ? 'bg-gradient-to-r from-blue-50/80 to-indigo-50/40' : 'bg-slate-50/70 hover:bg-slate-50'}`}
-                                                         onClick={() => toggleBranchAccordion(branchKey)}
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
+                                                <FaBuilding className="text-sm" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Payslip' : 'Payslips'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 tabular-nums">
+                                                Net Pool: {formatCompactCurrency(companyGroup.totalNet)}
+                                            </span>
+                                            {companyGroup.sent > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-200">
+                                                    Sent: {companyGroup.sent}
+                                                </span>
+                                            )}
+                                            {companyGroup.generated > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                                    Pending: {companyGroup.generated}
+                                                </span>
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
                                                     >
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className="flex items-center gap-2 min-w-0">
-                                                                <span className="text-xs sm:text-sm font-bold text-slate-800 truncate">{branch}</span>
-                                                                <span className="text-[10px] font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-full shrink-0 shadow-sm">
-                                                                    {branchPayslips.length} Records
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.total} {branchGroup.total === 1 ? 'Payslip' : 'Payslips'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 tabular-nums">
+                                                                    Net: {formatCompactCurrency(branchGroup.totalNet)}
+                                                                </span>
+                                                                {branchGroup.sent > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-100">
+                                                                        {branchGroup.sent} Sent
+                                                                    </span>
+                                                                )}
+                                                                {branchGroup.generated > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                                                        {branchGroup.generated} Pending
+                                                                    </span>
+                                                                )}
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
                                                                 </span>
                                                             </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <button 
-                                                                className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all shadow-sm border ${isExpanded ? 'bg-[#0437cc] text-white border-[#0437cc]' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
-                                                            >
-                                                                {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
-                                                            </button>
-                                                        </div>
-                                                    </div>
+                                                        </button>
 
-                                                    {/* Branch Content (Payslips Table) */}
-                                                    {isExpanded && (
-                                                        <div className="overflow-x-auto bg-white border-t border-slate-100 custom-scrollbar">
-                                                            <table className="w-full text-left border-collapse min-w-[960px]">
-                                                                <thead>
-                                                                    <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/40">
-                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Employee</th>
-                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Pay Month</th>
-                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Gross Salary</th>
-                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Deductions</th>
-                                                                        <th className="px-5 py-3.5 font-bold whitespace-nowrap">Net Salary</th>
-                                                                        <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
-                                                                        <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="divide-y divide-slate-50">
-                                                                    {branchPayslips.map((record, i) => {
-                                                                        const StatusIcon = getStatusIcon(record.status);
-                                                                        return (
-                                                                            <tr key={i} className="transition-colors group hover:bg-slate-50/60">
-                                                                                <td className="px-5 py-4">
-                                                                                    <div className="flex items-center gap-3 min-w-0">
-                                                                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
-                                                                                            {record.employee_name?.charAt(0)}
+                                                        {isBranchOpen && (
+                                                            <div className="overflow-x-auto bg-white border-t border-slate-100 custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[920px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Employee</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Pay Month</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Gross Salary</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Deductions</th>
+                                                                            <th className="px-5 py-3.5 font-bold whitespace-nowrap">Net Salary</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.records.map((record, i) => {
+                                                                            const StatusIcon = getStatusIcon(record.status);
+                                                                            return (
+                                                                                <tr key={record.id || i} className="transition-colors group hover:bg-slate-50/60">
+                                                                                    <td className="px-5 py-4">
+                                                                                        <div className="flex items-center gap-3 min-w-0">
+                                                                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-[#0437cc]/20 group-hover:scale-105 transition-transform">
+                                                                                                {record.employee_name?.charAt(0)}
+                                                                                            </div>
+                                                                                            <div className="min-w-0">
+                                                                                                <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{record.employee_name}</p>
+                                                                                                <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                                                                    {record.employee_id}
+                                                                                                </span>
+                                                                                            </div>
                                                                                         </div>
-                                                                                        <div className="min-w-0">
-                                                                                            <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{record.employee_name}</p>
-                                                                                            <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
-                                                                                                {record.employee_id}
+                                                                                    </td>
+                                                                                    <td className="px-5 py-4">
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <span className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                                                                                                <FaCalendarAlt className="text-slate-500 text-[10px]" />
                                                                                             </span>
+                                                                                            <p className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">{record.pay_month || record.monthLabel}</p>
                                                                                         </div>
-                                                                                    </div>
-                                                                                </td>
-                                                                                <td className="px-5 py-4">
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <span className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                                                                                            <FaCalendarAlt className="text-slate-500 text-[10px]" />
+                                                                                    </td>
+                                                                                    <td className="px-5 py-4">
+                                                                                        <p className="text-xs sm:text-sm font-bold text-slate-700 tabular-nums whitespace-nowrap">{formatCurrency(record.grossSalary)}</p>
+                                                                                    </td>
+                                                                                    <td className="px-5 py-4">
+                                                                                        <p className="text-xs sm:text-sm font-bold text-red-600 tabular-nums whitespace-nowrap">-{formatCurrency(record.totalDeductions)}</p>
+                                                                                    </td>
+                                                                                    <td className="px-5 py-4">
+                                                                                        <p className="text-xs sm:text-sm font-black text-green-700 tabular-nums whitespace-nowrap">{formatCurrency(record.netSalary)}</p>
+                                                                                    </td>
+                                                                                    <td className="px-5 py-4 text-center">
+                                                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getStatusStyle(record.status)}`}>
+                                                                                            <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(record.status)}`}></span>
+                                                                                            <StatusIcon className="text-[9px]" />
+                                                                                            {record.status}
                                                                                         </span>
-                                                                                        <p className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">{record.pay_month}</p>
-                                                                                    </div>
-                                                                                </td>
-                                                                                <td className="px-5 py-4">
-                                                                                    <p className="text-xs sm:text-sm font-bold text-slate-700 tabular-nums whitespace-nowrap">{formatCurrency(record.grossSalary)}</p>
-                                                                                </td>
-                                                                                <td className="px-5 py-4">
-                                                                                    <p className="text-xs sm:text-sm font-bold text-red-600 tabular-nums whitespace-nowrap">-{formatCurrency(record.totalDeductions)}</p>
-                                                                                </td>
-                                                                                <td className="px-5 py-4">
-                                                                                    <p className="text-xs sm:text-sm font-black text-green-700 tabular-nums whitespace-nowrap">{formatCurrency(record.netSalary)}</p>
-                                                                                </td>
-                                                                                <td className="px-5 py-4 text-center">
-                                                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getStatusStyle(record.status)}`}>
-                                                                                        <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(record.status)}`}></span>
-                                                                                        <StatusIcon className="text-[9px]" />
-                                                                                        {record.status}
-                                                                                    </span>
-                                                                                </td>
-                                                                                <td className="px-5 py-4 text-right">
-                                                                                    <div className="flex gap-1 justify-end">
-                                                                                        <button
-                                                                                            onClick={() => handleView(record)}
-                                                                                            disabled={isBuildingPdf || isEmailing}
-                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                                            title="Preview Payslip"
-                                                                                        >
-                                                                                            <FaEye className="text-xs" />
-                                                                                        </button>
-                                                                                        <button
-                                                                                            onClick={() => handleDownload(record)}
-                                                                                            disabled={isBuildingPdf || isEmailing}
-                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                                            title="Download PDF"
-                                                                                        >
-                                                                                            <FaDownload className="text-xs" />
-                                                                                        </button>
-                                                                                        <button
-                                                                                            onClick={() => handleSendEmail(record)}
-                                                                                            disabled={isEmailing}
-                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                                            title="Email to Employee"
-                                                                                        >
-                                                                                            <FaEnvelope className="text-xs" />
-                                                                                        </button>
-                                                                                    </div>
-                                                                                </td>
-                                                                            </tr>
-                                                                        );
-                                                                    })}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                                                                    </td>
+                                                                                    <td className="px-5 py-4 text-right">
+                                                                                        <div className="flex gap-1 justify-end">
+                                                                                            <button
+                                                                                                onClick={() => handleView(record)}
+                                                                                                disabled={isBuildingPdf || isEmailing}
+                                                                                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                                title="Preview Payslip"
+                                                                                            >
+                                                                                                <FaEye className="text-xs" />
+                                                                                            </button>
+                                                                                            <button
+                                                                                                onClick={() => handleDownload(record)}
+                                                                                                disabled={isBuildingPdf || isEmailing}
+                                                                                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                                title="Download PDF"
+                                                                                            >
+                                                                                                <FaDownload className="text-xs" />
+                                                                                            </button>
+                                                                                            <button
+                                                                                                onClick={() => handleSendEmail(record)}
+                                                                                                disabled={isEmailing}
+                                                                                                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                                title="Email to Employee"
+                                                                                            >
+                                                                                                <FaEnvelope className="text-xs" />
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            );
+                                                                        })}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

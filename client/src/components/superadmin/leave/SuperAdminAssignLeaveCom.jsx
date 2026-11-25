@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaUserShield, FaPlaneDeparture, FaBuilding,
-    FaCalendarCheck, FaCheckCircle, FaTimesCircle, FaPaperPlane, FaInfoCircle, FaSearch, FaListUl, FaUsers
+    FaCalendarCheck, FaCheckCircle, FaTimesCircle, FaPaperPlane,
+    FaInfoCircle, FaSearch, FaListUl, FaUsers,
+    FaChevronDown, FaChevronUp, FaCodeBranch
 } from 'react-icons/fa';
 import Button from '../../common/Button';
 import Select from '../../common/Select';
@@ -21,7 +23,6 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => ({
     headers: {
         'Content-Type': 'application/json',
@@ -43,7 +44,6 @@ const SuperAdminAssignLeaveCom = () => {
         reason: 'Leave assigned manually by Super Admin.',
     };
 
-    // UI & Form States
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,16 +52,15 @@ const SuperAdminAssignLeaveCom = () => {
     const [apiError, setApiError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Organization Data
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [employees, setEmployees] = useState([]);
-    
-    // History Table Data
     const [assignedHistory, setAssignedHistory] = useState([]);
 
-    // Hardcoded Master List of Leave Types
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
+
     const standardLeaveTypes = [
         'Casual Leave',
         'Sick Leave',
@@ -78,7 +77,6 @@ const SuperAdminAssignLeaveCom = () => {
     const fetchInitialData = async () => {
         setLoading(true);
         try {
-            // Protected with individual catch blocks to prevent Promise.all failure
             const [compRes, branchRes, deptRes, empRes, histRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-company-profile`, getAuthConfig()).catch(() => ({ data: [] })),
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] })),
@@ -90,55 +88,56 @@ const SuperAdminAssignLeaveCom = () => {
             const companyData = compRes.data || [];
             const branchData = branchRes.data || [];
             const deptData = deptRes.data || [];
-            
-            // Map Employees to internal ID and Foreign IDs for filtering
-            let empData = [];
-            if (empRes.data) {
-                empData = empRes.data.map(e => {
-                    const c = companyData.find(comp => comp.company_name === e.company);
-                    const b = branchData.find(br => br.branch_name === e.branch);
-                    const d = deptData.find(dp => dp.department_name === e.department);
-                    
-                    return {
-                        id: e.id, 
-                        employee_id: e.employee_id,
-                        name: `${e.first_name} ${e.last_name}`,
-                        company_id: c ? c.id : null,
-                        branch_id: b ? b.id : null,
-                        department_id: d ? d.id : null
-                    };
-                });
-            }
+            const rawEmployees = empRes.data || [];
+
+            const empLookup = new Map();
+            const empData = rawEmployees.map(e => {
+                if (e.employee_id) empLookup.set(String(e.employee_id), e);
+                const c = companyData.find(comp => comp.company_name === e.company);
+                const b = branchData.find(br => br.branch_name === e.branch);
+                const d = deptData.find(dp => dp.department_name === e.department);
+
+                return {
+                    id: e.id,
+                    employee_id: e.employee_id,
+                    name: `${e.first_name} ${e.last_name}`,
+                    company_id: c ? c.id : null,
+                    branch_id: b ? b.id : null,
+                    department_id: d ? d.id : null
+                };
+            });
 
             setCompanies(companyData);
             setBranches(branchData);
             setDepartments(deptData);
             setEmployees(empData);
 
-            // Filter history to ONLY show leaves assigned by Super Admin
             if (histRes.data) {
-                const adminAssigned = histRes.data.filter(req => 
-                    req.reason && req.reason.includes('Super Admin')
-                ).map(req => ({
-                    id: req.id,
-                    emp_name: `${req.first_name || ''} ${req.last_name || ''}`.trim(),
-                    emp_id: req.employee_id,
-                    leave_type: req.leave_type,
-                    dates: `${new Date(req.from_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to ${new Date(req.to_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-                    assigned_by: 'Super Admin',
-                    status: req.status
-                }));
+                const adminAssigned = histRes.data
+                    .filter(req => req.reason && req.reason.includes('Super Admin'))
+                    .map(req => {
+                        const empInfo = empLookup.get(String(req.employee_id)) || {};
+                        return {
+                            id: req.id,
+                            emp_name: `${req.first_name || empInfo.first_name || ''} ${req.last_name || empInfo.last_name || ''}`.trim() || 'Employee',
+                            emp_id: req.employee_id,
+                            company: req.company || empInfo.company || 'Unassigned Company',
+                            branch: req.branch || empInfo.branch || 'Unassigned Branch',
+                            leave_type: req.leave_type,
+                            dates: `${new Date(req.from_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to ${new Date(req.to_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+                            assigned_by: 'Super Admin',
+                            status: req.status
+                        };
+                    });
                 setAssignedHistory(adminAssigned);
             }
-
         } catch (error) {
-            console.error("Error fetching data:", error);
+            console.error('Error fetching data:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    // Guarded execution: Only run when user & token are present
     useEffect(() => {
         if (user && localStorage.getItem('token')) {
             fetchInitialData();
@@ -147,33 +146,135 @@ const SuperAdminAssignLeaveCom = () => {
         }
     }, [user]);
 
-    // Merge Dynamic DB Policies with Standard List (Remove Duplicates)
     const allLeaveTypeOptions = standardLeaveTypes.map(type => ({
         value: type,
         label: type
     }));
 
-    // ==================== CASCADING DROPDOWNS ====================
     const filteredBranches = branches.filter(b => b.company_id === parseInt(formData.companyId));
-    const filteredDepartments = departments.filter(d => 
-        (formData.branchId ? d.branch_id === parseInt(formData.branchId) : true) && 
+    const filteredDepartments = departments.filter(d =>
+        (formData.branchId ? d.branch_id === parseInt(formData.branchId) : true) &&
         (formData.companyId ? d.company_id === parseInt(formData.companyId) : true)
     );
-    const filteredEmployees = employees.filter(e => 
+    const filteredEmployees = employees.filter(e =>
         (formData.companyId ? e.company_id === parseInt(formData.companyId) : true) &&
         (formData.branchId ? e.branch_id === parseInt(formData.branchId) : true) &&
         (formData.departmentId ? e.department_id === parseInt(formData.departmentId) : true)
     );
 
+    const filteredHistory = useMemo(() => {
+        const q = searchTerm.toLowerCase();
+        return assignedHistory.filter(h =>
+            `${h.emp_name} ${h.emp_id} ${h.company} ${h.branch} ${h.leave_type}`.toLowerCase().includes(q)
+        );
+    }, [assignedHistory, searchTerm]);
+
+    const groupedHistory = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredHistory.forEach(record => {
+            const companyName = record.company?.trim() || 'Unassigned Company';
+            const branchName = record.branch?.trim() || 'Unassigned Branch';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    total: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.total += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    records: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+            branchGroup.records.push(record);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredHistory]);
+
+    useEffect(() => {
+        if (groupedHistory.length === 0) return;
+
+        if (searchTerm.trim() !== '') {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedHistory.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedHistory[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedHistory, searchTerm]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedHistory.length === 0) return false;
+        return groupedHistory.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedHistory, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedHistory.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         let updates = { [name]: value };
 
-        // Reset child dropdowns if parent changes
         if (name === 'companyId') {
-            updates.branchId = ''; updates.departmentId = ''; updates.employeeId = '';
+            updates.branchId = '';
+            updates.departmentId = '';
+            updates.employeeId = '';
         } else if (name === 'branchId') {
-            updates.departmentId = ''; updates.employeeId = '';
+            updates.departmentId = '';
+            updates.employeeId = '';
         } else if (name === 'departmentId') {
             updates.employeeId = '';
         }
@@ -184,7 +285,6 @@ const SuperAdminAssignLeaveCom = () => {
         if (successMsg) setSuccessMsg('');
     };
 
-    // ==================== SUBMISSION LOGIC ====================
     const validateForm = () => {
         let newErrors = {};
         if (!formData.companyId) newErrors.companyId = 'Company is required';
@@ -192,13 +292,13 @@ const SuperAdminAssignLeaveCom = () => {
         if (!formData.leaveType) newErrors.leaveType = 'Leave type is required';
         if (!formData.fromDate) newErrors.fromDate = 'Start date is required';
         if (!formData.toDate) newErrors.toDate = 'End date is required';
-        
+
         if (formData.fromDate && formData.toDate) {
             if (new Date(formData.toDate) < new Date(formData.fromDate)) {
                 newErrors.toDate = 'End date cannot be before start date';
             }
         }
-        
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -216,7 +316,7 @@ const SuperAdminAssignLeaveCom = () => {
                 companyId: formData.companyId,
                 branchId: formData.branchId,
                 departmentId: formData.departmentId,
-                employeeId: formData.employeeId, // Sends 'ALL' or a specific ID
+                employeeId: formData.employeeId,
                 leaveType: formData.leaveType,
                 fromDate: formData.fromDate,
                 toDate: formData.toDate,
@@ -224,7 +324,7 @@ const SuperAdminAssignLeaveCom = () => {
             };
 
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/leave/admin-assign`, payload, getAuthConfig());
-            
+
             let empName = '';
             if (formData.employeeId === 'ALL') {
                 empName = `${response.data.count} Employee(s) via Bulk Assign`;
@@ -232,16 +332,11 @@ const SuperAdminAssignLeaveCom = () => {
                 const selectedEmp = employees.find(emp => emp.id === parseInt(formData.employeeId));
                 empName = selectedEmp?.name || formData.employeeId;
             }
-            
-            setSuccessMsg(`Successfully assigned ${formData.leaveType} to ${empName}.`);
-            
-            // Refresh history table live from database
-            fetchInitialData();
 
-            // Reset specific form fields
+            setSuccessMsg(`Successfully assigned ${formData.leaveType} to ${empName}.`);
+            fetchInitialData();
             setFormData(prev => ({ ...prev, fromDate: '', toDate: '', leaveType: '', reason: 'Leave assigned manually by Super Admin.' }));
             window.scrollTo({ top: 0, behavior: 'smooth' });
-
         } catch (error) {
             setApiError(error.response?.data?.message || 'Failed to assign leave. Please try again.');
         } finally {
@@ -249,7 +344,6 @@ const SuperAdminAssignLeaveCom = () => {
         }
     };
 
-    // ==================== SHIMMER ====================
     if (loading && companies.length === 0) {
         return (
             <div className="space-y-6 pb-10 w-full overflow-hidden animate-pulse">
@@ -273,7 +367,6 @@ const SuperAdminAssignLeaveCom = () => {
                 `}
             </style>
 
-            {/* ==================== PAGE HEADER ==================== */}
             <div className="dm-sans-root relative bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#f77704]/[0.05] rounded-full blur-3xl pointer-events-none"></div>
 
@@ -289,7 +382,6 @@ const SuperAdminAssignLeaveCom = () => {
                 </div>
             </div>
 
-            {/* ==================== MESSAGES ==================== */}
             {successMsg && (
                 <div className="dm-sans-root relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3.5 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-3 overflow-hidden shadow-sm animate-in slide-in-from-top-2">
                     <span className="w-8 h-8 rounded-xl bg-white flex items-center justify-center border border-green-200 shrink-0 shadow-sm">
@@ -308,10 +400,7 @@ const SuperAdminAssignLeaveCom = () => {
                 </div>
             )}
 
-            {/* ==================== MAIN FORM ==================== */}
             <form onSubmit={handleAssignLeave} className="dm-sans-root space-y-5 sm:space-y-6">
-                
-                {/* Warning Banner */}
                 <div className="relative bg-gradient-to-br from-[#0437cc]/5 to-blue-50/50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start shadow-sm overflow-hidden">
                     <div className="absolute -top-8 -right-8 w-32 h-32 bg-[#0437cc]/10 rounded-full blur-3xl pointer-events-none"></div>
                     <span className="relative w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-blue-100 mt-0.5">
@@ -328,7 +417,6 @@ const SuperAdminAssignLeaveCom = () => {
                 <div className="relative bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#0437cc]/[0.02] rounded-full blur-[80px] pointer-events-none"></div>
 
-                    {/* Section 1: Target Selection */}
                     <div className="p-5 sm:p-7 border-b border-slate-100 bg-slate-50/30">
                         <div className="flex items-center gap-2 mb-5">
                             <span className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center border border-blue-100 shadow-sm">
@@ -336,7 +424,7 @@ const SuperAdminAssignLeaveCom = () => {
                             </span>
                             <h3 className="text-sm font-bold text-[#010a1f] uppercase tracking-wider">Step 1: Select Target Audience</h3>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
                             <FieldWrapper error={errors.companyId}>
                                 <Select
@@ -378,8 +466,8 @@ const SuperAdminAssignLeaveCom = () => {
                                     onChange={handleInputChange}
                                     disabled={!formData.companyId}
                                     options={[
-                                        { value: '', label: 'Select Target' }, 
-                                        { value: 'ALL', label: '--- ALL EMPLOYEES (Bulk Assign) ---' }, 
+                                        { value: '', label: 'Select Target' },
+                                        { value: 'ALL', label: '--- ALL EMPLOYEES (Bulk Assign) ---' },
                                         ...filteredEmployees.map(e => ({ value: e.id, label: `${e.name} (${e.employee_id})` }))
                                     ]}
                                 />
@@ -387,7 +475,6 @@ const SuperAdminAssignLeaveCom = () => {
                         </div>
                     </div>
 
-                    {/* Section 2: Leave Details */}
                     <div className="p-5 sm:p-7 relative z-10">
                         <div className="flex items-center gap-2 mb-5">
                             <span className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center border border-orange-100 shadow-sm">
@@ -431,7 +518,7 @@ const SuperAdminAssignLeaveCom = () => {
                                     />
                                 </FieldWrapper>
                             </div>
-                            
+
                             <div className="lg:col-span-1 h-full flex flex-col">
                                 <FieldWrapper error={errors.reason}>
                                     <div className="flex flex-col gap-1 w-full h-full">
@@ -451,11 +538,11 @@ const SuperAdminAssignLeaveCom = () => {
                         </div>
 
                         <div className="pt-6 mt-6 border-t border-slate-100 flex justify-end">
-                            <Button 
-                                type="submit" 
-                                variant="primary" 
-                                icon={FaPaperPlane} 
-                                disabled={isSubmitting} 
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                icon={FaPaperPlane}
+                                disabled={isSubmitting}
                                 className="w-full sm:w-auto sm:px-8 shadow-lg shadow-[#0437cc]/25 text-sm py-3 rounded-xl"
                             >
                                 {isSubmitting ? 'Processing Assignment...' : (formData.employeeId === 'ALL' ? 'Bulk Assign Leave' : 'Confirm & Assign Leave')}
@@ -465,90 +552,193 @@ const SuperAdminAssignLeaveCom = () => {
                 </div>
             </form>
 
-            {/* ==================== RECENT ASSIGNMENTS TABLE ==================== */}
             <div className="dm-sans-root bg-white rounded-3xl shadow-[0_8px_30px_-10px_rgba(0,0,0,0.06)] border border-slate-100 overflow-hidden flex flex-col mt-8">
-                <div className="p-5 sm:p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div className="p-5 sm:p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex flex-col md:flex-row justify-between md:items-center gap-4">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 border border-indigo-100">
                             <FaListUl className="text-indigo-600 text-sm" />
                         </span>
                         <div className="min-w-0">
                             <h2 className="text-base font-bold text-[#010a1f] truncate">Recent Admin Overrides</h2>
-                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">Leaves assigned directly via this console</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                {filteredHistory.length} {filteredHistory.length === 1 ? 'override' : 'overrides'} across {groupedHistory.length} {groupedHistory.length === 1 ? 'company' : 'companies'}
+                            </p>
                         </div>
                     </div>
-                    
-                    <div className="relative w-full sm:w-64 shrink-0">
-                        <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
-                        <input
-                            type="text"
-                            placeholder="Search employee..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-[13px] font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white transition-all shadow-sm"
-                        />
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto shrink-0">
+                        <div className="relative w-full sm:w-64">
+                            <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                            <input
+                                type="text"
+                                placeholder="Search employee, ID, branch..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-[13px] font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white transition-all shadow-sm"
+                            />
+                        </div>
+                        {groupedHistory.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="overflow-x-auto custom-scrollbar">
-                    {assignedHistory.length === 0 ? (
+                <div className="p-4 sm:p-5 space-y-4">
+                    {groupedHistory.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mx-auto mb-3">
                                 <FaCalendarCheck className="text-xl text-slate-300" />
                             </div>
-                            <p className="text-sm font-semibold text-slate-400">No leaves have been manually assigned yet.</p>
+                            <p className="text-sm font-semibold text-slate-400">
+                                {searchTerm ? 'No assigned leaves match your search.' : 'No leaves have been manually assigned yet.'}
+                            </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[800px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-6 py-4 font-bold whitespace-nowrap">Employee Info</th>
-                                    <th className="px-6 py-4 font-bold whitespace-nowrap">Leave Type</th>
-                                    <th className="px-6 py-4 font-bold whitespace-nowrap">Dates Granted</th>
-                                    <th className="px-6 py-4 font-bold text-center whitespace-nowrap">Assigned By</th>
-                                    <th className="px-6 py-4 font-bold text-right whitespace-nowrap">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {assignedHistory.filter(h => h.emp_name.toLowerCase().includes(searchTerm.toLowerCase())).map((record, i) => (
-                                    <tr key={i} className="hover:bg-slate-50/60 transition-colors group">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md ${record.emp_id === 'BULK-ASSIGN' ? 'bg-gradient-to-br from-[#f77704] to-orange-500' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6]'}`}>
-                                                    {record.emp_id === 'BULK-ASSIGN' ? <FaUsers size={16} /> : record.emp_name.charAt(0)}
-                                                </div>
-                                                <div>
-                                                    <p className={`text-[13px] font-bold ${record.emp_id === 'BULK-ASSIGN' ? 'text-[#f77704]' : 'text-[#010a1f]'}`}>{record.emp_name}</p>
-                                                    <p className="text-[10px] font-mono font-bold text-slate-500">{record.emp_id}</p>
-                                                </div>
+                        groupedHistory.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
+
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
+                                                <FaBuilding className="text-sm" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Override' : 'Overrides'}
+                                                </p>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-100 rounded-md text-[11px] font-bold text-purple-700 uppercase tracking-wide">
-                                                <FaPlaneDeparture className="text-[9px]" />
-                                                {record.leave_type}
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                {companyGroup.total} Assigned
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <p className="text-[12px] font-semibold text-slate-600 whitespace-nowrap bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">
-                                                {record.dates}
-                                            </p>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-1 rounded-full shadow-sm">
-                                                {record.assigned_by}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border text-teal-700 bg-teal-50 border-teal-200 justify-end">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
-                                                {record.status}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        </div>
+                                    </button>
+
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.total} {branchGroup.total === 1 ? 'Override' : 'Overrides'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-100">
+                                                                    {branchGroup.total} Assigned
+                                                                </span>
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[760px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-6 py-3.5 font-bold whitespace-nowrap">Employee Info</th>
+                                                                            <th className="px-6 py-3.5 font-bold whitespace-nowrap">Leave Type</th>
+                                                                            <th className="px-6 py-3.5 font-bold whitespace-nowrap">Dates Granted</th>
+                                                                            <th className="px-6 py-3.5 font-bold text-center whitespace-nowrap">Assigned By</th>
+                                                                            <th className="px-6 py-3.5 font-bold text-right whitespace-nowrap">Status</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.records.map((record, i) => (
+                                                                            <tr key={record.id || i} className="hover:bg-slate-50/60 transition-colors group">
+                                                                                <td className="px-6 py-4">
+                                                                                    <div className="flex items-center gap-3">
+                                                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md ${record.emp_id === 'BULK-ASSIGN' ? 'bg-gradient-to-br from-[#f77704] to-orange-500' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6]'}`}>
+                                                                                            {record.emp_id === 'BULK-ASSIGN' ? <FaUsers size={16} /> : record.emp_name.charAt(0)}
+                                                                                        </div>
+                                                                                        <div>
+                                                                                            <p className={`text-[13px] font-bold ${record.emp_id === 'BULK-ASSIGN' ? 'text-[#f77704]' : 'text-[#010a1f]'}`}>{record.emp_name}</p>
+                                                                                            <p className="text-[10px] font-mono font-bold text-slate-500">{record.emp_id}</p>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-6 py-4">
+                                                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-100 rounded-md text-[11px] font-bold text-purple-700 uppercase tracking-wide">
+                                                                                        <FaPlaneDeparture className="text-[9px]" />
+                                                                                        {record.leave_type}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-6 py-4">
+                                                                                    <p className="text-[12px] font-semibold text-slate-600 whitespace-nowrap bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block">
+                                                                                        {record.dates}
+                                                                                    </p>
+                                                                                </td>
+                                                                                <td className="px-6 py-4 text-center">
+                                                                                    <span className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-1 rounded-full shadow-sm">
+                                                                                        {record.assigned_by}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-6 py-4 text-right">
+                                                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border text-teal-700 bg-teal-50 border-teal-200 justify-end">
+                                                                                        <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+                                                                                        {record.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

@@ -61,7 +61,7 @@ const menuItems = [
         ]
     },
     { title: 'Expenses & Reimbursements', icon: FaFileInvoiceDollar, path: '/superadmin/expenses' },
-    { title: 'Loans & Advances', icon: FaHandHoldingUsd, path: '/superadmin/loans' },
+    // { title: 'Loans & Advances', icon: FaHandHoldingUsd, path: '/superadmin/loans' },
     {
         title: 'Reports', icon: FaChartBar,
         subItems: [

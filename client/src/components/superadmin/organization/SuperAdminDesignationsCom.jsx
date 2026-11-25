@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaInfoCircle, FaCheck, FaTimes, FaIdBadge,
     FaSitemap, FaCode, FaLayerGroup, FaUsers,
     FaEye, FaEdit, FaTrash, FaBuilding, FaNetworkWired,
-    FaSearch, FaFilter
+    FaSearch, FaFilter, FaChevronDown, FaChevronUp, FaCodeBranch
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -60,6 +60,9 @@ const SuperAdminDesignationsCom = () => {
     const [statusFilter, setStatusFilter] = useState('All');
     const [hierarchyFilter, setHierarchyFilter] = useState('All');
 
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
+
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -81,14 +84,45 @@ const SuperAdminDesignationsCom = () => {
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-designations`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
-            setCompanies(compRes.data || []);
-            setDepartments(deptRes.data || []);
-            setDesignations(desigRes.data || []);
+            const compList = compRes.data || [];
+            const deptList = deptRes.data || [];
+            const deptMap = new Map();
+            deptList.forEach(d => deptMap.set(String(d.id), d));
 
-            if (deptRes.data && deptRes.data.length > 0 && !isEditing) {
-                setFormData(prev => ({ ...prev, departmentId: deptRes.data[0].id }));
+            const compByIdMap = new Map();
+            const compByNameMap = new Map();
+            compList.forEach(c => {
+                compByIdMap.set(String(c.id), c);
+                if (c.company_name) compByNameMap.set(c.company_name.trim().toLowerCase(), c);
+            });
+
+            const enrichedDesignations = (desigRes.data || []).map(desig => {
+                const parentDept = deptMap.get(String(desig.department_id)) || {};
+                const companyName = desig.company_name || parentDept.company_name || 'Unassigned Company';
+                const branchName = desig.branch_name || parentDept.branch_name || 'Unassigned Branch';
+                const departmentName = desig.department_name || parentDept.department_name || 'Unassigned Department';
+                const parentCompany =
+                    compByIdMap.get(String(parentDept.company_id)) ||
+                    compByNameMap.get(companyName.trim().toLowerCase()) ||
+                    null;
+
+                return {
+                    ...desig,
+                    company_name: companyName,
+                    branch_name: branchName,
+                    department_name: departmentName,
+                    company_logo: parentCompany?.logo || null
+                };
+            });
+
+            setCompanies(compList);
+            setDepartments(deptList);
+            setDesignations(enrichedDesignations);
+
+            if (deptList.length > 0 && !isEditing) {
+                setFormData(prev => ({ ...prev, departmentId: prev.departmentId || deptList[0].id }));
             }
-            setApiError(''); 
+            setApiError('');
         } catch (error) {
             console.error('Failed to load core data', error);
         } finally {
@@ -103,7 +137,6 @@ const SuperAdminDesignationsCom = () => {
         } else {
             setIsLoading(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleInputChange = (e) => {
@@ -179,7 +212,7 @@ const SuperAdminDesignationsCom = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this designation? It may impact associated employees.")) return;
+        if (!window.confirm('Are you sure you want to delete this designation? It may impact associated employees.')) return;
         try {
             await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-designations/${id}`, getAuthConfig());
             fetchCoreData();
@@ -191,24 +224,131 @@ const SuperAdminDesignationsCom = () => {
     };
 
     const handleView = (desig) => {
-        const parentDept = departments.find(d => d.id === desig.department_id);
-        const parentCompany = companies.find(c => c.id === parentDept?.company_id);
-        setViewDesig({ ...desig, logo: parentCompany?.logo });
+        setViewDesig({ ...desig, logo: desig.company_logo });
         setIsViewModalOpen(true);
     };
 
-    const filteredDesignations = designations.filter(desig => {
-        const searchStr = `${desig.designation_name} ${desig.company_name} ${desig.department_name}`.toLowerCase();
-        const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === 'All' || desig.status === statusFilter;
-        const matchesHierarchy = hierarchyFilter === 'All' || desig.hierarchy_level === hierarchyFilter;
-        return matchesSearch && matchesStatus && matchesHierarchy;
-    });
+    const filteredDesignations = useMemo(() => {
+        const q = searchTerm.toLowerCase();
+        return designations.filter(desig => {
+            const searchStr = `${desig.designation_name} ${desig.designation_code} ${desig.company_name} ${desig.branch_name} ${desig.department_name}`.toLowerCase();
+            const matchesSearch = searchStr.includes(q);
+            const matchesStatus = statusFilter === 'All' || desig.status === statusFilter;
+            const matchesHierarchy = hierarchyFilter === 'All' || desig.hierarchy_level === hierarchyFilter;
+            return matchesSearch && matchesStatus && matchesHierarchy;
+        });
+    }, [designations, searchTerm, statusFilter, hierarchyFilter]);
+
+    const groupedDesignations = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredDesignations.forEach(desig => {
+            const companyName = desig.company_name?.trim() || 'Unassigned Company';
+            const branchName = desig.branch_name?.trim() || 'Unassigned Branch';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    logo: desig.company_logo || null,
+                    total: 0,
+                    active: 0,
+                    inactive: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            if (!compGroup.logo && desig.company_logo) compGroup.logo = desig.company_logo;
+            compGroup.total += 1;
+            if (desig.status === 'Active') compGroup.active += 1;
+            else compGroup.inactive += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    active: 0,
+                    inactive: 0,
+                    records: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+            if (desig.status === 'Active') branchGroup.active += 1;
+            else branchGroup.inactive += 1;
+            branchGroup.records.push(desig);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredDesignations]);
+
+    useEffect(() => {
+        if (groupedDesignations.length === 0) return;
+
+        const hasActiveFilter = searchTerm.trim() !== '' || statusFilter !== 'All' || hierarchyFilter !== 'All';
+
+        if (hasActiveFilter) {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedDesignations.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedDesignations[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedDesignations, searchTerm, statusFilter, hierarchyFilter]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedDesignations.length === 0) return false;
+        return groupedDesignations.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedDesignations, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedDesignations.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
 
     if (isLoading) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
-                {/* Non-Sticky Header Shimmer */}
                 <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
                         <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
@@ -225,7 +365,6 @@ const SuperAdminDesignationsCom = () => {
 
                 <div className="bg-slate-100 rounded-2xl h-24 w-full border border-slate-200"></div>
 
-                {/* Form Shimmer */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <div className="md:col-span-2 lg:col-span-3 space-y-2">
                         <div className="h-4 bg-slate-200 rounded w-1/6"></div>
@@ -239,7 +378,6 @@ const SuperAdminDesignationsCom = () => {
                     ))}
                 </div>
 
-                {/* List Table Shimmer */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[400px]">
                     <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-3 w-1/3">
@@ -300,7 +438,6 @@ const SuperAdminDesignationsCom = () => {
                         </div>
 
                         <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
-
                             <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4">
                                 <h3 className="text-lg sm:text-xl font-bold text-[#010a1f] truncate">{viewDesig.designation_name}</h3>
                                 <span className="inline-block mt-2 text-[11px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2.5 py-1 rounded-lg tracking-wide">
@@ -519,7 +656,7 @@ const SuperAdminDesignationsCom = () => {
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="relative p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-slate-50/40">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
                             <FaUsers className="text-sm" />
@@ -527,30 +664,30 @@ const SuperAdminDesignationsCom = () => {
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Active Designations</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredDesignations.length} of {designations.length} {designations.length === 1 ? 'role' : 'roles'}
+                                {filteredDesignations.length} of {designations.length} {designations.length === 1 ? 'role' : 'roles'} across {groupedDesignations.length} {groupedDesignations.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2.5 w-full xl:w-auto shrink-0">
-                        <div className="relative w-full sm:w-64 flex-1">
+                    <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full xl:w-auto shrink-0">
+                        <div className="relative w-full sm:w-56 flex-1">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <input
                                 type="text"
-                                placeholder="Search role, dept or company…"
+                                placeholder="Search role, dept, branch…"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 transition-all"
                             />
                         </div>
 
                         <div className="flex gap-2.5">
-                            <div className="relative w-1/2 sm:w-44">
+                            <div className="relative flex-1 sm:w-40">
                                 <FaLayerGroup className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                                 <select
                                     value={hierarchyFilter}
                                     onChange={(e) => setHierarchyFilter(e.target.value)}
-                                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white cursor-pointer transition-all appearance-none"
+                                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 cursor-pointer transition-all appearance-none"
                                 >
                                     <option value="All">All Levels</option>
                                     <option value="Entry Level">Entry Level</option>
@@ -562,12 +699,12 @@ const SuperAdminDesignationsCom = () => {
                                 </select>
                             </div>
 
-                            <div className="relative w-1/2 sm:w-36">
+                            <div className="relative flex-1 sm:w-32">
                                 <FaFilter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white cursor-pointer transition-all appearance-none"
+                                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 cursor-pointer transition-all appearance-none"
                                 >
                                     <option value="All">All Status</option>
                                     <option value="Active">Active</option>
@@ -575,111 +712,210 @@ const SuperAdminDesignationsCom = () => {
                                 </select>
                             </div>
                         </div>
+
+                        {groupedDesignations.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="relative overflow-x-auto">
-                    {filteredDesignations.length === 0 ? (
+                <div className="p-4 sm:p-5 space-y-4">
+                    {groupedDesignations.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaIdBadge className="text-xl text-slate-300" />
                             </div>
                             <p className="text-xs sm:text-sm font-semibold text-slate-400">
-                                {searchTerm ? 'No designations match your search criteria.' : 'No designations created yet.'}
+                                {searchTerm || statusFilter !== 'All' || hierarchyFilter !== 'All'
+                                    ? 'No designations match your search criteria.'
+                                    : 'No designations created yet.'}
                             </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[820px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-3.5 font-bold">Designation & Code</th>
-                                    <th className="px-5 py-3.5 font-bold">Org Placement</th>
-                                    <th className="px-5 py-3.5 font-bold">Hierarchy Level</th>
-                                    <th className="px-5 py-3.5 font-bold text-center">Status</th>
-                                    <th className="px-5 py-3.5 font-bold text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredDesignations.map((desig, i) => {
-                                    const parentDept = departments.find(d => d.id === desig.department_id);
-                                    const parentCompany = companies.find(c => c.id === parentDept?.company_id);
+                        groupedDesignations.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
 
-                                    return (
-                                        <tr
-                                            key={i}
-                                            className={`transition-colors group ${isEditing && editId === desig.id
-                                                ? 'bg-orange-50/60'
-                                                : 'hover:bg-slate-50/60'
-                                                }`}
-                                        >
-                                            <td className="px-5 py-4">
-                                                <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{desig.designation_name}</p>
-                                                <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
-                                                    {desig.designation_code}
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-10 h-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center p-1.5 shrink-0 overflow-hidden shadow-sm">
+                                                {companyGroup.logo ? (
+                                                    <img src={companyGroup.logo} alt={companyGroup.companyName} className="w-full h-full object-contain" />
+                                                ) : (
+                                                    <FaBuilding className="text-[#0437cc] text-sm" />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Designation' : 'Designations'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                Active: {companyGroup.active}
+                                            </span>
+                                            {companyGroup.inactive > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                                    Inactive: {companyGroup.inactive}
                                                 </span>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <div className="flex items-start gap-3 min-w-0">
-                                                    <div className="w-10 h-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center p-1.5 shrink-0 overflow-hidden shadow-sm group-hover:scale-105 transition-transform">
-                                                        {parentCompany?.logo ? (
-                                                            <img src={parentCompany.logo} alt="logo" className="w-full h-full object-contain" />
-                                                        ) : (
-                                                            <FaBuilding className="text-slate-300" />
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.total} {branchGroup.total === 1 ? 'Designation' : 'Designations'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-100">
+                                                                    {branchGroup.active} Active
+                                                                </span>
+                                                                {branchGroup.inactive > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-100">
+                                                                        {branchGroup.inactive} Inactive
+                                                                    </span>
+                                                                )}
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[740px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-5 py-3.5 font-bold">Designation & Code</th>
+                                                                            <th className="px-5 py-3.5 font-bold">Department</th>
+                                                                            <th className="px-5 py-3.5 font-bold">Hierarchy Level</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-center">Status</th>
+                                                                            <th className="px-5 py-3.5 font-bold text-right">Actions</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.records.map((desig, i) => (
+                                                                            <tr
+                                                                                key={desig.id || i}
+                                                                                className={`transition-colors group ${isEditing && editId === desig.id
+                                                                                    ? 'bg-orange-50/60'
+                                                                                    : 'hover:bg-slate-50/60'
+                                                                                    }`}
+                                                                            >
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{desig.designation_name}</p>
+                                                                                    <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                                                        {desig.designation_code}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 min-w-0">
+                                                                                    <p className="text-xs sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5 truncate">
+                                                                                        <FaNetworkWired className="text-slate-400 text-[10px] shrink-0" />
+                                                                                        <span className="truncate">{desig.department_name}</span>
+                                                                                    </p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#f77704] bg-orange-50 border border-orange-100 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                                                                                        <FaLayerGroup className="text-[9px]" />
+                                                                                        {desig.hierarchy_level}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${desig.status === 'Active'
+                                                                                        ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                                                                        : 'text-red-700 bg-red-50 border-red-200'
+                                                                                        }`}>
+                                                                                        <span className={`w-1.5 h-1.5 rounded-full ${desig.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
+                                                                                        {desig.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-right">
+                                                                                    <div className="flex gap-1 justify-end">
+                                                                                        <button
+                                                                                            onClick={() => handleView(desig)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
+                                                                                            title="View Designation"
+                                                                                        >
+                                                                                            <FaEye className="text-xs" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleEdit(desig)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
+                                                                                            title="Edit Designation"
+                                                                                        >
+                                                                                            <FaEdit className="text-xs" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleDelete(desig.id)}
+                                                                                            className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                                                                                            title="Delete Designation"
+                                                                                        >
+                                                                                            <FaTrash className="text-xs" />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
                                                         )}
                                                     </div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{desig.company_name}</p>
-                                                        <p className="text-[10px] sm:text-xs font-semibold text-slate-500 mt-0.5 truncate">
-                                                            {desig.department_name} <span className="text-slate-300 mx-0.5">•</span> {desig.branch_name}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#f77704] bg-orange-50 border border-orange-100 px-2.5 py-1 rounded-lg whitespace-nowrap">
-                                                    <FaLayerGroup className="text-[9px]" />
-                                                    {desig.hierarchy_level}
-                                                </span>
-                                            </td>
-                                            <td className="px-5 py-4 text-center">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${desig.status === 'Active'
-                                                    ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                    : 'text-red-700 bg-red-50 border-red-200'
-                                                    }`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${desig.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
-                                                    {desig.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-5 py-4 text-right">
-                                                <div className="flex gap-1 justify-end">
-                                                    <button
-                                                        onClick={() => handleView(desig)}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
-                                                        title="View Designation"
-                                                    >
-                                                        <FaEye className="text-xs" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleEdit(desig)}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
-                                                        title="Edit Designation"
-                                                    >
-                                                        <FaEdit className="text-xs" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(desig.id)}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
-                                                        title="Delete Designation"
-                                                    >
-                                                        <FaTrash className="text-xs" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

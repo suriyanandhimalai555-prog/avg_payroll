@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
-    FaCalculator, FaPercent, FaRupeeSign, FaInfoCircle,
-    FaMoneyBillWave, FaToggleOn, FaToggleOff,
-    FaCheckCircle, FaExclamationTriangle, FaUsers, FaSearch, FaFilter,
-    FaBuilding, FaSitemap, FaCheck, FaTimes, FaEye, FaMagic, FaTasks, FaCogs, FaPlusCircle, FaMinusCircle
+    FaCalculator, FaMoneyBillWave, FaToggleOn, FaToggleOff,
+    FaCheckCircle, FaExclamationTriangle, FaUsers, FaSearch,
+    FaBuilding, FaSitemap, FaTimes, FaEye, FaMagic, FaTasks,
+    FaCogs, FaPlusCircle, FaMinusCircle, FaChevronDown,
+    FaChevronUp, FaCodeBranch
 } from 'react-icons/fa';
 import Button from '../../common/Button';
 
-// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -19,37 +19,31 @@ const getAuthConfig = () => {
 };
 
 const SuperAdminSalaryStructureCom = () => {
-    // ==================== STATE MANAGEMENT ====================
     const [loading, setLoading] = useState(true);
     const [structures, setStructures] = useState([]);
-    
-    // Filtering States
+
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCompany, setFilterCompany] = useState('');
     const [filterBranch, setFilterBranch] = useState('');
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
 
-    // Checkbox / Bulk Selection State
     const [selectedUids, setSelectedUids] = useState([]);
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
 
-    // Action States
     const [actionLoadingId, setActionLoadingId] = useState(null);
     const [isBulkLoading, setIsBulkLoading] = useState(false);
-    
-    // Custom Popup / Toast States
+
     const [successMsg, setSuccessMsg] = useState('');
     const [apiError, setApiError] = useState('');
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
 
-    // Local Gross Inputs (Stores live changes before saving)
     const [grossInputs, setGrossInputs] = useState({});
 
-    // View Modal State
     const [viewUser, setViewUser] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
-    // ==================== GLOBAL FORMULA ENGINE ====================
     const [previewGross, setPreviewGross] = useState(30000);
 
     const [earningsRules, setEarningsRules] = useState([
@@ -66,11 +60,20 @@ const SuperAdminSalaryStructureCom = () => {
         { id: 'esi', name: 'ESI', type: '%', rate: 0.75, basis: 'Gross', enabled: false },
         { id: 'healthInsurance', name: 'Health Insurance', type: 'Fixed', rate: 1500, basis: 'Fixed', enabled: false },
         { id: 'pt', name: 'Professional Tax', type: 'Fixed', rate: 200, basis: 'Fixed', enabled: false },
-        { id: 5, name: 'TDS', type: '%', rate: 10, basis: 'Gross', enabled: false },
+        { id: 'tds', name: 'TDS', type: '%', rate: 10, basis: 'Gross', enabled: false },
     ]);
 
-    // ==================== DATA FETCHING ====================
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
+
+    const showSuccess = (msg) => {
+        setSuccessMsg(msg);
+        setTimeout(() => setSuccessMsg(''), 5000);
+    };
+
+    const showError = (msg) => {
+        setApiError(msg);
+        setTimeout(() => setApiError(''), 5000);
+    };
 
     const fetchMasterData = async () => {
         setLoading(true);
@@ -107,7 +110,6 @@ const SuperAdminSalaryStructureCom = () => {
                     branch: user.branch,
                     department: user.department,
                     status: user.status || 'Active',
-                    
                     monthlySalary: parseNum(user.monthly_salary) > 0 ? parseNum(user.monthly_salary) : gross,
                     currentGross: gross,
                     currentDeductions: deductions,
@@ -128,38 +130,26 @@ const SuperAdminSalaryStructureCom = () => {
         fetchMasterData();
     }, []);
 
-    // ==================== NOTIFICATION HELPERS ====================
-    const showSuccess = (msg) => {
-        setSuccessMsg(msg);
-        setTimeout(() => setSuccessMsg(''), 5000);
-    };
-
-    const showError = (msg) => {
-        setApiError(msg);
-        setTimeout(() => setApiError(''), 5000);
-    };
-
-    // ==================== CALCULATION LOGIC ====================
     const calculateForUser = (grossInput) => {
         const gross = parseNum(grossInput) || 0;
         let basic = 0;
-        
+
         const computedEarnings = {};
         earningsRules.forEach(rule => {
-             const amt = rule.type === '%' ? (gross * parseNum(rule.rate) / 100) : parseNum(rule.rate);
-             computedEarnings[rule.id] = Math.round(amt);
-             if (rule.id === 'basic') basic = Math.round(amt);
+            const amt = rule.type === '%' ? (gross * parseNum(rule.rate) / 100) : parseNum(rule.rate);
+            computedEarnings[rule.id] = Math.round(amt);
+            if (rule.id === 'basic') basic = Math.round(amt);
         });
-        
+
         const computedDeductions = {};
         deductionsRules.forEach(rule => {
-             if (!rule.enabled) {
-                 computedDeductions[rule.id] = 0;
-                 return;
-             }
-             const baseAmt = rule.basis === 'Basic' ? basic : gross;
-             const amt = rule.type === '%' ? (baseAmt * parseNum(rule.rate) / 100) : parseNum(rule.rate);
-             computedDeductions[rule.id] = Math.round(amt);
+            if (!rule.enabled) {
+                computedDeductions[rule.id] = 0;
+                return;
+            }
+            const baseAmt = rule.basis === 'Basic' ? basic : gross;
+            const amt = rule.type === '%' ? (baseAmt * parseNum(rule.rate) / 100) : parseNum(rule.rate);
+            computedDeductions[rule.id] = Math.round(amt);
         });
 
         return {
@@ -186,7 +176,6 @@ const SuperAdminSalaryStructureCom = () => {
     const livePreviewNet = livePreviewTotalEarnings - livePreviewTotalDeductions;
     const totalEarningPercent = earningsRules.reduce((acc, curr) => curr.type === '%' && curr.basis === 'Gross' ? acc + parseNum(curr.rate) : acc, 0);
 
-    // ==================== SUBMISSION HANDLERS ====================
     const applyToDatabase = async (emp, calculatedStruct) => {
         const payload = {
             role: emp.role,
@@ -195,7 +184,6 @@ const SuperAdminSalaryStructureCom = () => {
             firstName: emp.originalData.firstName,
             lastName: emp.originalData.lastName,
             company: emp.company,
-            
             ctc: calculatedStruct.ctc,
             monthlySalary: calculatedStruct.monthlySalary,
             basic: calculatedStruct.basic,
@@ -218,18 +206,18 @@ const SuperAdminSalaryStructureCom = () => {
     const handleApplySingle = async (uid) => {
         const emp = structures.find(s => s.uid === uid);
         const targetGross = grossInputs[uid] !== undefined ? grossInputs[uid] : emp.monthlySalary;
-        
+
         if (targetGross <= 0) {
-            return showError("Target Gross Salary must be greater than zero.");
+            return showError('Target Gross Salary must be greater than zero.');
         }
-        
+
         setActionLoadingId(uid);
         try {
             const calculated = calculateForUser(targetGross);
             await applyToDatabase(emp, calculated);
-            
+
             showSuccess(`Salary structure dynamically applied & email dispatched to ${emp.userName}`);
-            await fetchMasterData(); // Refresh UI
+            await fetchMasterData();
         } catch (error) {
             console.error('Save Error:', error);
             showError('Failed to apply structure. Check console for details.');
@@ -238,22 +226,138 @@ const SuperAdminSalaryStructureCom = () => {
         }
     };
 
-    const initiateBulkApply = () => {
-        if (selectedUids.length === 0) {
-            return showError("Please select at least one user via the checkboxes to apply the formula.");
-        }
-        
-        // Open Custom Confirmation Modal instead of window.confirm
-        setConfirmConfig({
-            isOpen: true,
-            title: 'Deploy Global Formula',
-            message: `You are about to mathematically recalculate the active salary structure and dispatch email notifications to ${selectedUids.length} selected users based on their respective Monthly Gross targets. Do you wish to proceed?`,
-            onConfirm: executeBulkApply
+    const filteredStructures = useMemo(() => {
+        return structures.filter(struct => {
+            const matchSearch = `${struct.userName} ${struct.displayId} ${struct.department}`.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchCompany = filterCompany ? struct.company === filterCompany : true;
+            const matchBranch = filterBranch ? struct.branch === filterBranch : true;
+            return matchSearch && matchCompany && matchBranch;
         });
+    }, [structures, searchTerm, filterCompany, filterBranch]);
+
+    const groupedStructures = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredStructures.forEach(struct => {
+            const companyName = struct.company?.trim() || 'Unassigned Company';
+            const branchName = struct.branch?.trim() || 'Unassigned Branch';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    totalUsers: 0,
+                    totalNet: 0,
+                    uids: [],
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.totalUsers += 1;
+            compGroup.totalNet += struct.currentNet || 0;
+            compGroup.uids.push(struct.uid);
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    totalUsers: 0,
+                    totalNet: 0,
+                    uids: [],
+                    users: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.totalUsers += 1;
+            branchGroup.totalNet += struct.currentNet || 0;
+            branchGroup.uids.push(struct.uid);
+            branchGroup.users.push(struct);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredStructures]);
+
+    useEffect(() => {
+        if (groupedStructures.length === 0) return;
+
+        const hasActiveFilter = searchTerm.trim() !== '' || filterCompany !== '' || filterBranch !== '';
+
+        if (hasActiveFilter) {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedStructures.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedStructures[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedStructures, searchTerm, filterCompany, filterBranch]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedStructures.length === 0) return false;
+        return groupedStructures.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedStructures, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedStructures.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
+
+    const handleSelectGroup = (groupUids, e) => {
+        e.stopPropagation();
+        const allSelected = groupUids.every(uid => selectedUids.includes(uid));
+        if (allSelected) {
+            setSelectedUids(prev => prev.filter(uid => !groupUids.includes(uid)));
+        } else {
+            setSelectedUids(prev => Array.from(new Set([...prev, ...groupUids])));
+        }
+    };
+
+    const handleSelectOne = (uid) => {
+        setSelectedUids(prev =>
+            prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+        );
     };
 
     const executeBulkApply = async () => {
-        setConfirmConfig({ ...confirmConfig, isOpen: false }); // Close modal
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
         setIsBulkLoading(true);
         try {
             const targetEmployees = filteredStructures.filter(s => selectedUids.includes(s.uid));
@@ -265,8 +369,8 @@ const SuperAdminSalaryStructureCom = () => {
             });
 
             await Promise.all(promises);
-            showSuccess(`Successfully applied Global Salary Formula & dispatched emails to ${selectedUids.length} users!`);
-            setSelectedUids([]); // Clear selections after success
+            showSuccess(`Successfully applied Global Salary Formula & dispatched emails to ${targetEmployees.length} users!`);
+            setSelectedUids([]);
             await fetchMasterData();
         } catch (error) {
             showError('Bulk update failed. Some records or emails may not have processed properly.');
@@ -275,33 +379,23 @@ const SuperAdminSalaryStructureCom = () => {
         }
     };
 
-    // ==================== CHECKBOX HANDLERS ====================
-    const filteredStructures = structures.filter(struct => {
-        const matchSearch = `${struct.userName} ${struct.displayId} ${struct.department}`.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCompany = filterCompany ? struct.company === filterCompany : true;
-        const matchBranch = filterBranch ? struct.branch === filterBranch : true;
-        return matchSearch && matchCompany && matchBranch;
-    });
-
-    const handleSelectAll = (e) => {
-        if (e.target.checked) {
-            setSelectedUids(filteredStructures.map(s => s.uid));
-        } else {
-            setSelectedUids([]);
+    const initiateBulkApply = () => {
+        if (selectedUids.length === 0) {
+            return showError('Please select at least one user via the checkboxes to apply the formula.');
         }
+
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Deploy Global Formula',
+            message: `You are about to mathematically recalculate the active salary structure and dispatch email notifications to ${selectedUids.length} selected users based on their respective Monthly Gross targets. Do you wish to proceed?`,
+            onConfirm: executeBulkApply
+        });
     };
 
-    const handleSelectOne = (uid) => {
-        setSelectedUids(prev => 
-            prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
-        );
-    };
-
-    // ==================== UI HELPERS ====================
     const updateEarning = (id, field, value) => setEarningsRules(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
     const updateDeduction = (id, field, value) => setDeductionsRules(prev => prev.map(d => d.id === id ? { ...d, [field]: value } : d));
     const toggleDeduction = (id) => setDeductionsRules(prev => prev.map(d => d.id === id ? { ...d, enabled: !d.enabled } : d));
-    
+
     const formatCurrency = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
 
     const getRoleBadgeStyle = (role) => {
@@ -325,7 +419,6 @@ const SuperAdminSalaryStructureCom = () => {
                 `}
             </style>
 
-            {/* ==================== CUSTOM TOAST NOTIFICATIONS ==================== */}
             <div className="fixed top-6 right-6 z-[1000] flex flex-col gap-3 pointer-events-none">
                 {successMsg && (
                     <div className="bg-white border-l-4 border-green-500 text-slate-700 px-5 py-4 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] font-medium text-sm flex items-center gap-3 animate-in slide-in-from-right-8 pointer-events-auto max-w-md">
@@ -333,7 +426,7 @@ const SuperAdminSalaryStructureCom = () => {
                             <FaCheckCircle className="text-green-600 text-lg" />
                         </span>
                         <p className="leading-relaxed">{successMsg}</p>
-                        <button onClick={() => setSuccessMsg('')} className="ml-auto pl-2 text-slate-400 hover:text-slate-600"><FaTimes/></button>
+                        <button onClick={() => setSuccessMsg('')} className="ml-auto pl-2 text-slate-400 hover:text-slate-600"><FaTimes /></button>
                     </div>
                 )}
                 {apiError && (
@@ -342,12 +435,11 @@ const SuperAdminSalaryStructureCom = () => {
                             <FaExclamationTriangle className="text-red-600 text-lg" />
                         </span>
                         <p className="leading-relaxed">{apiError}</p>
-                        <button onClick={() => setApiError('')} className="ml-auto pl-2 text-slate-400 hover:text-slate-600"><FaTimes/></button>
+                        <button onClick={() => setApiError('')} className="ml-auto pl-2 text-slate-400 hover:text-slate-600"><FaTimes /></button>
                     </div>
                 )}
             </div>
 
-            {/* ==================== CONFIRMATION MODAL ==================== */}
             {confirmConfig.isOpen && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
@@ -359,16 +451,16 @@ const SuperAdminSalaryStructureCom = () => {
                             <h2 className="text-xl font-bold text-[#010a1f]">{confirmConfig.title}</h2>
                             <p className="text-sm text-slate-500 leading-relaxed">{confirmConfig.message}</p>
                             <div className="flex items-center gap-3 pt-4">
-                                <Button 
-                                    variant="ghost" 
-                                    className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl py-2.5 border-transparent" 
+                                <Button
+                                    variant="ghost"
+                                    className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl py-2.5 border-transparent"
                                     onClick={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
                                 >
                                     Cancel
                                 </Button>
-                                <Button 
-                                    variant="primary" 
-                                    className="flex-1 bg-gradient-to-r from-[#f77704] to-orange-500 hover:from-orange-600 hover:to-red-500 border-none shadow-lg shadow-orange-500/30 rounded-xl py-2.5" 
+                                <Button
+                                    variant="primary"
+                                    className="flex-1 bg-gradient-to-r from-[#f77704] to-orange-500 hover:from-orange-600 hover:to-red-500 border-none shadow-lg shadow-orange-500/30 rounded-xl py-2.5"
                                     onClick={confirmConfig.onConfirm}
                                 >
                                     Confirm Deploy
@@ -379,7 +471,6 @@ const SuperAdminSalaryStructureCom = () => {
                 </div>
             )}
 
-            {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewUser && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -401,7 +492,6 @@ const SuperAdminSalaryStructureCom = () => {
                         </div>
 
                         <div className="p-5 sm:p-6 space-y-5">
-                            {/* Summary Card */}
                             <div className="bg-gradient-to-br from-[#010a1f] to-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-[#0437cc]/30 rounded-full blur-3xl pointer-events-none"></div>
                                 <div className="relative z-10 flex justify-between items-center">
@@ -416,8 +506,7 @@ const SuperAdminSalaryStructureCom = () => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-5">
-                                {/* Earnings */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                                     <h3 className="text-[11px] font-bold text-green-700 uppercase tracking-wider mb-3 border-b border-slate-200 pb-2 flex items-center gap-1.5"><FaPlusCircle /> Earnings</h3>
                                     <div className="space-y-2.5">
@@ -430,7 +519,6 @@ const SuperAdminSalaryStructureCom = () => {
                                     </div>
                                 </div>
 
-                                {/* Deductions */}
                                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                                     <h3 className="text-[11px] font-bold text-red-600 uppercase tracking-wider mb-3 border-b border-slate-200 pb-2 flex items-center gap-1.5"><FaMinusCircle /> Deductions</h3>
                                     <div className="space-y-2.5">
@@ -448,7 +536,6 @@ const SuperAdminSalaryStructureCom = () => {
                 </div>
             )}
 
-            {/* ==================== PAGE HEADER ==================== */}
             <div className="dm-sans-root relative bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
 
@@ -465,11 +552,7 @@ const SuperAdminSalaryStructureCom = () => {
             </div>
 
             <div className="dm-sans-root grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
-                
-                {/* ==================== LEFT: GLOBAL FORMULA CONFIGURATOR ==================== */}
                 <div className="lg:col-span-2 space-y-5 sm:space-y-6">
-                    
-                    {/* EARNINGS */}
                     <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                         <div className="absolute -top-20 -right-20 w-48 h-48 bg-green-100/30 rounded-full blur-3xl pointer-events-none"></div>
                         <div className="relative p-5 border-b border-slate-100 flex justify-between items-center">
@@ -505,7 +588,7 @@ const SuperAdminSalaryStructureCom = () => {
                                                 <span className="text-xs sm:text-sm font-bold text-[#010a1f]">{item.name}</span>
                                             </td>
                                             <td className="px-3 py-2.5">
-                                                <select 
+                                                <select
                                                     value={item.type}
                                                     onChange={(e) => updateEarning(item.id, 'type', e.target.value)}
                                                     className="w-full text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0437cc] shadow-sm"
@@ -516,8 +599,8 @@ const SuperAdminSalaryStructureCom = () => {
                                             </td>
                                             <td className="px-3 py-2.5">
                                                 <div className="relative flex items-center">
-                                                    <input 
-                                                        type="number" 
+                                                    <input
+                                                        type="number"
                                                         value={item.rate}
                                                         onChange={(e) => updateEarning(item.id, 'rate', e.target.value)}
                                                         className="w-full text-[11px] font-bold text-[#0437cc] bg-blue-50 border border-blue-100 rounded-lg pl-3 pr-2 py-1.5 outline-none focus:border-[#0437cc] focus:ring-1 focus:ring-[#0437cc] shadow-inner tabular-nums"
@@ -525,7 +608,7 @@ const SuperAdminSalaryStructureCom = () => {
                                                 </div>
                                             </td>
                                             <td className="px-3 py-2.5">
-                                                <select 
+                                                <select
                                                     value={item.basis}
                                                     disabled={item.type === 'Fixed'}
                                                     className="w-full text-[11px] font-bold text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 outline-none disabled:opacity-60"
@@ -540,7 +623,6 @@ const SuperAdminSalaryStructureCom = () => {
                         </div>
                     </div>
 
-                    {/* DEDUCTIONS */}
                     <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                         <div className="absolute -top-20 -right-20 w-48 h-48 bg-red-100/30 rounded-full blur-3xl pointer-events-none"></div>
                         <div className="relative p-5 border-b border-slate-100 flex justify-between items-center">
@@ -570,7 +652,7 @@ const SuperAdminSalaryStructureCom = () => {
                                     {deductionsRules.map((item) => (
                                         <tr key={item.id} className={`transition-colors ${item.enabled ? 'hover:bg-slate-50/50' : 'bg-slate-50/30 opacity-70'}`}>
                                             <td className="px-5 py-2.5 text-center">
-                                                <button 
+                                                <button
                                                     onClick={() => toggleDeduction(item.id)}
                                                     className={`text-xl transition-colors ${item.enabled ? 'text-green-500 drop-shadow-sm' : 'text-slate-300'}`}
                                                 >
@@ -581,7 +663,7 @@ const SuperAdminSalaryStructureCom = () => {
                                                 <span className={`text-xs sm:text-sm font-bold ${item.enabled ? 'text-[#010a1f]' : 'text-slate-400'}`}>{item.name}</span>
                                             </td>
                                             <td className="px-3 py-2.5">
-                                                <select 
+                                                <select
                                                     value={item.type}
                                                     onChange={(e) => updateDeduction(item.id, 'type', e.target.value)}
                                                     disabled={!item.enabled}
@@ -593,8 +675,8 @@ const SuperAdminSalaryStructureCom = () => {
                                             </td>
                                             <td className="px-3 py-2.5">
                                                 <div className="relative flex items-center">
-                                                    <input 
-                                                        type="number" 
+                                                    <input
+                                                        type="number"
                                                         value={item.rate}
                                                         onChange={(e) => updateDeduction(item.id, 'rate', e.target.value)}
                                                         disabled={!item.enabled}
@@ -603,7 +685,7 @@ const SuperAdminSalaryStructureCom = () => {
                                                 </div>
                                             </td>
                                             <td className="px-3 py-2.5">
-                                                <select 
+                                                <select
                                                     value={item.basis}
                                                     onChange={(e) => updateDeduction(item.id, 'basis', e.target.value)}
                                                     disabled={!item.enabled || item.type === 'Fixed'}
@@ -621,11 +703,10 @@ const SuperAdminSalaryStructureCom = () => {
                     </div>
                 </div>
 
-                {/* ==================== RIGHT: LIVE PREVIEW SIMULATOR ==================== */}
                 <div className="lg:col-span-1">
                     <div className="bg-gradient-to-br from-[#010a1f] to-slate-800 rounded-2xl shadow-xl overflow-hidden relative border border-slate-700 h-full flex flex-col">
                         <div className="absolute top-0 right-0 w-48 h-48 bg-[#0437cc]/30 rounded-full blur-3xl pointer-events-none"></div>
-                        
+
                         <div className="px-5 py-5 border-b border-slate-700/50 flex justify-between items-center relative z-10">
                             <div>
                                 <h2 className="text-sm font-bold text-white flex items-center gap-2"><FaCalculator className="text-[#0437cc]" /> Dynamic Formula Preview</h2>
@@ -638,9 +719,9 @@ const SuperAdminSalaryStructureCom = () => {
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Simulate Monthly Gross Target</label>
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl font-black text-slate-500">₹</span>
-                                    <input 
-                                        type="number" 
-                                        value={previewGross} 
+                                    <input
+                                        type="number"
+                                        value={previewGross}
                                         onChange={(e) => setPreviewGross(Number(e.target.value))}
                                         className="w-full text-2xl font-black text-white bg-transparent border-none p-0 focus:ring-0 outline-none tabular-nums"
                                     />
@@ -675,11 +756,9 @@ const SuperAdminSalaryStructureCom = () => {
                 </div>
             </div>
 
-            {/* ==================== WORKFORCE DIRECTORY & BULK APPLICATION ==================== */}
             <div className="dm-sans-root relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col mt-8">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                {/* Directory Header */}
                 <div className="relative p-5 border-b border-slate-100 flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center bg-slate-50/40">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#010a1f] to-slate-800 flex items-center justify-center text-white shrink-0 shadow-md">
@@ -688,14 +767,13 @@ const SuperAdminSalaryStructureCom = () => {
                         <div className="min-w-0">
                             <h2 className="text-base font-bold text-[#010a1f] truncate">Workforce Formula Deployment</h2>
                             <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                                Select users, adjust Gross inputs, and dispatch the Global Formula.
+                                {filteredStructures.length} {filteredStructures.length === 1 ? 'user' : 'users'} across {groupedStructures.length} {groupedStructures.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto shrink-0">
-                        {/* Filters */}
-                        <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-1 sm:flex-none">
+                    <div className="flex flex-col sm:flex-row flex-wrap items-center gap-2.5 w-full xl:w-auto shrink-0">
+                        <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm w-full sm:w-auto">
                             <div className="relative flex-1 border-r border-slate-200">
                                 <FaBuilding className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none" />
                                 <select value={filterCompany} onChange={(e) => { setFilterCompany(e.target.value); setFilterBranch(''); }} className="w-full pl-8 pr-3 py-2 text-[11px] font-bold text-slate-700 appearance-none outline-none cursor-pointer">
@@ -712,8 +790,7 @@ const SuperAdminSalaryStructureCom = () => {
                             </div>
                         </div>
 
-                        {/* Search */}
-                        <div className="relative w-full sm:w-64">
+                        <div className="relative w-full sm:w-56">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <input
                                 type="text"
@@ -724,9 +801,20 @@ const SuperAdminSalaryStructureCom = () => {
                             />
                         </div>
 
-                        <Button 
-                            variant="primary" 
-                            icon={FaMagic} 
+                        {groupedStructures.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3 py-2 rounded-xl border border-blue-200 bg-white w-full sm:w-auto shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
+
+                        <Button
+                            variant="primary"
+                            icon={FaMagic}
                             onClick={initiateBulkApply}
                             disabled={isBulkLoading || selectedUids.length === 0}
                             className="w-full sm:w-auto text-sm py-2 px-4 shadow-lg shadow-[#0437cc]/25 rounded-xl border-none whitespace-nowrap"
@@ -736,13 +824,13 @@ const SuperAdminSalaryStructureCom = () => {
                     </div>
                 </div>
 
-                <div className="relative overflow-x-auto w-full custom-scrollbar flex-1 min-h-[300px]">
+                <div className="p-4 sm:p-5 space-y-4 min-h-[300px]">
                     {loading ? (
                         <div className="p-16 text-center">
                             <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Loading directory…</p>
                         </div>
-                    ) : filteredStructures.length === 0 ? (
+                    ) : groupedStructures.length === 0 ? (
                         <div className="p-16 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaUsers className="text-xl text-slate-300" />
@@ -750,94 +838,203 @@ const SuperAdminSalaryStructureCom = () => {
                             <p className="text-xs font-semibold text-slate-400">No users match your criteria.</p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[850px]">
-                            <thead>
-                                <tr className="bg-slate-50/80 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                    <th className="px-5 py-3.5 w-10">
-                                        <input 
-                                            type="checkbox" 
-                                            onChange={handleSelectAll}
-                                            checked={selectedUids.length === filteredStructures.length && filteredStructures.length > 0}
-                                            className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
-                                        />
-                                    </th>
-                                    <th className="px-2 py-3.5 whitespace-nowrap">Employee Info</th>
-                                    <th className="px-5 py-3.5 whitespace-nowrap">Target Monthly Gross (Edit)</th>
-                                    <th className="px-5 py-3.5 whitespace-nowrap">Current Setup</th>
-                                    <th className="px-5 py-3.5 text-right whitespace-nowrap">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredStructures.map((struct, i) => (
-                                    <tr key={i} className={`transition-colors group ${selectedUids.includes(struct.uid) ? 'bg-[#0437cc]/5' : 'hover:bg-blue-50/30'}`}>
-                                        <td className="px-5 py-4">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={selectedUids.includes(struct.uid)}
-                                                onChange={() => handleSelectOne(struct.uid)}
-                                                className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
+                        groupedStructures.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
+                            const compAllSelected = companyGroup.uids.length > 0 && companyGroup.uids.every(uid => selectedUids.includes(uid));
+                            const compSelectedCount = companyGroup.uids.filter(uid => selectedUids.includes(uid)).length;
+
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <div
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <input
+                                                type="checkbox"
+                                                checked={compAllSelected}
+                                                onChange={(e) => handleSelectGroup(companyGroup.uids, e)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer shrink-0"
+                                                title="Select all employees in this company"
                                             />
-                                        </td>
-                                        <td className="px-2 py-4">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                {struct.profilePhoto ? (
-                                                    <img src={struct.profilePhoto} alt={struct.userName} className="w-10 h-10 rounded-xl object-cover shrink-0 border border-slate-200 shadow-sm group-hover:scale-105 transition-transform" />
-                                                ) : (
-                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-sm group-hover:scale-105 transition-transform ${struct.role === 'HR Admin' ? 'bg-gradient-to-br from-purple-500 to-indigo-500 text-white' : struct.role === 'Manager' ? 'bg-gradient-to-br from-[#f77704] to-orange-500 text-white' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white'}`}>
-                                                        {struct.userName?.charAt(0)}
+                                            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
+                                                <FaBuilding className="text-sm" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.totalUsers} {companyGroup.totalUsers === 1 ? 'Employee' : 'Employees'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            {compSelectedCount > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-200">
+                                                    {compSelectedCount} Selected
+                                                </span>
+                                            )}
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 tabular-nums">
+                                                Net Pool: {formatCurrency(companyGroup.totalNet)}
+                                            </span>
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+                                                const branchAllSelected = branchGroup.uids.length > 0 && branchGroup.uids.every(uid => selectedUids.includes(uid));
+                                                const branchSelectedCount = branchGroup.uids.filter(uid => selectedUids.includes(uid)).length;
+
+                                                return (
+                                                    <div
+                                                        key={branchGroup.branchKey}
+                                                        className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                    >
+                                                        <div
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={branchAllSelected}
+                                                                    onChange={(e) => handleSelectGroup(branchGroup.uids, e)}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer shrink-0"
+                                                                    title="Select all employees in this branch"
+                                                                />
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                        {branchGroup.branchName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                                                        {branchGroup.totalUsers} {branchGroup.totalUsers === 1 ? 'Employee' : 'Employees'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                {branchSelectedCount > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-100">
+                                                                        {branchSelectedCount} Selected
+                                                                    </span>
+                                                                )}
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 tabular-nums">
+                                                                    Net: {formatCurrency(branchGroup.totalNet)}
+                                                                </span>
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto w-full custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[820px]">
+                                                                    <thead>
+                                                                        <tr className="bg-slate-50/80 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                                                            <th className="px-5 py-3 w-10"></th>
+                                                                            <th className="px-2 py-3 whitespace-nowrap">Employee Info</th>
+                                                                            <th className="px-5 py-3 whitespace-nowrap">Target Monthly Gross (Edit)</th>
+                                                                            <th className="px-5 py-3 whitespace-nowrap">Current Setup</th>
+                                                                            <th className="px-5 py-3 text-right whitespace-nowrap">Action</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.users.map((struct) => (
+                                                                            <tr key={struct.uid} className={`transition-colors group ${selectedUids.includes(struct.uid) ? 'bg-[#0437cc]/5' : 'hover:bg-blue-50/30'}`}>
+                                                                                <td className="px-5 py-3.5">
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={selectedUids.includes(struct.uid)}
+                                                                                        onChange={() => handleSelectOne(struct.uid)}
+                                                                                        className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
+                                                                                    />
+                                                                                </td>
+                                                                                <td className="px-2 py-3.5">
+                                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                                        {struct.profilePhoto ? (
+                                                                                            <img src={struct.profilePhoto} alt={struct.userName} className="w-9 h-9 rounded-xl object-cover shrink-0 border border-slate-200 shadow-sm group-hover:scale-105 transition-transform" />
+                                                                                        ) : (
+                                                                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-sm group-hover:scale-105 transition-transform ${struct.role === 'HR Admin' ? 'bg-gradient-to-br from-purple-500 to-indigo-500 text-white' : struct.role === 'Manager' ? 'bg-gradient-to-br from-[#f77704] to-orange-500 text-white' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white'}`}>
+                                                                                                {struct.userName?.charAt(0)}
+                                                                                            </div>
+                                                                                        )}
+                                                                                        <div className="min-w-0">
+                                                                                            <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate flex items-center gap-1.5">
+                                                                                                {struct.userName}
+                                                                                                <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider border ${getRoleBadgeStyle(struct.role)}`}>{struct.role}</span>
+                                                                                            </p>
+                                                                                            <p className="text-[10px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5 truncate">
+                                                                                                {struct.displayId} <span className="text-slate-300">•</span> {struct.department || 'All Depts'}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-3.5">
+                                                                                    <div className="relative flex items-center w-36">
+                                                                                        <span className="absolute left-3 text-xs font-bold text-slate-400">₹</span>
+                                                                                        <input
+                                                                                            type="number"
+                                                                                            value={grossInputs[struct.uid] !== undefined ? grossInputs[struct.uid] : struct.monthlySalary}
+                                                                                            onChange={(e) => setGrossInputs({ ...grossInputs, [struct.uid]: e.target.value })}
+                                                                                            className="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-[#0437cc] focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 outline-none tabular-nums shadow-inner transition-all"
+                                                                                        />
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-3.5">
+                                                                                    <div className="flex items-center gap-4">
+                                                                                        <div className="flex flex-col">
+                                                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Current Net</span>
+                                                                                            <span className="text-xs font-bold text-green-700 tabular-nums">{formatCurrency(struct.currentNet)}</span>
+                                                                                        </div>
+                                                                                        <button
+                                                                                            onClick={() => { setViewUser(struct); setIsViewModalOpen(true); }}
+                                                                                            className="w-7 h-7 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-lg text-slate-500 hover:text-[#0437cc] hover:bg-blue-50 hover:border-blue-200 transition-all"
+                                                                                            title="View Detailed Current Breakdown"
+                                                                                        >
+                                                                                            <FaEye size={12} />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-5 py-3.5 text-right">
+                                                                                    <Button
+                                                                                        variant="primary"
+                                                                                        onClick={() => handleApplySingle(struct.uid)}
+                                                                                        disabled={actionLoadingId === struct.uid}
+                                                                                        className="text-[11px] py-1.5 px-3 rounded-lg shadow-sm"
+                                                                                    >
+                                                                                        {actionLoadingId === struct.uid ? 'Applying...' : 'Apply Formula'}
+                                                                                    </Button>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                )}
-                                                <div className="min-w-0">
-                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate flex items-center gap-1.5">
-                                                        {struct.userName}
-                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider border ${getRoleBadgeStyle(struct.role)}`}>{struct.role}</span>
-                                                    </p>
-                                                    <p className="text-[10px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5 truncate">
-                                                        {struct.displayId} <span className="text-slate-300">•</span> {struct.department || 'All Depts'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4">
-                                            <div className="relative flex items-center w-36">
-                                                <span className="absolute left-3 text-xs font-bold text-slate-400">₹</span>
-                                                <input 
-                                                    type="number"
-                                                    value={grossInputs[struct.uid] !== undefined ? grossInputs[struct.uid] : struct.monthlySalary}
-                                                    onChange={(e) => setGrossInputs({...grossInputs, [struct.uid]: e.target.value})}
-                                                    className="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-[#0437cc] focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 outline-none tabular-nums shadow-inner transition-all"
-                                                />
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Current Net</span>
-                                                    <span className="text-xs font-bold text-green-700 tabular-nums">{formatCurrency(struct.currentNet)}</span>
-                                                </div>
-                                                <button 
-                                                    onClick={() => { setViewUser(struct); setIsViewModalOpen(true); }}
-                                                    className="w-7 h-7 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-lg text-slate-500 hover:text-[#0437cc] hover:bg-blue-50 hover:border-blue-200 transition-all"
-                                                    title="View Detailed Current Breakdown"
-                                                >
-                                                    <FaEye size={12} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4 text-right">
-                                            <Button 
-                                                variant="primary"
-                                                onClick={() => handleApplySingle(struct.uid)}
-                                                disabled={actionLoadingId === struct.uid}
-                                                className="text-[11px] py-1.5 px-3 rounded-lg shadow-sm"
-                                            >
-                                                {actionLoadingId === struct.uid ? 'Applying...' : 'Apply Formula'}
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

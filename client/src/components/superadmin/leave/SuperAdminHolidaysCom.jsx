@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
-    FaUmbrellaBeach, FaInfoCircle, FaCheck, FaTimes,
-    FaListUl, FaSearch, FaTree, FaBuilding, FaSitemap,
-    FaNetworkWired, FaEye, FaEdit, FaTrash, FaCalendarAlt,
-    FaChevronDown, FaChevronUp, FaThLarge, FaMagic, FaLandmark
+    FaUmbrellaBeach, FaCheck, FaTimes, FaListUl, FaSearch,
+    FaTree, FaBuilding, FaSitemap, FaNetworkWired, FaEye,
+    FaEdit, FaTrash, FaCalendarAlt, FaChevronDown, FaChevronUp,
+    FaThLarge, FaMagic, FaLandmark, FaCodeBranch
 } from 'react-icons/fa';
 import Button from '../../common/Button';
 import Input from '../../common/Input';
@@ -23,7 +23,6 @@ const FieldWrapper = ({ error, children }) => (
     </div>
 );
 
-// Bulletproof Stateless Auth Config
 const getAuthConfig = () => ({
     headers: {
         'Content-Type': 'application/json',
@@ -55,8 +54,7 @@ const SuperAdminHolidaysCom = () => {
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    
-    // Auto-Generation States
+
     const [isGeneratingWeekends, setIsGeneratingWeekends] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [autoGenYear, setAutoGenYear] = useState(new Date().getFullYear());
@@ -68,6 +66,8 @@ const SuperAdminHolidaysCom = () => {
     const [viewHoliday, setViewHoliday] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
     const [expandedWeekends, setExpandedWeekends] = useState([]);
     const [viewMode, setViewMode] = useState('list');
 
@@ -102,7 +102,6 @@ const SuperAdminHolidaysCom = () => {
         }
     };
 
-    // Guarded execution
     useEffect(() => {
         if (user && localStorage.getItem('token')) {
             fetchOrgData();
@@ -110,7 +109,6 @@ const SuperAdminHolidaysCom = () => {
         } else {
             setIsLoading(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const filteredBranches = branches.filter(b => b.company_id === parseInt(formData.companyId));
@@ -121,7 +119,8 @@ const SuperAdminHolidaysCom = () => {
         let updates = { [name]: value };
 
         if (name === 'companyId') {
-            updates.branchId = ''; updates.departmentId = '';
+            updates.branchId = '';
+            updates.departmentId = '';
         } else if (name === 'branchId') {
             updates.departmentId = '';
         }
@@ -254,7 +253,7 @@ const SuperAdminHolidaysCom = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this holiday schedule?")) return;
+        if (!window.confirm('Are you sure you want to delete this holiday schedule?')) return;
         try {
             await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-holidays/${id}`, getAuthConfig());
             fetchHolidays();
@@ -270,14 +269,14 @@ const SuperAdminHolidaysCom = () => {
         setIsViewModalOpen(true);
     };
 
-    const toggleWeekendAccordion = (companyName) => {
+    const toggleWeekendAccordion = (branchKey) => {
         setExpandedWeekends(prev =>
-            prev.includes(companyName) ? prev.filter(c => c !== companyName) : [...prev, companyName]
+            prev.includes(branchKey) ? prev.filter(k => k !== branchKey) : [...prev, branchKey]
         );
     };
 
     const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
+        if (!dateString) return { full: 'N/A', day: '' };
         const date = new Date(dateString);
         return {
             full: date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
@@ -285,25 +284,127 @@ const SuperAdminHolidaysCom = () => {
         };
     };
 
-    const filteredHolidays = holidays.filter(holiday => {
-        const searchString = `${holiday.holiday_name} ${holiday.type} ${holiday.company_name}`.toLowerCase();
-        return searchString.includes(searchTerm.toLowerCase());
-    });
+    const filteredHolidays = useMemo(() => {
+        const q = searchTerm.toLowerCase();
+        return holidays.filter(holiday => {
+            const searchString = `${holiday.holiday_name} ${holiday.type} ${holiday.company_name} ${holiday.branch_name || ''}`.toLowerCase();
+            return searchString.includes(q);
+        });
+    }, [holidays, searchTerm]);
 
-    const groupedHolidays = filteredHolidays.reduce((acc, curr) => {
-        const comp = curr.company_name || 'Global / Unassigned';
-        if (!acc[comp]) {
-            acc[comp] = { standard: [], weekends: [], drafts: [] };
-        }
-        if (curr.type === 'WEEKLY_OFF') {
-            acc[comp].weekends.push(curr);
-        } else if (curr.status === 'Draft') {
-            acc[comp].drafts.push(curr);
+    const groupedHolidays = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredHolidays.forEach(curr => {
+            const companyName = curr.company_name?.trim() || 'Global / Unassigned';
+            const branchName = curr.branch_name?.trim() || 'All Branches';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    total: 0,
+                    standardCount: 0,
+                    draftCount: 0,
+                    weekendCount: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.total += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    standard: [],
+                    drafts: [],
+                    weekends: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+
+            if (curr.type === 'WEEKLY_OFF') {
+                compGroup.weekendCount += 1;
+                branchGroup.weekends.push(curr);
+            } else if (curr.status === 'Draft') {
+                compGroup.draftCount += 1;
+                branchGroup.drafts.push(curr);
+            } else {
+                compGroup.standardCount += 1;
+                branchGroup.standard.push(curr);
+            }
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => {
+                    if (a.branchName === 'All Branches') return -1;
+                    if (b.branchName === 'All Branches') return 1;
+                    return a.branchName.localeCompare(b.branchName);
+                })
+            }));
+    }, [filteredHolidays]);
+
+    useEffect(() => {
+        if (groupedHolidays.length === 0) return;
+
+        if (searchTerm.trim() !== '') {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedHolidays.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
         } else {
-            acc[comp].standard.push(curr);
+            const firstComp = groupedHolidays[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
         }
-        return acc;
-    }, {});
+    }, [groupedHolidays, searchTerm]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedHolidays.length === 0) return false;
+        return groupedHolidays.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedHolidays, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedHolidays.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
 
     const getTypeStyle = (type) => {
         if (type === 'GAZETTED') return 'text-[#0437cc] bg-blue-50 border-blue-200';
@@ -389,7 +490,6 @@ const SuperAdminHolidaysCom = () => {
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewHoliday && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -414,7 +514,6 @@ const SuperAdminHolidaysCom = () => {
                         </div>
 
                         <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
-
                             <div className="relative bg-gradient-to-br from-purple-50 to-blue-50/50 border border-purple-100 rounded-2xl p-4 overflow-hidden">
                                 <div className="absolute -top-8 -right-8 w-24 h-24 bg-purple-200/30 rounded-full blur-3xl pointer-events-none"></div>
                                 <div className="relative flex items-start gap-4">
@@ -468,7 +567,7 @@ const SuperAdminHolidaysCom = () => {
                                 </div>
                                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Creation Source</p>
-                                    <p className="text-xs font-bold text-slate-700">{viewHoliday.source.replace('_', ' ')}</p>
+                                    <p className="text-xs font-bold text-slate-700">{(viewHoliday.source || 'MANUAL').replace('_', ' ')}</p>
                                 </div>
                             </div>
                         </div>
@@ -476,7 +575,6 @@ const SuperAdminHolidaysCom = () => {
                 </div>
             )}
 
-            {/* ==================== STICKY HEADER ==================== */}
             <div className="relative sticky top-0 z-30 bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-purple-200/40'}`}></div>
 
@@ -538,7 +636,6 @@ const SuperAdminHolidaysCom = () => {
                 </div>
             </div>
 
-            {/* ==================== MESSAGES ==================== */}
             {successMsg && (
                 <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden animate-in fade-in">
                     <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
@@ -557,7 +654,6 @@ const SuperAdminHolidaysCom = () => {
                 </div>
             )}
 
-            {/* ==================== FORM ==================== */}
             <form className="space-y-5 sm:space-y-6" onSubmit={handleSubmit}>
                 <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors duration-300 ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-100/40 rounded-full blur-3xl pointer-events-none"></div>
@@ -575,7 +671,6 @@ const SuperAdminHolidaysCom = () => {
                     </div>
 
                     <div className="relative p-5 space-y-6">
-                        {/* Org Deployment */}
                         <div>
                             <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
                                 <span className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center">
@@ -618,7 +713,6 @@ const SuperAdminHolidaysCom = () => {
                             </div>
                         </div>
 
-                        {/* Holiday Info */}
                         <div>
                             <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
                                 <span className="w-6 h-6 rounded-md bg-orange-50 flex items-center justify-center">
@@ -679,8 +773,7 @@ const SuperAdminHolidaysCom = () => {
                             </div>
                         </div>
                     </div>
-                    
-                    {/* AUTO GENERATION TOOLS EXPANSION */}
+
                     {showAutoTools && !isEditing && (
                         <div className="bg-slate-50 border-t border-slate-200 p-5 space-y-5 animate-in slide-in-from-top-4 duration-300">
                             <div className="flex items-center gap-2 mb-2">
@@ -689,7 +782,7 @@ const SuperAdminHolidaysCom = () => {
                                 </span>
                                 <h3 className="text-[11px] font-bold text-[#010a1f] uppercase tracking-wider">Automated Bulk Generation</h3>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end">
                                 <FieldWrapper>
                                     <Select
@@ -703,7 +796,7 @@ const SuperAdminHolidaysCom = () => {
                                         ]}
                                     />
                                 </FieldWrapper>
-                                
+
                                 <FieldWrapper>
                                     <Select
                                         label="Saturday Policy Rule"
@@ -719,7 +812,7 @@ const SuperAdminHolidaysCom = () => {
                                         ]}
                                     />
                                 </FieldWrapper>
-                                
+
                                 <Button
                                     type="button"
                                     onClick={handleAutoGenerateWeekends}
@@ -751,11 +844,10 @@ const SuperAdminHolidaysCom = () => {
                 </div>
             </form>
 
-            {/* ==================== MASTER RECORDS HEADER ==================== */}
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
                             <FaListUl className="text-sm" />
@@ -763,22 +855,33 @@ const SuperAdminHolidaysCom = () => {
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Master Calendar Records</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredHolidays.length} of {holidays.length} {holidays.length === 1 ? 'record' : 'records'}
+                                {filteredHolidays.length} of {holidays.length} {holidays.length === 1 ? 'record' : 'records'} across {groupedHolidays.length} {groupedHolidays.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto shrink-0">
-                        <div className="relative w-full sm:w-72">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto shrink-0">
+                        <div className="relative w-full sm:w-64">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <input
                                 type="text"
-                                placeholder="Search holidays, type or company…"
+                                placeholder="Search holiday, company, branch…"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
                             />
                         </div>
+
+                        {groupedHolidays.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
 
                         <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
                             <button
@@ -810,13 +913,12 @@ const SuperAdminHolidaysCom = () => {
                 </div>
             </div>
 
-            {/* ==================== GROUPED HOLIDAYS ==================== */}
             {isLoading ? (
                 <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-12 text-center">
                     <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
                     <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading calendar records…</p>
                 </div>
-            ) : Object.keys(groupedHolidays).length === 0 ? (
+            ) : groupedHolidays.length === 0 ? (
                 <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-12 text-center">
                     <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center mx-auto mb-3 border border-purple-100">
                         <FaUmbrellaBeach className="text-xl text-purple-400" />
@@ -826,100 +928,183 @@ const SuperAdminHolidaysCom = () => {
                     </p>
                 </div>
             ) : (
-                <div className={viewMode === 'grid' ? 'grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-6' : 'space-y-5 sm:space-y-6'}>
-                    {Object.entries(groupedHolidays).map(([companyName, data]) => {
-                        const isWeekendExpanded = expandedWeekends.includes(companyName);
+                <div className={viewMode === 'grid' ? 'grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-6 items-start' : 'space-y-4 sm:space-y-5'}>
+                    {groupedHolidays.map((companyGroup) => {
+                        const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
 
                         return (
-                            <div key={companyName} className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                                <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-100/30 rounded-full blur-3xl pointer-events-none"></div>
-
-                                {/* Company Group Header */}
-                                <div className="relative p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div
+                                key={companyGroup.companyName}
+                                className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => toggleCompany(companyGroup.companyName)}
+                                    className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                >
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white shrink-0 shadow-md shadow-[#0437cc]/20">
+                                        <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#0437cc]/20">
                                             <FaBuilding className="text-sm" />
                                         </span>
                                         <div className="min-w-0">
-                                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">{companyName}</h2>
-                                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Official Calendar Deployment</p>
+                                            <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                {companyGroup.companyName}
+                                            </h3>
+                                            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Holiday' : 'Holidays'}
+                                            </p>
                                         </div>
                                     </div>
-                                    <span className="inline-flex items-center gap-1.5 bg-[#0437cc]/10 text-[#0437cc] text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-full border border-[#0437cc]/20 shrink-0 w-max">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-[#0437cc]"></span>
-                                        {data.standard.length + data.weekends.length + data.drafts.length} Total Holidays
-                                    </span>
-                                </div>
 
-                                {/* Standard Holidays Table */}
-                                {data.standard.length > 0 || data.drafts.length > 0 ? (
-                                    <div className="relative overflow-x-auto w-full custom-scrollbar">
-                                        <table className="w-full text-left border-collapse min-w-[700px]">
-                                            <thead>
-                                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Date</th>
-                                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Holiday Name</th>
-                                                    <th className="px-5 py-3.5 font-bold whitespace-nowrap">Deployment Target</th>
-                                                    <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
-                                                    <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {/* Drafts visually separated first */}
-                                                {data.drafts.map((holiday, i) => (
-                                                    <HolidayTableRow key={`draft-${i}`} holiday={holiday} />
-                                                ))}
-                                                {data.standard.map((holiday, i) => (
-                                                    <HolidayTableRow key={`std-${i}`} holiday={holiday} />
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="relative p-6 text-center">
-                                        <p className="text-xs sm:text-sm text-slate-400 font-medium">No standard holidays recorded for this company.</p>
-                                    </div>
-                                )}
-
-                                {/* Accordion: Weekend Holidays */}
-                                {data.weekends.length > 0 && (
-                                    <div className="relative border-t border-slate-100 bg-slate-50/40">
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleWeekendAccordion(companyName)}
-                                            className="group w-full p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50 transition-colors focus:outline-none"
-                                        >
-                                            <span className="flex items-center gap-3 min-w-0 pr-3">
-                                                <span className="shrink-0 w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
-                                                    <FaCalendarAlt className="text-purple-600 text-xs" />
-                                                </span>
-                                                <span className="min-w-0 text-left">
-                                                    <span className="block text-[11px] sm:text-xs font-bold text-slate-700 truncate">Auto-Generated Weekends</span>
-                                                    <span className="block text-[10px] sm:text-[11px] font-semibold text-slate-400 mt-0.5 truncate">Sundays & Saturdays</span>
-                                                </span>
-                                                <span className="shrink-0 ml-2 inline-flex items-center gap-1 bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-purple-200">
-                                                    {data.weekends.length} Off Days
-                                                </span>
+                                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                        {companyGroup.standardCount > 0 && (
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-200">
+                                                Standard: {companyGroup.standardCount}
                                             </span>
-                                            <span className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isWeekendExpanded
-                                                ? 'bg-purple-500 text-white'
-                                                : 'bg-white text-slate-400 border border-slate-200 group-hover:border-purple-200'
-                                                }`}>
-                                                {isWeekendExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
-                                            </span>
-                                        </button>
-
-                                        {isWeekendExpanded && (
-                                            <div className="overflow-x-auto w-full border-t border-slate-100 bg-white animate-in slide-in-from-top-2 duration-300 custom-scrollbar">
-                                                <table className="w-full text-left border-collapse min-w-[700px]">
-                                                    <tbody className="divide-y divide-slate-100">
-                                                        {data.weekends.map((holiday, i) => (
-                                                            <HolidayTableRow key={i} holiday={holiday} />
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
                                         )}
+                                        {companyGroup.draftCount > 0 && (
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200">
+                                                Draft: {companyGroup.draftCount}
+                                            </span>
+                                        )}
+                                        {companyGroup.weekendCount > 0 && (
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                Weekends: {companyGroup.weekendCount}
+                                            </span>
+                                        )}
+                                        <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                            {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                        </span>
+                                    </div>
+                                </button>
+
+                                {isCompanyOpen && (
+                                    <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                        {companyGroup.branches.map((branchGroup) => {
+                                            const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+                                            const isWeekendExpanded = expandedWeekends.includes(branchGroup.branchKey);
+
+                                            return (
+                                                <div
+                                                    key={branchGroup.branchKey}
+                                                    className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs"
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                        className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-left"
+                                                    >
+                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                            <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                <FaCodeBranch className="text-xs" />
+                                                            </span>
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">
+                                                                    {branchGroup.branchName}
+                                                                </p>
+                                                                <p className="text-[10px] text-slate-400 font-semibold">
+                                                                    {branchGroup.total} {branchGroup.total === 1 ? 'Holiday' : 'Holidays'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                            {branchGroup.standard.length > 0 && (
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#0437cc] border border-blue-100">
+                                                                    {branchGroup.standard.length} Standard
+                                                                </span>
+                                                            )}
+                                                            {branchGroup.drafts.length > 0 && (
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-100">
+                                                                    {branchGroup.drafts.length} Draft
+                                                                </span>
+                                                            )}
+                                                            {branchGroup.weekends.length > 0 && (
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100">
+                                                                    {branchGroup.weekends.length} Weekends
+                                                                </span>
+                                                            )}
+                                                            <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                                {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                                            </span>
+                                                        </div>
+                                                    </button>
+
+                                                    {isBranchOpen && (
+                                                        <div className="border-t border-slate-100 bg-white">
+                                                            {branchGroup.standard.length > 0 || branchGroup.drafts.length > 0 ? (
+                                                                <div className="overflow-x-auto w-full custom-scrollbar">
+                                                                    <table className="w-full text-left border-collapse min-w-[700px]">
+                                                                        <thead>
+                                                                            <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                                <th className="px-5 py-3.5 font-bold whitespace-nowrap">Date</th>
+                                                                                <th className="px-5 py-3.5 font-bold whitespace-nowrap">Holiday Name</th>
+                                                                                <th className="px-5 py-3.5 font-bold whitespace-nowrap">Deployment Target</th>
+                                                                                <th className="px-5 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                                                                <th className="px-5 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody className="divide-y divide-slate-100">
+                                                                            {branchGroup.drafts.map((holiday, i) => (
+                                                                                <HolidayTableRow key={holiday.id || `draft-${i}`} holiday={holiday} />
+                                                                            ))}
+                                                                            {branchGroup.standard.map((holiday, i) => (
+                                                                                <HolidayTableRow key={holiday.id || `std-${i}`} holiday={holiday} />
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="p-5 text-center">
+                                                                    <p className="text-xs text-slate-400 font-medium">No standard holidays recorded for this branch.</p>
+                                                                </div>
+                                                            )}
+
+                                                            {branchGroup.weekends.length > 0 && (
+                                                                <div className="border-t border-slate-100 bg-slate-50/40">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => toggleWeekendAccordion(branchGroup.branchKey)}
+                                                                        className="group w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors focus:outline-none"
+                                                                    >
+                                                                        <span className="flex items-center gap-3 min-w-0 pr-3">
+                                                                            <span className="shrink-0 w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                                                                                <FaCalendarAlt className="text-purple-600 text-xs" />
+                                                                            </span>
+                                                                            <span className="min-w-0 text-left">
+                                                                                <span className="block text-[11px] sm:text-xs font-bold text-slate-700 truncate">Auto-Generated Weekends</span>
+                                                                                <span className="block text-[10px] font-semibold text-slate-400 mt-0.5 truncate">Sundays & Saturdays</span>
+                                                                            </span>
+                                                                            <span className="shrink-0 ml-2 inline-flex items-center gap-1 bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-purple-200">
+                                                                                {branchGroup.weekends.length} Off Days
+                                                                            </span>
+                                                                        </span>
+                                                                        <span className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isWeekendExpanded
+                                                                            ? 'bg-purple-500 text-white'
+                                                                            : 'bg-white text-slate-400 border border-slate-200 group-hover:border-purple-200'
+                                                                            }`}>
+                                                                            {isWeekendExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
+                                                                        </span>
+                                                                    </button>
+
+                                                                    {isWeekendExpanded && (
+                                                                        <div className="overflow-x-auto w-full border-t border-slate-100 bg-white animate-in slide-in-from-top-2 duration-300 custom-scrollbar">
+                                                                            <table className="w-full text-left border-collapse min-w-[700px]">
+                                                                                <tbody className="divide-y divide-slate-100">
+                                                                                    {branchGroup.weekends.map((holiday, i) => (
+                                                                                        <HolidayTableRow key={holiday.id || `wknd-${i}`} holiday={holiday} />
+                                                                                    ))}
+                                                                                </tbody>
+                                                                            </table>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

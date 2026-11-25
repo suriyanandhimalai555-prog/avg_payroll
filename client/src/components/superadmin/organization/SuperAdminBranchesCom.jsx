@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FaBuilding, FaInfoCircle, FaCheck, FaTimes,
     FaMapMarkerAlt, FaCodeBranch, FaUserTie, FaPhoneAlt,
     FaSitemap, FaEye, FaEdit, FaTrash, FaSearch, FaFilter,
+    FaChevronDown, FaChevronUp
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -57,6 +58,7 @@ const SuperAdminBranchesCom = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
+    const [expandedCompanies, setExpandedCompanies] = useState({});
 
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -78,13 +80,34 @@ const SuperAdminBranchesCom = () => {
                 axios.get(`${import.meta.env.VITE_API_URL}/api/sa-branches`, getAuthConfig()).catch(() => ({ data: [] }))
             ]);
 
-            setCompanies(companyRes.data || []);
-            setBranches(branchRes.data || []);
+            const compList = companyRes.data || [];
+            const compByIdMap = new Map();
+            const compByNameMap = new Map();
+            compList.forEach(c => {
+                compByIdMap.set(String(c.id), c);
+                if (c.company_name) compByNameMap.set(c.company_name.trim().toLowerCase(), c);
+            });
 
-            if (companyRes.data && companyRes.data.length > 0 && !isEditing) {
-                setFormData(prev => ({ ...prev, companyId: companyRes.data[0].id }));
+            const enrichedBranches = (branchRes.data || []).map(branch => {
+                const parentCompany =
+                    compByIdMap.get(String(branch.company_id)) ||
+                    (branch.company_name ? compByNameMap.get(branch.company_name.trim().toLowerCase()) : null) ||
+                    null;
+
+                return {
+                    ...branch,
+                    company_name: branch.company_name || parentCompany?.company_name || 'Unassigned Company',
+                    company_logo: parentCompany?.logo || null
+                };
+            });
+
+            setCompanies(compList);
+            setBranches(enrichedBranches);
+
+            if (compList.length > 0 && !isEditing) {
+                setFormData(prev => ({ ...prev, companyId: prev.companyId || compList[0].id }));
             }
-            setApiError(''); 
+            setApiError('');
         } catch (error) {
             console.error('Failed to load core data', error);
         } finally {
@@ -181,7 +204,7 @@ const SuperAdminBranchesCom = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this branch? It may impact associated employees.")) return;
+        if (!window.confirm('Are you sure you want to delete this branch? It may impact associated employees.')) return;
         try {
             await axios.delete(`${import.meta.env.VITE_API_URL}/api/sa-branches/${id}`, getAuthConfig());
             fetchCoreData();
@@ -193,22 +216,94 @@ const SuperAdminBranchesCom = () => {
     };
 
     const handleView = (branch) => {
-        const parentCompany = companies.find(c => c.id === branch.company_id);
-        setViewBranch({ ...branch, logo: parentCompany?.logo });
+        setViewBranch({ ...branch, logo: branch.company_logo });
         setIsViewModalOpen(true);
     };
 
-    const filteredBranches = branches.filter(branch => {
-        const searchStr = `${branch.branch_name} ${branch.company_name} ${branch.branch_code}`.toLowerCase();
-        const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === 'All' || branch.status === statusFilter;
-        return matchesSearch && matchesStatus;
-    });
+    const filteredBranches = useMemo(() => {
+        const q = searchTerm.toLowerCase();
+        return branches.filter(branch => {
+            const searchStr = `${branch.branch_name} ${branch.company_name} ${branch.branch_code} ${branch.manager}`.toLowerCase();
+            const matchesSearch = searchStr.includes(q);
+            const matchesStatus = statusFilter === 'All' || branch.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        });
+    }, [branches, searchTerm, statusFilter]);
+
+    const groupedBranches = useMemo(() => {
+        const companyMap = new Map();
+
+        filteredBranches.forEach(branch => {
+            const companyName = branch.company_name?.trim() || 'Unassigned Company';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    logo: branch.company_logo || null,
+                    total: 0,
+                    active: 0,
+                    inactive: 0,
+                    records: []
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            if (!compGroup.logo && branch.company_logo) compGroup.logo = branch.company_logo;
+            compGroup.total += 1;
+            if (branch.status === 'Active') compGroup.active += 1;
+            else compGroup.inactive += 1;
+            compGroup.records.push(branch);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                records: comp.records.sort((a, b) => (a.branch_name || '').localeCompare(b.branch_name || ''))
+            }));
+    }, [filteredBranches]);
+
+    useEffect(() => {
+        if (groupedBranches.length === 0) return;
+
+        const hasActiveFilter = searchTerm.trim() !== '' || statusFilter !== 'All';
+
+        if (hasActiveFilter) {
+            const nextComps = {};
+            groupedBranches.forEach(c => {
+                nextComps[c.companyName] = true;
+            });
+            setExpandedCompanies(nextComps);
+        } else {
+            const firstComp = groupedBranches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+        }
+    }, [groupedBranches, searchTerm, statusFilter]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedBranches.length === 0) return false;
+        return groupedBranches.every(c => expandedCompanies[c.companyName]);
+    }, [groupedBranches, expandedCompanies]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+        } else {
+            const nextComps = {};
+            groupedBranches.forEach(c => {
+                nextComps[c.companyName] = true;
+            });
+            setExpandedCompanies(nextComps);
+        }
+    };
 
     if (isLoading) {
         return (
             <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
-                {/* Non-Sticky Header Shimmer */}
                 <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
                         <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
@@ -276,7 +371,6 @@ const SuperAdminBranchesCom = () => {
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative">
 
-            {/* ==================== VIEW MODAL ==================== */}
             {isViewModalOpen && viewBranch && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
@@ -301,7 +395,6 @@ const SuperAdminBranchesCom = () => {
                         </div>
 
                         <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
-
                             <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4">
                                 <h3 className="text-lg sm:text-xl font-bold text-[#010a1f] truncate">{viewBranch.branch_name}</h3>
                                 <span className="inline-block mt-2 text-[11px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2.5 py-1 rounded-lg tracking-wide">
@@ -354,7 +447,6 @@ const SuperAdminBranchesCom = () => {
                 </div>
             )}
 
-            {/* ==================== HEADER (NON-STICKY) ==================== */}
             <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
@@ -458,7 +550,6 @@ const SuperAdminBranchesCom = () => {
                     </div>
 
                     <div className="relative p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-
                         <div className="md:col-span-2 lg:col-span-3">
                             <FieldWrapper error={errors.companyId}>
                                 <Select
@@ -527,7 +618,7 @@ const SuperAdminBranchesCom = () => {
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/40">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
                             <FaSitemap className="text-sm" />
@@ -535,131 +626,177 @@ const SuperAdminBranchesCom = () => {
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Active Branches</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredBranches.length} of {branches.length} {branches.length === 1 ? 'branch' : 'branches'}
+                                {filteredBranches.length} of {branches.length} {branches.length === 1 ? 'branch' : 'branches'} across {groupedBranches.length} {groupedBranches.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto shrink-0">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto shrink-0">
                         <div className="relative w-full sm:w-64">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <input
                                 type="text"
-                                placeholder="Search branch or company…"
+                                placeholder="Search branch, code, company…"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 transition-all"
                             />
                         </div>
-                        <div className="relative w-full sm:w-40">
+                        <div className="relative w-full sm:w-36">
                             <FaFilter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white cursor-pointer transition-all appearance-none"
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 cursor-pointer transition-all appearance-none"
                             >
                                 <option value="All">All Status</option>
                                 <option value="Active">Active</option>
                                 <option value="Inactive">Inactive</option>
                             </select>
                         </div>
+                        {groupedBranches.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="relative overflow-x-auto">
-                    {filteredBranches.length === 0 ? (
+                <div className="p-4 sm:p-5 space-y-4">
+                    {groupedBranches.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaCodeBranch className="text-xl text-slate-300" />
                             </div>
                             <p className="text-xs sm:text-sm font-semibold text-slate-400">
-                                {searchTerm ? 'No branches match your search criteria.' : 'No branches created yet.'}
+                                {searchTerm || statusFilter !== 'All' ? 'No branches match your search criteria.' : 'No branches created yet.'}
                             </p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[800px]">
-                            <thead>
-                                <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
-                                    <th className="px-5 py-3.5 font-bold">Branch Name & Code</th>
-                                    <th className="px-5 py-3.5 font-bold">Company Info</th>
-                                    <th className="px-5 py-3.5 font-bold">Manager</th>
-                                    <th className="px-5 py-3.5 font-bold text-center">Status</th>
-                                    <th className="px-5 py-3.5 font-bold text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredBranches.map((branch, i) => {
-                                    const parentCompany = companies.find(c => c.id === branch.company_id);
+                        groupedBranches.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
 
-                                    return (
-                                        <tr
-                                            key={i}
-                                            className={`transition-colors group ${isEditing && editId === branch.id
-                                                ? 'bg-orange-50/60'
-                                                : 'hover:bg-slate-50/60'
-                                                }`}
-                                        >
-                                            <td className="px-5 py-4">
-                                                <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{branch.branch_name}</p>
-                                                <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
-                                                    {branch.branch_code}
+                            return (
+                                <div
+                                    key={companyGroup.companyName}
+                                    className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-10 h-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center p-1.5 shrink-0 overflow-hidden shadow-sm">
+                                                {companyGroup.logo ? (
+                                                    <img src={companyGroup.logo} alt={companyGroup.companyName} className="w-full h-full object-contain" />
+                                                ) : (
+                                                    <FaBuilding className="text-[#0437cc] text-sm" />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">
+                                                    {companyGroup.companyName}
+                                                </h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.total} {companyGroup.total === 1 ? 'Branch' : 'Branches'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                Active: {companyGroup.active}
+                                            </span>
+                                            {companyGroup.inactive > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                                    Inactive: {companyGroup.inactive}
                                                 </span>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="w-10 h-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center p-1.5 shrink-0 overflow-hidden shadow-sm group-hover:scale-105 transition-transform">
-                                                        {parentCompany?.logo ? (
-                                                            <img src={parentCompany.logo} alt="logo" className="w-full h-full object-contain" />
-                                                        ) : (
-                                                            <FaBuilding className="text-slate-300" />
-                                                        )}
-                                                    </div>
-                                                    <p className="text-xs sm:text-sm font-semibold text-slate-700 truncate">{branch.company_name}</p>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-4 min-w-0">
-                                                <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{branch.manager}</p>
-                                                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate">{branch.contact_number}</p>
-                                            </td>
-                                            <td className="px-5 py-4 text-center">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${branch.status === 'Active'
-                                                    ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                    : 'text-red-700 bg-red-50 border-red-200'
-                                                    }`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${branch.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
-                                                    {branch.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-5 py-4 text-right">
-                                                <div className="flex gap-1 justify-end">
-                                                    <button
-                                                        onClick={() => handleView(branch)}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
-                                                        title="View Branch"
-                                                    >
-                                                        <FaEye className="text-xs" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleEdit(branch)}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
-                                                        title="Edit Branch"
-                                                    >
-                                                        <FaEdit className="text-xs" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(branch.id)}
-                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
-                                                        title="Delete Branch"
-                                                    >
-                                                        <FaTrash className="text-xs" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    {isCompanyOpen && (
+                                        <div className="border-t border-slate-100 overflow-x-auto custom-scrollbar">
+                                            <table className="w-full text-left border-collapse min-w-[740px]">
+                                                <thead>
+                                                    <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                        <th className="px-5 py-3.5 font-bold">Branch Name & Code</th>
+                                                        <th className="px-5 py-3.5 font-bold">Manager & Contact</th>
+                                                        <th className="px-5 py-3.5 font-bold text-center">Status</th>
+                                                        <th className="px-5 py-3.5 font-bold text-right">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {companyGroup.records.map((branch, i) => (
+                                                        <tr
+                                                            key={branch.id || i}
+                                                            className={`transition-colors group ${isEditing && editId === branch.id
+                                                                ? 'bg-orange-50/60'
+                                                                : 'hover:bg-slate-50/60'
+                                                                }`}
+                                                        >
+                                                            <td className="px-5 py-4">
+                                                                <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{branch.branch_name}</p>
+                                                                <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md tracking-wide">
+                                                                    {branch.branch_code}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-5 py-4 min-w-0">
+                                                                <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{branch.manager}</p>
+                                                                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 truncate">{branch.contact_number}</p>
+                                                            </td>
+                                                            <td className="px-5 py-4 text-center">
+                                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${branch.status === 'Active'
+                                                                    ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                                                    : 'text-red-700 bg-red-50 border-red-200'
+                                                                    }`}>
+                                                                    <span className={`w-1.5 h-1.5 rounded-full ${branch.status === 'Active' ? 'bg-teal-500' : 'bg-red-500'}`}></span>
+                                                                    {branch.status}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-5 py-4 text-right">
+                                                                <div className="flex gap-1 justify-end">
+                                                                    <button
+                                                                        onClick={() => handleView(branch)}
+                                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50"
+                                                                        title="View Branch"
+                                                                    >
+                                                                        <FaEye className="text-xs" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleEdit(branch)}
+                                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50"
+                                                                        title="Edit Branch"
+                                                                    >
+                                                                        <FaEdit className="text-xs" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDelete(branch.id)}
+                                                                        className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                                                                        title="Delete Branch"
+                                                                    >
+                                                                        <FaTrash className="text-xs" />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             </div>
