@@ -27,6 +27,7 @@ const menuItems = [
         subItems: [
             { name: 'HR', path: '/superadmin/users/hr' },
             { name: 'Managers', path: '/superadmin/users/managers' },
+            { name: 'Coordinators', path: '/superadmin/users/coordinators' },
             { name: 'Employees', path: '/superadmin/users/employees' }
         ]
     },

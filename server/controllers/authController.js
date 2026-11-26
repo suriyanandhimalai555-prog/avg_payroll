@@ -48,20 +48,20 @@ const getTableByRole = (role) => {
     if (role === 'superadmin') return 'sa_superadmins';
     if (role === 'hr') return 'sa_hr_users';
     if (role === 'manager') return 'sa_managers';
+    if (role === 'coordinator') return 'sa_coordinators';
     if (role === 'employee') return 'sa_employees';
     return null;
 };
 
-// ==================== LOGIN ====================
 export const login = async (req, res) => {
     try {
         const { identifier, password, role } = req.body;
 
-        if (!identifier?.trim() || !password || !['superadmin', 'hr', 'manager', 'employee'].includes(role)) {
+        if (!identifier?.trim() || !password || !['superadmin', 'hr', 'manager', 'coordinator', 'employee'].includes(role)) {
             return res.status(400).json({ message: 'Identifier, password, and a valid login role are required.' });
         }
 
-        let values = [identifier.trim()];
+        const values = [identifier.trim()];
         let result;
 
         try {
@@ -76,6 +76,8 @@ export const login = async (req, res) => {
                     if (e.code === '42703') result = await pool.query(`SELECT * FROM sa_managers WHERE email ILIKE $1`, values);
                     else throw e;
                 }
+            } else if (role === 'coordinator') {
+                result = await pool.query(`SELECT * FROM sa_coordinators WHERE email ILIKE $1 OR coordinator_id ILIKE $1`, values);
             } else if (role === 'employee') {
                 result = await pool.query(`SELECT * FROM sa_employees WHERE email ILIKE $1 OR employee_id ILIKE $1`, values);
             } else {
@@ -92,7 +94,7 @@ export const login = async (req, res) => {
 
         const user = result.rows[0];
 
-        if (user.status === 'Pending Deletion') return res.status(403).json({ message: `Your account is pending deletion. Access restricted.` });
+        if (user.status === 'Pending Deletion') return res.status(403).json({ message: 'Your account is pending deletion. Access restricted.' });
         if (user.status !== 'Active') return res.status(403).json({ message: `Account is ${user.status}. Please contact administrator.` });
         if (!user.password) return res.status(403).json({ message: 'Account not activated. Please check your email to set a password.' });
 
@@ -135,7 +137,7 @@ export const login = async (req, res) => {
         const deviceInfo = `${os} - ${browser}`;
 
         await pool.query(
-            `INSERT INTO user_sessions (email, role, token, device_info, device_type, ip_address, last_active) 
+            `INSERT INTO user_sessions (email, role, token, device_info, device_type, ip_address, last_active)
              VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
             [user.email, role, token, deviceInfo, deviceType, ip]
         );
@@ -145,18 +147,16 @@ export const login = async (req, res) => {
             user: userPayload,
             token: token
         });
-
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ message: 'Server error during login.' });
     }
 };
 
-// ==================== SESSION TRACKING ====================
 export const getActiveSessions = async (req, res) => {
     try {
         const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-        let token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
 
         const result = await pool.query(
             'SELECT id, device_info, device_type, ip_address, last_active, token FROM user_sessions WHERE email = $1 ORDER BY last_active DESC',
@@ -189,7 +189,6 @@ export const revokeSession = async (req, res) => {
     }
 };
 
-// ==================== LOGOUT ====================
 export const logout = async (req, res) => {
     try {
         const authHeader = req.headers['authorization'] || req.headers['Authorization'];
@@ -208,7 +207,6 @@ export const logout = async (req, res) => {
     }
 };
 
-// ==================== ACCOUNT DELETION (SOFT REQUEST) ====================
 export const deleteAccount = async (req, res) => {
     try {
         const email = req.user?.email;
@@ -241,7 +239,6 @@ export const deleteAccount = async (req, res) => {
     }
 };
 
-// ==================== ACTIVATION & RECOVERY ====================
 export const activateAccount = async (req, res) => {
     try {
         const { token, password } = req.body ?? {};
@@ -299,7 +296,7 @@ export const requestOtp = async (req, res) => {
         const expiry = Date.now() + 10 * 60 * 1000;
 
         await pool.query(`
-            INSERT INTO password_reset_otps (email, otp, expiry, verified) 
+            INSERT INTO password_reset_otps (email, otp, expiry, verified)
             VALUES ($1, $2, $3, false)
             ON CONFLICT (email) DO UPDATE SET otp = EXCLUDED.otp, expiry = EXCLUDED.expiry, verified = false
         `, [safeEmail, otp, expiry]);
@@ -429,7 +426,6 @@ export const changePassword = async (req, res) => {
     }
 };
 
-// ==================== SUPERADMIN PROFILE UPDATE (WITH AWS S3) ====================
 export const updateProfile = async (req, res) => {
     try {
         if (req.user?.role !== 'superadmin' || !req.user.email) {

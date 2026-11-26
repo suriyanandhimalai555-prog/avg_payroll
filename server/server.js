@@ -23,6 +23,7 @@ import saLeavePolicyRoutes from './routes/superadmin/saLeavePolicyRoutes.js';
 import saAttendanceRoutes from './routes/superadmin/saAttendanceRoutes.js';
 import saHrUserRoutes from './routes/superadmin/saHrUserRoutes.js';
 import saManagerRoutes from './routes/superadmin/saManagerRoutes.js';
+import saCoordinatorRoutes from './routes/superadmin/saCoordinatorRoutes.js';
 import saReimbursementRoutes from './routes/superadmin/saReimbursementRoutes.js';
 import saSalaryRoutes from './routes/superadmin/saSalaryStructureRoutes.js';
 import saPayslipRoutes from './routes/superadmin/saPayslipRoutes.js';
@@ -52,6 +53,7 @@ import initializeSAHolidayModel from './models/superadmin/SAHoliday.js';
 import initializeSALeavePolicyModel from './models/superadmin/SALeavePolicy.js';
 import initializeSAHrUserModel from './models/superadmin/SAHrUser.js';
 import initializeSAManagerModel from './models/superadmin/SAManager.js';
+import initializeSACoordinatorModel from './models/superadmin/SACoordinator.js';
 
 import initializeHrAttendanceModel from './models/hr/HrAttendance.js';
 
@@ -77,6 +79,7 @@ const initializeDatabase = async () => {
         await initializeSAHrUserModel();
         await initializeSAManagerModel();
         await initializeSAEmployeeModel();
+        await initializeSACoordinatorModel();
 
         // Policies & Operations
         await initializeSAHolidayModel();
@@ -176,6 +179,7 @@ if (cluster.isPrimary) {
     app.use('/api/sa-leave-policies', saLeavePolicyRoutes);
     app.use('/api/sa-hr-users', saHrUserRoutes);
     app.use('/api/sa-managers', saManagerRoutes);
+    app.use('/api/sa-coordinators', saCoordinatorRoutes);
     app.use('/api/sa-employees', saEmployeeRoutes);
     app.use('/api/sa-attendance', saAttendanceRoutes);
     app.use('/api/sa-reimbursements', saReimbursementRoutes);

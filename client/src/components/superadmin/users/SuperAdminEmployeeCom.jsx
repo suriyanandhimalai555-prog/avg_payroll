@@ -3,10 +3,11 @@ import axios from 'axios';
 import * as XLSX from 'xlsx';
 import {
     FaUserPlus, FaUser, FaBriefcase, FaMoneyCheckAlt, FaInfoCircle,
-    FaUniversity, FaTimes, FaCheck, FaListUl, FaEnvelope, FaPhoneAlt,
+    FaUniversity, FaTimes, FaCheck, FaEnvelope, FaPhoneAlt,
     FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle,
     FaUpload, FaFileExcel, FaDownload, FaCloudUploadAlt, FaExclamationCircle,
-    FaBuilding, FaChevronDown, FaChevronUp, FaExclamationTriangle
+    FaBuilding, FaChevronDown, FaChevronUp, FaExclamationTriangle,
+    FaCodeBranch, FaFilter, FaUsers, FaNetworkWired, FaClock, FaIdBadge
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -43,7 +44,6 @@ const getAuthConfig = () => {
     };
 };
 
-// Reusable Custom Modal for Alerts/Confirmations
 const ActionModal = ({ isOpen, type, title, message, onConfirm, onCancel }) => {
     if (!isOpen) return null;
 
@@ -67,12 +67,7 @@ const ActionModal = ({ isOpen, type, title, message, onConfirm, onCancel }) => {
 
                     <div className="flex gap-3 pt-4">
                         {!isAlert && (
-                            <Button
-                                variant="ghost"
-                                fullWidth
-                                onClick={onCancel}
-                                className="text-slate-500 hover:bg-slate-100 rounded-xl"
-                            >
+                            <Button variant="ghost" fullWidth onClick={onCancel} className="text-slate-500 hover:bg-slate-100 rounded-xl">
                                 Cancel
                             </Button>
                         )}
@@ -117,21 +112,20 @@ const SuperAdminEmployeeCom = () => {
     const [viewEmployee, setViewEmployee] = useState(null);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
-    // Modal Control State
     const [modalConfig, setModalConfig] = useState({ isOpen: false, type: 'alert', title: '', message: '', onConfirm: null });
 
-    // Bulk Upload States
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadResults, setUploadResults] = useState(null);
     const fileInputRef = useRef(null);
 
-    // Employee Selection & Accordion States
     const [employees, setEmployees] = useState([]);
     const [isFetching, setIsFetching] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('All');
     const [selectedIds, setSelectedIds] = useState([]);
-    const [expandedBranches, setExpandedBranches] = useState([]);
+    const [expandedCompanies, setExpandedCompanies] = useState({});
+    const [expandedBranches, setExpandedBranches] = useState({});
 
     const [successMsg, setSuccessMsg] = useState('');
     const [apiError, setApiError] = useState('');
@@ -152,13 +146,19 @@ const SuperAdminEmployeeCom = () => {
         return new Date(dateString).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
+    const getEmpNet = (emp) => {
+        const gross = parseNum(emp.basic_salary) + parseNum(emp.hra) + parseNum(emp.conveyance) + parseNum(emp.medical) + parseNum(emp.special_allowance) + parseNum(emp.other_allowances);
+        const ded = parseNum(emp.epf) + parseNum(emp.esi) + parseNum(emp.health_insurance) + parseNum(emp.pt) + parseNum(emp.tds) + parseNum(emp.leaves);
+        return gross - ded;
+    };
+
     const showAlert = (title, message) => {
         setModalConfig({
             isOpen: true,
             type: 'alert',
             title,
             message,
-            onConfirm: () => setModalConfig({ ...modalConfig, isOpen: false })
+            onConfirm: () => setModalConfig(prev => ({ ...prev, isOpen: false }))
         });
     };
 
@@ -170,9 +170,9 @@ const SuperAdminEmployeeCom = () => {
             message,
             onConfirm: () => {
                 onConfirmAction();
-                setModalConfig({ ...modalConfig, isOpen: false });
+                setModalConfig(prev => ({ ...prev, isOpen: false }));
             },
-            onCancel: () => setModalConfig({ ...modalConfig, isOpen: false })
+            onCancel: () => setModalConfig(prev => ({ ...prev, isOpen: false }))
         });
     };
 
@@ -205,8 +205,7 @@ const SuperAdminEmployeeCom = () => {
         setIsFetching(true);
         try {
             const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-employees`, getAuthConfig());
-            let data = response.data || [];
-            setEmployees(data);
+            setEmployees(response.data || []);
         } catch (error) {
             console.error('Error fetching employees:', error);
             if (error.response?.status === 500) {
@@ -241,7 +240,6 @@ const SuperAdminEmployeeCom = () => {
         }
 
         setFormData(prev => ({ ...prev, ...updates }));
-
         if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
         if (apiError) setApiError('');
     };
@@ -379,21 +377,6 @@ const SuperAdminEmployeeCom = () => {
         );
     };
 
-    const handleBranchDelete = (branchKey, branchEmployees) => {
-        showConfirm(
-            'Delete Entire Branch?',
-            `Are you sure you want to permanently delete ALL ${branchEmployees.length} employees in this branch?`,
-            () => {
-                const idsToDelete = branchEmployees.map(e => e.id);
-                setSelectedIds(idsToDelete);
-                // We briefly set the ids and immediately call the bulk delete execution
-                setTimeout(() => {
-                    executeBulkDeleteTrigger(idsToDelete);
-                }, 100);
-            }
-        );
-    };
-
     const executeBulkDeleteTrigger = async (idsToDel) => {
         try {
             await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/bulk-delete`, { ids: idsToDel }, getAuthConfig());
@@ -406,12 +389,19 @@ const SuperAdminEmployeeCom = () => {
         }
     };
 
+    const handleBranchDelete = (branchEmployees) => {
+        showConfirm(
+            'Delete Entire Branch?',
+            `Are you sure you want to permanently delete ALL ${branchEmployees.length} employees in this branch?`,
+            () => executeBulkDeleteTrigger(branchEmployees.map(e => e.id))
+        );
+    };
+
     const handleView = (emp) => {
         setViewEmployee(emp);
         setIsViewModalOpen(true);
     };
 
-    // ==================== BULK UPLOAD LOGIC ====================
     const handleDownloadSample = () => {
         const sampleData = [{
             firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', phone: '9876543210',
@@ -426,8 +416,8 @@ const SuperAdminEmployeeCom = () => {
         }];
         const ws = XLSX.utils.json_to_sheet(sampleData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Sample");
-        XLSX.writeFile(wb, "Employee_Bulk_Upload_Sample.xlsx");
+        XLSX.utils.book_append_sheet(wb, ws, 'Sample');
+        XLSX.writeFile(wb, 'Employee_Bulk_Upload_Sample.xlsx');
     };
 
     const handleFileUpload = (e) => {
@@ -447,7 +437,7 @@ const SuperAdminEmployeeCom = () => {
                 const data = XLSX.utils.sheet_to_json(ws);
 
                 if (data.length === 0) {
-                    showAlert("Upload Failed", "Uploaded file is empty.");
+                    showAlert('Upload Failed', 'Uploaded file is empty.');
                     setIsUploading(false);
                     return;
                 }
@@ -465,38 +455,143 @@ const SuperAdminEmployeeCom = () => {
                     setTimeout(() => setSuccessMsg(''), 5000);
                 }
             } catch (error) {
-                console.error("Bulk Upload Error:", error);
+                console.error('Bulk Upload Error:', error);
                 setUploadResults({
                     success: 0,
                     errors: [error.response?.data?.message || 'Failed to process file. Check format.']
                 });
             } finally {
                 setIsUploading(false);
-                if (fileInputRef.current) fileInputRef.current.value = "";
+                if (fileInputRef.current) fileInputRef.current.value = '';
             }
         };
         reader.readAsBinaryString(file);
     };
 
-    // Derived Groupings
-    const filteredEmployees = employees.filter(emp => {
-        const searchStr = `${emp.first_name} ${emp.last_name} ${emp.employee_id} ${emp.company} ${emp.branch} ${emp.department}`.toLowerCase();
-        return searchStr.includes(searchTerm.toLowerCase());
-    });
+    const companyLogoMap = useMemo(() => {
+        const map = new Map();
+        companies.forEach(c => {
+            if (c.company_name) map.set(c.company_name.trim().toLowerCase(), c.logo || null);
+        });
+        return map;
+    }, [companies]);
+
+    const filteredEmployees = useMemo(() => {
+        const q = searchTerm.toLowerCase();
+        return employees.filter(emp => {
+            const searchStr = `${emp.first_name} ${emp.last_name} ${emp.employee_id} ${emp.company} ${emp.branch} ${emp.department} ${emp.designation}`.toLowerCase();
+            const matchesSearch = searchStr.includes(q);
+            const matchesStatus = statusFilter === 'All' || emp.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        });
+    }, [employees, searchTerm, statusFilter]);
 
     const groupedEmployees = useMemo(() => {
-        const groups = {};
-        filteredEmployees.forEach(emp => {
-            const comp = emp.company || 'Unassigned Company';
-            const br = emp.branch || 'Unassigned Branch';
-            if (!groups[comp]) groups[comp] = {};
-            if (!groups[comp][br]) groups[comp][br] = [];
-            groups[comp][br].push(emp);
-        });
-        return groups;
-    }, [filteredEmployees]);
+        const companyMap = new Map();
 
-    // Selection Handlers
+        filteredEmployees.forEach(emp => {
+            const companyName = emp.company?.trim() || 'Unassigned Company';
+            const branchName = emp.branch?.trim() || 'Unassigned Branch';
+
+            if (!companyMap.has(companyName)) {
+                companyMap.set(companyName, {
+                    companyName,
+                    logo: companyLogoMap.get(companyName.toLowerCase()) || null,
+                    total: 0,
+                    active: 0,
+                    pending: 0,
+                    branches: new Map()
+                });
+            }
+
+            const compGroup = companyMap.get(companyName);
+            compGroup.total += 1;
+            if (emp.status === 'Active') compGroup.active += 1;
+            else if (emp.status === 'Pending Activation') compGroup.pending += 1;
+
+            if (!compGroup.branches.has(branchName)) {
+                compGroup.branches.set(branchName, {
+                    branchKey: `${companyName}::${branchName}`,
+                    branchName,
+                    total: 0,
+                    active: 0,
+                    pending: 0,
+                    records: []
+                });
+            }
+
+            const branchGroup = compGroup.branches.get(branchName);
+            branchGroup.total += 1;
+            if (emp.status === 'Active') branchGroup.active += 1;
+            else if (emp.status === 'Pending Activation') branchGroup.pending += 1;
+            branchGroup.records.push(emp);
+        });
+
+        return Array.from(companyMap.values())
+            .sort((a, b) => a.companyName.localeCompare(b.companyName))
+            .map(comp => ({
+                ...comp,
+                branches: Array.from(comp.branches.values()).sort((a, b) => a.branchName.localeCompare(b.branchName))
+            }));
+    }, [filteredEmployees, companyLogoMap]);
+
+    useEffect(() => {
+        if (groupedEmployees.length === 0) return;
+
+        const hasActiveFilter = searchTerm.trim() !== '' || statusFilter !== 'All';
+
+        if (hasActiveFilter) {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedEmployees.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        } else {
+            const firstComp = groupedEmployees[0];
+            const firstBranch = firstComp?.branches[0];
+            setExpandedCompanies(prev => (Object.keys(prev).length === 0 && firstComp ? { [firstComp.companyName]: true } : prev));
+            setExpandedBranches(prev => (Object.keys(prev).length === 0 && firstBranch ? { [firstBranch.branchKey]: true } : prev));
+        }
+    }, [groupedEmployees, searchTerm, statusFilter]);
+
+    const toggleCompany = (companyName) => {
+        setExpandedCompanies(prev => ({ ...prev, [companyName]: !prev[companyName] }));
+    };
+
+    const toggleBranch = (branchKey) => {
+        setExpandedBranches(prev => ({ ...prev, [branchKey]: !prev[branchKey] }));
+    };
+
+    const areAllExpanded = useMemo(() => {
+        if (groupedEmployees.length === 0) return false;
+        return groupedEmployees.every(
+            c => expandedCompanies[c.companyName] && c.branches.every(b => expandedBranches[b.branchKey])
+        );
+    }, [groupedEmployees, expandedCompanies, expandedBranches]);
+
+    const handleToggleAll = () => {
+        if (areAllExpanded) {
+            setExpandedCompanies({});
+            setExpandedBranches({});
+        } else {
+            const nextComps = {};
+            const nextBranches = {};
+            groupedEmployees.forEach(c => {
+                nextComps[c.companyName] = true;
+                c.branches.forEach(b => {
+                    nextBranches[b.branchKey] = true;
+                });
+            });
+            setExpandedCompanies(nextComps);
+            setExpandedBranches(nextBranches);
+        }
+    };
+
     const toggleEmployeeSelection = (id) => {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(empId => empId !== id) : [...prev, id]);
     };
@@ -510,47 +605,9 @@ const SuperAdminEmployeeCom = () => {
         }
     };
 
-    const toggleBranchAccordion = (branchKey) => {
-        setExpandedBranches(prev => prev.includes(branchKey) ? prev.filter(k => k !== branchKey) : [...prev, branchKey]);
-    };
-
-    if (isFetching) {
-        return (
-            <div className="space-y-5 sm:space-y-6 pb-10 relative animate-pulse">
-                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/2">
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-200 rounded-2xl shrink-0"></div>
-                        <div className="space-y-2 w-full">
-                            <div className="h-4 bg-slate-200 rounded w-1/4"></div>
-                            <div className="h-6 sm:h-8 bg-slate-200 rounded w-3/4"></div>
-                        </div>
-                    </div>
-                    <div className="flex gap-2.5 w-full md:w-auto">
-                        <div className="h-10 w-24 bg-slate-200 rounded-xl"></div>
-                        <div className="h-10 w-32 bg-slate-200 rounded-xl"></div>
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
-                        <div className="h-4 bg-slate-200 rounded w-1/6"></div>
-                        <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
-                    </div>
-                    {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <div key={i} className="space-y-2">
-                            <div className="h-4 bg-slate-200 rounded w-1/3"></div>
-                            <div className="h-10 bg-slate-200 rounded-xl w-full"></div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* Unified Action Modal for Alerts & Confirms */}
             <ActionModal
                 isOpen={modalConfig.isOpen}
                 type={modalConfig.type}
@@ -560,7 +617,6 @@ const SuperAdminEmployeeCom = () => {
                 onCancel={modalConfig.onCancel}
             />
 
-            {/* ==================== BULK UPLOAD MODAL ==================== */}
             {isBulkModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
                     <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
@@ -585,9 +641,7 @@ const SuperAdminEmployeeCom = () => {
                         </div>
 
                         <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
-
                             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative overflow-hidden">
-                                <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#0437cc]/5 rounded-full blur-2xl pointer-events-none"></div>
                                 <h3 className="text-xs font-bold text-[#010a1f] mb-3 uppercase tracking-wider flex items-center gap-2">
                                     <FaInfoCircle className="text-[#0437cc]" /> Instructions
                                 </h3>
@@ -645,20 +699,25 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             )}
 
-            {/* ==================== VIEW DOSSIER MODAL ==================== */}
             {isViewModalOpen && viewEmployee && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md overflow-y-auto">
-                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[90vh]">
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200"
+                    onClick={() => setIsViewModalOpen(false)}
+                >
+                    <div
+                        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-[#1f56d6] to-[#f77704]"></div>
 
-                        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50/40 shrink-0 sticky top-0 z-10 backdrop-blur-sm">
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50/40 shrink-0">
                             <div className="flex items-center gap-3 min-w-0">
                                 <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-blue-100">
                                     <FaUser className="text-[#0437cc] text-sm" />
                                 </span>
                                 <div className="min-w-0">
                                     <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Employee Dossier</h2>
-                                    <p className="text-[10px] text-slate-500 font-medium truncate">Complete record</p>
+                                    <p className="text-[10px] text-slate-500 font-medium">Complete record</p>
                                 </div>
                             </div>
                             <button
@@ -669,114 +728,84 @@ const SuperAdminEmployeeCom = () => {
                             </button>
                         </div>
 
-                        <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5 sm:space-y-6">
-                            <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 overflow-hidden">
-                                <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-200/30 rounded-full blur-3xl pointer-events-none"></div>
-
-                                <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white font-black text-2xl sm:text-3xl shadow-lg shadow-[#0437cc]/25 shrink-0">
-                                    {viewEmployee.first_name?.charAt(0)}{viewEmployee.last_name?.charAt(0)}
+                        <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl p-4">
+                                <div className="flex items-center gap-4 min-w-0">
+                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center font-black text-xl shrink-0 shadow-md">
+                                        {viewEmployee.first_name?.charAt(0)}{viewEmployee.last_name?.charAt(0)}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="text-base sm:text-lg font-bold text-[#010a1f] truncate">
+                                            {viewEmployee.first_name} {viewEmployee.last_name}
+                                        </h3>
+                                        <span className="inline-block mt-1 text-[10px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-md">
+                                            {viewEmployee.employee_id}
+                                        </span>
+                                        <p className="text-xs text-slate-500 font-medium mt-1 truncate">
+                                            {viewEmployee.designation} — {viewEmployee.department}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div className="relative min-w-0 text-center sm:text-left flex-1">
-                                    <h3 className="text-lg sm:text-xl font-bold text-[#010a1f] break-words">{viewEmployee.first_name} {viewEmployee.last_name}</h3>
-                                    <span className="inline-block mt-1.5 text-[10px] font-mono font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-md tracking-wide">
-                                        {viewEmployee.employee_id}
-                                    </span>
-                                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 break-words">{viewEmployee.designation} — {viewEmployee.department}</p>
-                                </div>
-                                <div className="relative shrink-0 bg-gradient-to-br from-[#0437cc] to-[#1f56d6] rounded-2xl px-5 py-3 shadow-lg shadow-[#0437cc]/25 text-center text-white w-full sm:w-auto overflow-hidden">
-                                    <div className="absolute -top-6 -right-6 w-20 h-20 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-                                    <p className="relative text-[10px] font-bold uppercase tracking-wider mb-0.5 opacity-80">Net Monthly Pay</p>
-                                    <p className="relative text-lg sm:text-xl font-black">
-                                        {formatCurrency(
-                                            (parseNum(viewEmployee.basic_salary) + parseNum(viewEmployee.hra) + parseNum(viewEmployee.conveyance) + parseNum(viewEmployee.medical) + parseNum(viewEmployee.special_allowance) + parseNum(viewEmployee.other_allowances)) -
-                                            (parseNum(viewEmployee.epf) + parseNum(viewEmployee.esi) + parseNum(viewEmployee.health_insurance) + parseNum(viewEmployee.pt) + parseNum(viewEmployee.tds) + parseNum(viewEmployee.leaves))
-                                        )}
-                                    </p>
+                                <div className="bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white rounded-2xl px-4 py-2.5 text-center shrink-0 shadow-md">
+                                    <p className="text-[9px] font-bold uppercase tracking-wider opacity-80">Net Monthly Pay</p>
+                                    <p className="text-lg font-black tabular-nums">{formatCurrency(getEmpNet(viewEmployee))}</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {[
-                                    { label: 'Company & Branch', value: `${viewEmployee.company} — ${viewEmployee.branch}` },
-                                    { label: 'Location & Shift', value: `${viewEmployee.location} (${viewEmployee.shift})` },
-                                    { label: 'Email', value: viewEmployee.email },
-                                    { label: 'Phone', value: viewEmployee.phone },
-                                    { label: 'UAN NO', value: viewEmployee.uan_no },
-                                ].map((item, i) => (
-                                    <div key={i} className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 min-w-0">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{item.label}</p>
-                                        <p className="text-xs sm:text-sm font-semibold text-slate-700 break-words">{item.value}</p>
-                                    </div>
-                                ))}
-                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 min-w-0">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${viewEmployee.status === 'Active'
-                                        ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                        : 'text-orange-700 bg-orange-50 border-orange-200'
-                                        }`}>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Email</p>
+                                    <p className="text-xs font-bold text-slate-700 truncate">{viewEmployee.email}</p>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Phone</p>
+                                    <p className="text-xs font-bold text-slate-700 truncate">{viewEmployee.phone}</p>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Joined / UAN</p>
+                                    <p className="text-xs font-bold text-slate-700 truncate">{formatDate(viewEmployee.joining_date)} • {viewEmployee.uan_no || 'N/A'}</p>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Company & Branch</p>
+                                    <p className="text-xs font-bold text-slate-700 truncate">{viewEmployee.company} — {viewEmployee.branch}</p>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Location & Shift</p>
+                                    <p className="text-xs font-bold text-slate-700 truncate">{viewEmployee.location} • {viewEmployee.shift}</p>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Status</p>
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${viewEmployee.status === 'Active' ? 'text-teal-700 bg-teal-50 border-teal-200' : 'text-orange-700 bg-orange-50 border-orange-200'}`}>
                                         <span className={`w-1.5 h-1.5 rounded-full ${viewEmployee.status === 'Active' ? 'bg-teal-500' : 'bg-orange-500'}`}></span>
                                         {viewEmployee.status}
                                     </span>
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
-                                <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-200">
-                                    <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shadow-sm">
-                                        <FaMoneyCheckAlt className="text-xs" />
-                                    </span>
-                                    <h3 className="text-xs sm:text-sm font-bold text-[#010a1f]">Elaborate Salary Breakdown</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="bg-green-50/50 border border-green-100 rounded-2xl p-4 space-y-2">
+                                    <p className="text-[11px] font-bold text-green-800 uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-green-100">
+                                        <FaPlusCircle /> Earnings
+                                    </p>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">CTC (Annual)</span><span className="font-bold text-[#0437cc]">{formatCurrency(viewEmployee.ctc)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">Basic Salary</span><span className="font-bold text-slate-700">{formatCurrency(viewEmployee.basic_salary)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">HRA</span><span className="font-bold text-slate-700">{formatCurrency(viewEmployee.hra)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">Conveyance</span><span className="font-bold text-slate-700">{formatCurrency(viewEmployee.conveyance)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">Medical</span><span className="font-bold text-slate-700">{formatCurrency(viewEmployee.medical)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">Special Allowance</span><span className="font-bold text-slate-700">{formatCurrency(viewEmployee.special_allowance)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">Other Allowances</span><span className="font-bold text-slate-700">{formatCurrency(viewEmployee.other_allowances)}</span></div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-                                    <div className="relative bg-gradient-to-br from-green-50/80 to-white p-4 rounded-2xl border border-green-100 overflow-hidden">
-                                        <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
-                                        <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-green-100">
-                                            <span className="w-6 h-6 rounded-md bg-green-100 flex items-center justify-center">
-                                                <FaPlusCircle className="text-green-700 text-[10px]" />
-                                            </span>
-                                            <h4 className="text-[11px] font-bold text-green-800 uppercase tracking-wider">Earnings</h4>
-                                        </div>
-                                        <div className="relative space-y-2">
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">CTC (Annual)</span><span className="font-bold text-[#0437cc] shrink-0">{formatCurrency(viewEmployee.ctc)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Basic Salary</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.basic_salary)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">HRA</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.hra)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Conveyance</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.conveyance)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Medical</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.medical)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Special Allowance</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.special_allowance)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Other Allowances</span><span className="font-bold text-slate-700 shrink-0">{formatCurrency(viewEmployee.other_allowances)}</span></div>
-                                        </div>
-                                        <div className="relative pt-3 mt-3 border-t border-green-200 flex justify-between items-center">
-                                            <span className="text-[11px] sm:text-sm font-bold text-green-800 uppercase tracking-wide">Gross</span>
-                                            <span className="text-sm font-black text-green-700">
-                                                {formatCurrency(parseNum(viewEmployee.basic_salary) + parseNum(viewEmployee.hra) + parseNum(viewEmployee.conveyance) + parseNum(viewEmployee.medical) + parseNum(viewEmployee.special_allowance) + parseNum(viewEmployee.other_allowances))}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="relative bg-gradient-to-br from-red-50/80 to-white p-4 rounded-2xl border border-red-100 overflow-hidden">
-                                        <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
-                                        <div className="relative flex items-center gap-2 mb-3.5 pb-3 border-b border-red-100">
-                                            <span className="w-6 h-6 rounded-md bg-red-100 flex items-center justify-center">
-                                                <FaMinusCircle className="text-red-600 text-[10px]" />
-                                            </span>
-                                            <h4 className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Deductions</h4>
-                                        </div>
-                                        <div className="relative space-y-2">
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">EPF</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.epf)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">ESI</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.esi)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Health Insurance</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.health_insurance)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Professional Tax</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.pt)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">TDS</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.tds)}</span></div>
-                                            <div className="flex justify-between text-[11px] sm:text-sm"><span className="text-slate-500 truncate pr-2">Leaves</span><span className="font-bold text-red-600 shrink-0">{formatCurrency(viewEmployee.leaves)}</span></div>
-                                        </div>
-                                        <div className="relative pt-3 mt-3 border-t border-red-200 flex justify-between items-center">
-                                            <span className="text-[11px] sm:text-sm font-bold text-red-800 uppercase tracking-wide">Total</span>
-                                            <span className="text-sm font-black text-red-600">
-                                                - {formatCurrency(parseNum(viewEmployee.epf) + parseNum(viewEmployee.esi) + parseNum(viewEmployee.health_insurance) + parseNum(viewEmployee.pt) + parseNum(viewEmployee.tds) + parseNum(viewEmployee.leaves))}
-                                            </span>
-                                        </div>
-                                    </div>
+                                <div className="bg-orange-50/50 border border-orange-100 rounded-2xl p-4 space-y-2">
+                                    <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-orange-100">
+                                        <FaMinusCircle /> Deductions
+                                    </p>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">EPF</span><span className="font-bold text-red-600">{formatCurrency(viewEmployee.epf)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">ESI</span><span className="font-bold text-red-600">{formatCurrency(viewEmployee.esi)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">Health Insurance</span><span className="font-bold text-red-600">{formatCurrency(viewEmployee.health_insurance)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">Professional Tax</span><span className="font-bold text-red-600">{formatCurrency(viewEmployee.pt)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">TDS</span><span className="font-bold text-red-600">{formatCurrency(viewEmployee.tds)}</span></div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-500">Leaves</span><span className="font-bold text-red-600">{formatCurrency(viewEmployee.leaves)}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -784,8 +813,7 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             )}
 
-            {/* ==================== HEADER SECTION ==================== */}
-            <div className="relative bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="relative bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-300 ${isEditing ? 'bg-[#f77704]/[0.06]' : 'bg-[#0437cc]/[0.04]'}`}></div>
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -797,18 +825,17 @@ const SuperAdminEmployeeCom = () => {
                             {isEditing ? <FaUserEdit className="text-lg sm:text-xl" /> : <FaUserPlus className="text-lg sm:text-xl" />}
                         </span>
                         <div className="min-w-0">
-                            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border mb-1.5 transition-colors ${isEditing ? 'bg-orange-50 border-orange-100' : 'bg-blue-50 border-blue-100'
-                                }`}>
+                            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border mb-1.5 transition-colors ${isEditing ? 'bg-orange-50 border-orange-100' : 'bg-blue-50 border-blue-100'}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${isEditing ? 'bg-[#f77704]' : 'bg-[#0437cc]'}`}></span>
                                 <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${isEditing ? 'text-[#f77704]' : 'text-[#0437cc]'}`}>
-                                    {isEditing ? 'Edit Mode' : 'Employee Setup'}
+                                    {isEditing ? 'Edit Mode' : 'Employee Creation'}
                                 </span>
                             </div>
                             <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">
-                                {isEditing ? 'Edit Employee Record' : 'Add New Employee'}
+                                {isEditing ? 'Edit Employee Record' : 'Employee Management'}
                             </h1>
                             <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">
-                                {isEditing ? 'Update employee details' : 'Onboard a new team member'}
+                                {isEditing ? 'Update employee details and placement' : 'Create employees with identity, placement, bank, and salary details'}
                             </p>
                         </div>
                     </div>
@@ -824,19 +851,27 @@ const SuperAdminEmployeeCom = () => {
                                 Bulk Upload
                             </Button>
                         )}
-                        {isEditing ? (
-                            <Button variant="ghost" icon={FaTimes} onClick={cancelEdit} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Cancel</Button>
-                        ) : (
-                            <Button variant="ghost" icon={FaTimes} onClick={() => setFormData(INITIAL_FORM_STATE)} className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2">Clear</Button>
-                        )}
-                        <Button variant="primary" icon={FaCheck} className="w-full sm:w-auto shadow-lg shadow-[#0437cc]/25 rounded-xl text-xs sm:text-sm py-2" onClick={handleSubmit} disabled={isSubmitting}>
+                        <Button
+                            variant="ghost"
+                            icon={FaTimes}
+                            onClick={isEditing ? cancelEdit : () => setFormData(INITIAL_FORM_STATE)}
+                            className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2"
+                        >
+                            {isEditing ? 'Cancel' : 'Clear'}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            icon={FaCheck}
+                            className="w-full sm:w-auto shadow-lg shadow-[#0437cc]/25 rounded-xl text-xs sm:text-sm py-2"
+                            onClick={handleSubmit}
+                            disabled={isSubmitting}
+                        >
                             {isSubmitting ? 'Saving...' : (isEditing ? 'Update Employee' : 'Create Employee')}
                         </Button>
                     </div>
                 </div>
             </div>
 
-            {/* ==================== MESSAGES ==================== */}
             {successMsg && (
                 <div className="relative bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 px-4 py-3 rounded-2xl font-semibold text-xs sm:text-sm flex items-center gap-2.5 overflow-hidden">
                     <span className="w-7 h-7 rounded-lg bg-white flex items-center justify-center border border-green-200 shrink-0">
@@ -854,46 +889,43 @@ const SuperAdminEmployeeCom = () => {
                 </div>
             )}
 
-            {/* ==================== FORM ==================== */}
             <form className="space-y-5 sm:space-y-6" onSubmit={handleSubmit}>
-                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
-                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors duration-300 ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
-                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md ${isEditing ? 'bg-gradient-to-br from-[#f77704] to-orange-500 shadow-[#f77704]/20' : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] shadow-[#0437cc]/20'}`}>
-                            <FaUser className="text-sm" />
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white shrink-0 shadow-md shadow-[#0437cc]/20">
+                            <FaIdBadge className="text-sm" />
                         </span>
                         <div className="min-w-0">
-                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Employee Identity Details</h2>
-                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Basic personal & contact details</p>
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">1. Employee Identity Details</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Personal profile, contact details, and residential address</p>
                         </div>
                     </div>
-                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <div className="relative p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                         <FieldWrapper error={errors.firstName}><Input label={<>First Name <span className="text-red-500">*</span></>} name="firstName" value={formData.firstName} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.lastName}><Input label={<>Last Name <span className="text-red-500">*</span></>} name="lastName" value={formData.lastName} onChange={handleInputChange} /></FieldWrapper>
-                        <FieldWrapper error={errors.email}><Input label={<>Official Email <span className="text-red-500">*</span></>} type="email" name="email" icon={FaEnvelope} value={formData.email} onChange={handleInputChange} disabled={isEditing} className={isEditing ? "bg-slate-100 cursor-not-allowed" : ""} /></FieldWrapper>
+                        <FieldWrapper error={errors.email}><Input label={<>Official Email <span className="text-red-500">*</span></>} type="email" name="email" icon={FaEnvelope} value={formData.email} onChange={handleInputChange} disabled={isEditing} className={isEditing ? 'bg-slate-100 cursor-not-allowed' : ''} /></FieldWrapper>
                         <FieldWrapper error={errors.phone}><Input label={<>Contact Number <span className="text-red-500">*</span></>} type="tel" name="phone" icon={FaPhoneAlt} value={formData.phone} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.dob}><Input label={<>Date of Birth <span className="text-red-500">*</span></>} type="date" name="dob" value={formData.dob} onChange={handleInputChange} /></FieldWrapper>
                         <FieldWrapper error={errors.gender}>
                             <Select label={<>Gender <span className="text-red-500">*</span></>} name="gender" value={formData.gender} onChange={handleInputChange} options={[{ value: '', label: 'Select Gender' }, { value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }]} />
                         </FieldWrapper>
-                        <div className="sm:col-span-2 lg:col-span-3">
+                        <div className="md:col-span-2 lg:col-span-3">
                             <FieldWrapper error={errors.address}><Input label={<>Residential Address <span className="text-red-500">*</span></>} name="address" value={formData.address} onChange={handleInputChange} /></FieldWrapper>
                         </div>
                     </div>
                 </div>
 
-                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
-                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#f77704]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
+                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors duration-300 ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
                     <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f77704] to-orange-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-[#f77704]/20">
-                            <FaBriefcase className="text-sm" />
+                            <FaBuilding className="text-sm" />
                         </span>
                         <div className="min-w-0">
-                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Organizational Placement</h2>
-                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Department, designation, shift & reporting hierarchy</p>
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">2. Organizational Placement</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Assign company, branch, department, designation, location, and shift</p>
                         </div>
                     </div>
-                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <div className="relative p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                         <FieldWrapper error={errors.employeeId}>
                             <Input label={<>Employee ID <span className="text-red-500">*</span></>} name="employeeId" value={formData.employeeId} onChange={handleInputChange} placeholder="e.g. AVG-2026-001" className="font-mono" />
                         </FieldWrapper>
@@ -948,35 +980,55 @@ const SuperAdminEmployeeCom = () => {
                     </div>
                 </div>
 
-                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
-                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-emerald-100/40 rounded-full blur-3xl pointer-events-none"></div>
-                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
-                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-emerald-500/20">
-                            <FaMoneyCheckAlt className="text-sm" />
+                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors duration-300 ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="p-5 border-b border-slate-100 flex items-center gap-3">
+                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white shrink-0 shadow-md">
+                            <FaUniversity className="text-sm" />
                         </span>
                         <div className="min-w-0">
-                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Salary Configuration</h2>
-                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Monthly earnings and deductions</p>
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">3. Bank Details</h2>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Salary payout account & UAN details</p>
                         </div>
                     </div>
-                    <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm shrink-0 m-5 mb-0">
-                        <span className="text-[10px] sm:text-xs font-bold text-emerald-700 uppercase tracking-wider">Live Net Pay:</span>
-                        <span className="text-base sm:text-lg font-black text-green-700 tabular-nums">{formatCurrency(liveNet)}</span>
+                    <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        <FieldWrapper error={errors.uanNo}><Input label={<>UAN NO <span className="text-red-500">*</span></>} name="uanNo" placeholder="12-digit UAN" value={formData.uanNo} onChange={handleInputChange} /></FieldWrapper>
+                        <FieldWrapper error={errors.bankName}><Input label={<>Bank Name <span className="text-red-500">*</span></>} name="bankName" value={formData.bankName} onChange={handleInputChange} /></FieldWrapper>
+                        <FieldWrapper error={errors.accountHolder}><Input label={<>Account Holder Name <span className="text-red-500">*</span></>} name="accountHolder" value={formData.accountHolder} onChange={handleInputChange} /></FieldWrapper>
+                        <FieldWrapper error={errors.accountNumber}><Input label={<>Account Number <span className="text-red-500">*</span></>} name="accountNumber" value={formData.accountNumber} onChange={handleInputChange} /></FieldWrapper>
+                        <FieldWrapper error={errors.ifsc}><Input label={<>IFSC Code <span className="text-red-500">*</span></>} name="ifsc" value={formData.ifsc} onChange={handleInputChange} className="uppercase font-mono" /></FieldWrapper>
+                    </div>
+                </div>
+
+                <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors duration-300 ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
+                    <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white shrink-0 shadow-md">
+                                <FaMoneyCheckAlt className="text-sm" />
+                            </span>
+                            <div className="min-w-0">
+                                <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">4. Salary Structure</h2>
+                                <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Earnings & statutory deductions</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                            <span className={`px-3 py-1 rounded-lg border tabular-nums ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
+                                Gross: {formatCurrency(liveGross)}
+                            </span>
+                            <span className="px-3 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 tabular-nums">
+                                Ded: -{formatCurrency(liveDeductions)}
+                            </span>
+                            <span className="px-3 py-1 rounded-lg bg-blue-50 text-[#0437cc] border border-blue-200 tabular-nums">
+                                Net: {formatCurrency(liveNet)}
+                            </span>
+                        </div>
                     </div>
 
-                    <div className="relative p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-                        <div className="relative bg-gradient-to-br from-green-50/80 to-white p-5 rounded-2xl border border-green-100 overflow-hidden">
-                            <div className="absolute -top-8 -right-8 w-24 h-24 bg-green-200/20 rounded-full blur-2xl pointer-events-none"></div>
-                            <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-green-100">
-                                <div className="flex items-center gap-2">
-                                    <span className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
-                                        <FaPlusCircle className="text-green-700 text-xs" />
-                                    </span>
-                                    <h3 className="text-xs font-bold text-green-800 uppercase tracking-wider">Earnings</h3>
-                                </div>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${isGrossMatchingMonthly && parseNum(formData.monthlySalary) > 0 ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{formatCurrency(liveGross)}</span>
-                            </div>
-                            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                            <p className="text-xs font-bold text-green-700 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                                <FaPlusCircle /> Earnings
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <FieldWrapper error={errors.ctc}><Input label={<>CTC (Annual) (₹) <span className="text-red-500">*</span></>} type="number" name="ctc" placeholder="0" value={formData.ctc} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.monthlySalary}><Input label={<>Monthly Salary (₹) <span className="text-red-500">*</span></>} type="number" name="monthlySalary" placeholder="0" value={formData.monthlySalary} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.basic}><Input label={<>Basic Salary (₹) <span className="text-red-500">*</span></>} type="number" name="basic" placeholder="0" value={formData.basic} onChange={handleInputChange} /></FieldWrapper>
@@ -987,18 +1039,12 @@ const SuperAdminEmployeeCom = () => {
                                 <FieldWrapper error={errors.otherAllowances}><Input label={<>Other Allowances (₹) <span className="text-red-500">*</span></>} type="number" name="otherAllowances" placeholder="0" value={formData.otherAllowances} onChange={handleInputChange} /></FieldWrapper>
                             </div>
                         </div>
-                        <div className="relative bg-gradient-to-br from-red-50/80 to-white p-5 rounded-2xl border border-red-100 overflow-hidden">
-                            <div className="absolute -top-8 -right-8 w-24 h-24 bg-red-200/20 rounded-full blur-2xl pointer-events-none"></div>
-                            <div className="relative flex items-center justify-between mb-4 pb-3 border-b border-red-100">
-                                <div className="flex items-center gap-2">
-                                    <span className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
-                                        <FaMinusCircle className="text-red-600 text-xs" />
-                                    </span>
-                                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wider">Deductions</h3>
-                                </div>
-                                <span className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200">-{formatCurrency(liveDeductions)}</span>
-                            </div>
-                            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                        <div className="space-y-4">
+                            <p className="text-xs font-bold text-red-600 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                                <FaMinusCircle /> Deductions
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <FieldWrapper error={errors.epf}><Input label={<>EPF (₹) <span className="text-red-500">*</span></>} type="number" name="epf" placeholder="0" value={formData.epf} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.esi}><Input label="ESI (₹)" type="number" name="esi" placeholder="If Gross <= 21k" value={formData.esi} onChange={handleInputChange} /></FieldWrapper>
                                 <FieldWrapper error={errors.healthInsurance}><Input label="Health Insurance (₹)" type="number" name="healthInsurance" placeholder="0" value={formData.healthInsurance} onChange={handleInputChange} /></FieldWrapper>
@@ -1009,61 +1055,63 @@ const SuperAdminEmployeeCom = () => {
                         </div>
                     </div>
                 </div>
-
-                <div className={`relative bg-white rounded-2xl shadow-sm border overflow-hidden transition-colors ${isEditing ? 'border-[#f77704]/30' : 'border-slate-100'}`}>
-                    <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-100/40 rounded-full blur-3xl pointer-events-none"></div>
-                    <div className="relative p-5 border-b border-slate-100 flex items-center gap-3">
-                        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-purple-500/20">
-                            <FaUniversity className="text-sm" />
-                        </span>
-                        <div className="min-w-0">
-                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Bank Information</h2>
-                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Salary disbursement account</p>
-                        </div>
-                    </div>
-                    <div className="relative p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <FieldWrapper error={errors.uanNo}><Input label={<>UAN NO <span className="text-red-500">*</span></>} name="uanNo" placeholder="12-digit UAN" value={formData.uanNo} onChange={handleInputChange} /></FieldWrapper>
-                        <FieldWrapper error={errors.bankName}><Input label={<>Bank Name <span className="text-red-500">*</span></>} name="bankName" value={formData.bankName} onChange={handleInputChange} /></FieldWrapper>
-                        <FieldWrapper error={errors.accountHolder}><Input label={<>Account Holder Name <span className="text-red-500">*</span></>} name="accountHolder" value={formData.accountHolder} onChange={handleInputChange} /></FieldWrapper>
-                        <FieldWrapper error={errors.accountNumber}><Input label={<>Account Number <span className="text-red-500">*</span></>} name="accountNumber" value={formData.accountNumber} onChange={handleInputChange} /></FieldWrapper>
-                        <FieldWrapper error={errors.ifsc}><Input label={<>IFSC Code <span className="text-red-500">*</span></>} name="ifsc" value={formData.ifsc} onChange={handleInputChange} /></FieldWrapper>
-                    </div>
-                </div>
             </form>
 
-            {/* ==================== EMPLOYEES LIST WITH ACCORDION ==================== */}
-            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-10">
-                <div className="absolute -top-24 -right-24 w-56 h-56 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
-
-                <div className="relative p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="relative p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-slate-50/40">
                     <div className="flex items-center gap-3 min-w-0">
                         <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] flex items-center justify-center text-white shrink-0 shadow-md shadow-[#0437cc]/20">
-                            <FaListUl className="text-sm" />
+                            <FaUsers className="text-sm" />
                         </span>
                         <div className="min-w-0">
-                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Registered Employees</h2>
+                            <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">Registered Employees Directory</h2>
                             <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">
-                                {filteredEmployees.length} of {employees.length} {employees.length === 1 ? 'record' : 'records'}
+                                {filteredEmployees.length} of {employees.length} records across {groupedEmployees.length} {groupedEmployees.length === 1 ? 'company' : 'companies'}
                             </p>
                         </div>
                     </div>
 
-                    <div className="relative w-full md:w-72 shrink-0">
-                        <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
-                        <input
-                            type="text"
-                            placeholder="Search name, ID or branch…"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-slate-50/70 hover:border-slate-300 focus:bg-white transition-all"
-                        />
+                    <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full xl:w-auto shrink-0">
+                        <div className="relative w-full sm:w-56">
+                            <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                            <input
+                                type="text"
+                                placeholder="Search name, ID, branch…"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 transition-all"
+                            />
+                        </div>
+                        <div className="relative w-full sm:w-40">
+                            <FaFilter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#0437cc] bg-white cursor-pointer appearance-none"
+                            >
+                                <option value="All">All Status</option>
+                                <option value="Active">Active</option>
+                                <option value="Pending Activation">Pending</option>
+                                <option value="Suspended">Suspended</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                        {groupedEmployees.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleToggleAll}
+                                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#0437cc] hover:bg-blue-50 transition-colors px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white shrink-0"
+                            >
+                                {areAllExpanded ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
+                                {areAllExpanded ? 'Collapse All' : 'Expand All'}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="p-5">
-                    {/* Bulk Delete Bar */}
+                <div className="p-4 sm:p-5 space-y-4">
                     {selectedIds.length > 0 && (
-                        <div className="bg-red-50 border border-red-200 p-3 sm:px-4 flex flex-col sm:flex-row justify-between items-center rounded-xl mb-5 gap-3 animate-in fade-in zoom-in-95">
+                        <div className="bg-red-50 border border-red-200 p-3 sm:px-4 flex flex-col sm:flex-row justify-between items-center rounded-xl gap-3">
                             <span className="text-xs sm:text-sm font-bold text-red-700 flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                                 {selectedIds.length} Employees Selected
@@ -1075,164 +1123,211 @@ const SuperAdminEmployeeCom = () => {
                         </div>
                     )}
 
-                    {filteredEmployees.length === 0 ? (
-                        <div className="py-12 text-center border border-slate-100 rounded-2xl bg-slate-50/50">
-                            <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center mx-auto mb-3">
+                    {isFetching ? (
+                        <div className="p-12 text-center">
+                            <div className="w-10 h-10 border-[3px] border-[#0437cc]/20 border-t-[#0437cc] rounded-full animate-spin mx-auto mb-3"></div>
+                            <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Loading employees…</p>
+                        </div>
+                    ) : groupedEmployees.length === 0 ? (
+                        <div className="p-12 text-center">
+                            <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
                                 <FaUser className="text-xl text-slate-300" />
                             </div>
                             <p className="text-xs sm:text-sm font-semibold text-slate-400">
-                                {searchTerm ? 'No employees match your search.' : 'No employees have been registered yet.'}
+                                {searchTerm || statusFilter !== 'All'
+                                    ? 'No employees match your search criteria.'
+                                    : 'No employees have been registered yet.'}
                             </p>
                         </div>
                     ) : (
-                        <div className="space-y-6">
-                            {Object.keys(groupedEmployees).map(company => (
-                                <div key={company} className="relative">
-                                    <h3 className="text-sm sm:text-base font-black text-[#010a1f] mb-3 pb-2 border-b border-slate-200 sticky top-0 bg-white z-10 pt-2">
-                                        {company}
-                                    </h3>
+                        groupedEmployees.map((companyGroup) => {
+                            const isCompanyOpen = !!expandedCompanies[companyGroup.companyName];
 
-                                    <div className="space-y-4">
-                                        {Object.keys(groupedEmployees[company]).map(branch => {
-                                            const branchEmployees = groupedEmployees[company][branch];
-                                            const branchKey = `${company}_${branch}`;
-                                            const isExpanded = expandedBranches.includes(branchKey);
+                            return (
+                                <div key={companyGroup.companyName} className="border border-slate-200/90 rounded-2xl overflow-hidden bg-white shadow-sm">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCompany(companyGroup.companyName)}
+                                        className="w-full px-4 sm:px-5 py-4 bg-gradient-to-r from-slate-50 via-blue-50/30 to-white hover:from-blue-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-10 h-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center p-1.5 shrink-0 overflow-hidden shadow-sm">
+                                                {companyGroup.logo ? (
+                                                    <img src={companyGroup.logo} alt={companyGroup.companyName} className="w-full h-full object-contain" />
+                                                ) : (
+                                                    <FaBuilding className="text-[#0437cc] text-sm" />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">{companyGroup.companyName}</h3>
+                                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                                    {companyGroup.branches.length} {companyGroup.branches.length === 1 ? 'Branch' : 'Branches'} • {companyGroup.total} {companyGroup.total === 1 ? 'Employee' : 'Employees'}
+                                                </p>
+                                            </div>
+                                        </div>
 
-                                            // Determine Checkbox State
-                                            const branchIds = branchEmployees.map(e => e.id);
-                                            const isAllSelected = branchIds.every(id => selectedIds.includes(id));
-                                            const isPartiallySelected = branchIds.some(id => selectedIds.includes(id)) && !isAllSelected;
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                Active: {companyGroup.active}
+                                            </span>
+                                            {companyGroup.pending > 0 && (
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200">
+                                                    Pending: {companyGroup.pending}
+                                                </span>
+                                            )}
+                                            <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 ml-1">
+                                                {isCompanyOpen ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+                                            </span>
+                                        </div>
+                                    </button>
 
-                                            return (
-                                                <div key={branchKey} className={`border rounded-2xl overflow-hidden transition-all duration-300 ${isExpanded ? 'border-[#0437cc]/30 shadow-md shadow-[#0437cc]/5' : 'border-slate-200 hover:border-slate-300'}`}>
+                                    {isCompanyOpen && (
+                                        <div className="p-3 sm:p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
+                                            {companyGroup.branches.map((branchGroup) => {
+                                                const isBranchOpen = !!expandedBranches[branchGroup.branchKey];
+                                                const branchIds = branchGroup.records.map(e => e.id);
+                                                const isAllSelected = branchIds.length > 0 && branchIds.every(id => selectedIds.includes(id));
+                                                const isPartiallySelected = branchIds.some(id => selectedIds.includes(id)) && !isAllSelected;
 
-                                                    {/* Branch Header Row */}
-                                                    <div className={`px-4 py-3 flex flex-row items-center justify-between gap-3 transition-colors ${isExpanded ? 'bg-gradient-to-r from-blue-50/80 to-indigo-50/40' : 'bg-slate-50/70 hover:bg-slate-50'}`}>
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isAllSelected}
-                                                                ref={input => {
-                                                                    if (input) input.indeterminate = isPartiallySelected;
-                                                                }}
-                                                                onChange={(e) => toggleBranchSelection(branchEmployees, e.target.checked)}
-                                                                className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
-                                                            />
-                                                            <div
-                                                                className="flex items-center gap-2 cursor-pointer min-w-0"
-                                                                onClick={() => toggleBranchAccordion(branchKey)}
-                                                            >
-                                                                <span className="text-xs sm:text-sm font-bold text-slate-800 truncate">{branch}</span>
-                                                                <span className="text-[10px] font-bold text-[#0437cc] bg-white border border-blue-200 px-2 py-0.5 rounded-full shrink-0 shadow-sm">
-                                                                    {branchEmployees.length} Staff
+                                                return (
+                                                    <div key={branchGroup.branchKey} className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-xs">
+                                                        <div
+                                                            onClick={() => toggleBranch(branchGroup.branchKey)}
+                                                            className="w-full px-4 py-3 bg-white hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isAllSelected}
+                                                                    ref={input => { if (input) input.indeterminate = isPartiallySelected; }}
+                                                                    onChange={(e) => toggleBranchSelection(branchGroup.records, e.target.checked)}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer shrink-0"
+                                                                />
+                                                                <span className="w-8 h-8 rounded-lg bg-orange-50 text-[#f77704] border border-orange-100 flex items-center justify-center shrink-0">
+                                                                    <FaCodeBranch className="text-xs" />
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{branchGroup.branchName}</p>
+                                                                    <p className="text-[10px] text-slate-400 font-semibold">{branchGroup.total} Staff</p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-100">
+                                                                    {branchGroup.active} Active
+                                                                </span>
+                                                                {branchGroup.pending > 0 && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-100">
+                                                                        {branchGroup.pending} Pending
+                                                                    </span>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleBranchDelete(branchGroup.records);
+                                                                    }}
+                                                                    className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 transition-colors ml-1"
+                                                                    title="Delete Entire Branch"
+                                                                >
+                                                                    <FaTrash className="text-[10px]" />
+                                                                </button>
+                                                                <span className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500">
+                                                                    {isBranchOpen ? <FaChevronUp className="text-[10px]" /> : <FaChevronDown className="text-[10px]" />}
                                                                 </span>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleBranchDelete(branchKey, branchEmployees);
-                                                                }}
-                                                                className="w-7 h-7 rounded-lg inline-flex items-center justify-center bg-white text-slate-400 hover:text-red-500 hover:border-red-200 border border-slate-200 transition-all shadow-sm"
-                                                                title="Delete Entire Branch"
-                                                            >
-                                                                <FaTrash size={10} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => toggleBranchAccordion(branchKey)}
-                                                                className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all shadow-sm border ${isExpanded ? 'bg-[#0437cc] text-white border-[#0437cc]' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
-                                                            >
-                                                                {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
-                                                            </button>
-                                                        </div>
-                                                    </div>
 
-                                                    {/* Hidden button to bridge the branch delete logic with the existing bulk delete flow securely */}
-                                                    <button id="hidden-bulk-delete-trigger" className="hidden" onClick={handleBulkDelete}></button>
-
-                                                    {/* Branch Content (Employees Table) */}
-                                                    {isExpanded && (
-                                                        <div className="overflow-x-auto bg-white border-t border-slate-100 custom-scrollbar">
-                                                            <table className="w-full text-left border-collapse min-w-[820px]">
-                                                                <thead>
-                                                                    <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/40">
-                                                                        <th className="px-4 py-2.5 w-10 text-center"></th>
-                                                                        <th className="px-4 py-2.5 font-bold">Employee Details</th>
-                                                                        <th className="px-4 py-2.5 font-bold">Designation & Dept</th>
-                                                                        <th className="px-4 py-2.5 font-bold">Joined On</th>
-                                                                        <th className="px-4 py-2.5 font-bold text-center">Status</th>
-                                                                        <th className="px-4 py-2.5 font-bold text-right">Actions</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="divide-y divide-slate-50">
-                                                                    {branchEmployees.map((emp) => (
-                                                                        <tr key={emp.id} className={`transition-colors group ${selectedIds.includes(emp.id) ? 'bg-blue-50/40' : (isEditing && editEmployeeId === emp.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60')}`}>
-                                                                            <td className="px-4 py-3 text-center">
-                                                                                <input
-                                                                                    type="checkbox"
-                                                                                    checked={selectedIds.includes(emp.id)}
-                                                                                    onChange={() => toggleEmployeeSelection(emp.id)}
-                                                                                    className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
-                                                                                />
-                                                                            </td>
-                                                                            <td className="px-4 py-3">
-                                                                                <div className="flex items-center gap-3 min-w-0">
-                                                                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs shrink-0">
-                                                                                        {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
-                                                                                    </div>
-                                                                                    <div className="min-w-0">
-                                                                                        <p className="text-xs font-bold text-slate-800 truncate">{emp.first_name} {emp.last_name}</p>
-                                                                                        <span className="inline-block mt-0.5 text-[9px] font-mono font-bold text-slate-500 tracking-wide">
-                                                                                            {emp.employee_id}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td className="px-4 py-3 min-w-0">
-                                                                                <p className="text-xs font-bold text-slate-700 truncate">{emp.designation}</p>
-                                                                                <p className="text-[10px] font-semibold text-slate-500 mt-0.5 truncate">{emp.department}</p>
-                                                                            </td>
-                                                                            <td className="px-4 py-3">
-                                                                                <p className="text-[11px] font-semibold text-slate-600 whitespace-nowrap">{formatDate(emp.joining_date)}</p>
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-center">
-                                                                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold border whitespace-nowrap ${emp.status === 'Active'
-                                                                                    ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                                                                    : emp.status === 'Pending Activation'
-                                                                                        ? 'text-orange-700 bg-orange-50 border-orange-200'
-                                                                                        : 'text-red-700 bg-red-50 border-red-200'
-                                                                                    }`}>
-                                                                                    <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500' : emp.status === 'Pending Activation' ? 'bg-orange-500' : 'bg-red-500'}`}></span>
-                                                                                    {emp.status}
-                                                                                </span>
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right">
-                                                                                <div className="flex gap-1 justify-end">
-                                                                                    <button onClick={() => handleView(emp)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50 bg-white border border-slate-100 shadow-sm" title="View Dossier">
-                                                                                        <FaEye className="text-[10px]" />
-                                                                                    </button>
-                                                                                    <button onClick={() => handleEdit(emp)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50 bg-white border border-slate-100 shadow-sm" title="Edit Employee">
-                                                                                        <FaEdit className="text-[10px]" />
-                                                                                    </button>
-                                                                                    <button onClick={() => handleDelete(emp.id)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 bg-white border border-slate-100 shadow-sm" title="Delete Employee">
-                                                                                        <FaTrash className="text-[10px]" />
-                                                                                    </button>
-                                                                                </div>
-                                                                            </td>
+                                                        {isBranchOpen && (
+                                                            <div className="border-t border-slate-100 overflow-x-auto custom-scrollbar">
+                                                                <table className="w-full text-left border-collapse min-w-[840px]">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                                                            <th className="px-4 py-3.5 w-10 text-center"></th>
+                                                                            <th className="px-4 py-3.5 font-bold whitespace-nowrap">Employee</th>
+                                                                            <th className="px-4 py-3.5 font-bold whitespace-nowrap">Dept & Shift</th>
+                                                                            <th className="px-4 py-3.5 font-bold whitespace-nowrap">Net Pay</th>
+                                                                            <th className="px-4 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                                                            <th className="px-4 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
                                                                         </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {branchGroup.records.map((emp) => (
+                                                                            <tr key={emp.id} className={`transition-colors group ${selectedIds.includes(emp.id) ? 'bg-blue-50/40' : (isEditing && editEmployeeId === emp.id ? 'bg-orange-50/60' : 'hover:bg-slate-50/60')}`}>
+                                                                                <td className="px-4 py-3.5 text-center">
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={selectedIds.includes(emp.id)}
+                                                                                        onChange={() => toggleEmployeeSelection(emp.id)}
+                                                                                        className="w-4 h-4 rounded border-slate-300 text-[#0437cc] focus:ring-[#0437cc] cursor-pointer"
+                                                                                    />
+                                                                                </td>
+                                                                                <td className="px-4 py-3.5">
+                                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+                                                                                            {emp.first_name?.charAt(0)}{emp.last_name?.charAt(0)}
+                                                                                        </div>
+                                                                                        <div className="min-w-0">
+                                                                                            <p className="text-xs sm:text-sm font-bold text-[#010a1f] truncate">{emp.first_name} {emp.last_name}</p>
+                                                                                            <span className="inline-block mt-0.5 text-[10px] font-mono font-bold text-[#0437cc] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">
+                                                                                                {emp.employee_id}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-4 py-3.5 min-w-0">
+                                                                                    <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5 truncate">
+                                                                                        <FaNetworkWired className="text-slate-400 text-[10px] shrink-0" />
+                                                                                        <span className="truncate">{emp.designation} • {emp.department}</span>
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
+                                                                                        <FaClock className="text-slate-400 text-[9px] shrink-0" />
+                                                                                        <span className="truncate">{emp.shift || 'General Shift'}</span>
+                                                                                    </p>
+                                                                                </td>
+                                                                                <td className="px-4 py-3.5">
+                                                                                    <p className="text-xs sm:text-sm font-bold text-green-700 tabular-nums whitespace-nowrap">{formatCurrency(getEmpNet(emp))}</p>
+                                                                                    <p className="text-[10px] text-slate-400 whitespace-nowrap">Joined: {formatDate(emp.joining_date)}</p>
+                                                                                </td>
+                                                                                <td className="px-4 py-3.5 text-center">
+                                                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${emp.status === 'Active'
+                                                                                        ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                                                                        : emp.status === 'Pending Activation'
+                                                                                            ? 'text-orange-700 bg-orange-50 border-orange-200'
+                                                                                            : 'text-red-700 bg-red-50 border-red-200'
+                                                                                        }`}>
+                                                                                        <span className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-teal-500' : emp.status === 'Pending Activation' ? 'bg-orange-500' : 'bg-red-500'}`}></span>
+                                                                                        {emp.status}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-4 py-3.5 text-right">
+                                                                                    <div className="flex gap-1 justify-end">
+                                                                                        <button onClick={() => handleView(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#0437cc] transition-colors rounded-lg hover:bg-blue-50" title="View Dossier">
+                                                                                            <FaEye className="text-xs" />
+                                                                                        </button>
+                                                                                        <button onClick={() => handleEdit(emp)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-[#f77704] transition-colors rounded-lg hover:bg-orange-50" title="Edit Employee">
+                                                                                            <FaEdit className="text-xs" />
+                                                                                        </button>
+                                                                                        <button onClick={() => handleDelete(emp.id)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50" title="Delete Employee">
+                                                                                            <FaTrash className="text-xs" />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
+                            );
+                        })
                     )}
                 </div>
             </div>

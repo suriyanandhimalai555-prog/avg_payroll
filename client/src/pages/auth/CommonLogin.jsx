@@ -3,12 +3,12 @@ import { useNavigate, useLocation, useSearchParams, Navigate } from 'react-route
 import axios from 'axios';
 import {
     FaUser, FaLock, FaSignInAlt, FaUserTie,
-    FaBriefcase, FaArrowLeft, FaEye, FaEyeSlash, FaEnvelope, FaKey
+    FaShieldAlt, FaArrowLeft, FaEye, FaEyeSlash, FaEnvelope, FaKey
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 
-const VALID_ROLES = ['employee', 'hr', 'manager'];
+const VALID_ROLES = ['employee', 'hr', 'coordinator'];
 
 const CommonLogin = () => {
     const navigate = useNavigate();
@@ -52,7 +52,7 @@ const CommonLogin = () => {
     useEffect(() => {
         const checkLockout = () => {
             const lockoutUntil = parseInt(localStorage.getItem('common_lockout_until'), 10);
-            
+
             if (lockoutUntil && lockoutUntil > Date.now()) {
                 const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000);
                 setBlockCountdown(remainingSeconds);
@@ -65,8 +65,8 @@ const CommonLogin = () => {
             }
         };
 
-        checkLockout(); 
-        const timer = setInterval(checkLockout, 1000); 
+        checkLockout();
+        const timer = setInterval(checkLockout, 1000);
         return () => clearInterval(timer);
     }, [error]);
 
@@ -82,7 +82,7 @@ const CommonLogin = () => {
     if (user) {
         if (user.role === 'employee') return <Navigate to="/employee" replace />;
         if (user.role === 'hr') return <Navigate to="/hr" replace />;
-        if (user.role === 'manager') return <Navigate to="/manager" replace />;
+        if (user.role === 'coordinator') return <Navigate to="/coordinator" replace />;
         if (user.role === 'superadmin') return <Navigate to="/superadmin" replace />;
     }
 
@@ -95,20 +95,20 @@ const CommonLogin = () => {
 
         try {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
-                identifier: identifier.trim(), 
-                password, 
+                identifier: identifier.trim(),
+                password,
                 role: loginRole
             });
-            
+
             if (response.status === 200) {
                 localStorage.removeItem('common_login_attempts');
                 localStorage.removeItem('common_lockout_until');
                 setLoginAttempts(0);
-                
+
                 login(response.data.user, response.data.token);
-                
+
                 if (loginRole === 'hr') navigate('/hr', { replace: true });
-                else if (loginRole === 'manager') navigate('/manager', { replace: true });
+                else if (loginRole === 'coordinator') navigate('/coordinator', { replace: true });
                 else navigate('/employee', { replace: true });
             }
         } catch (err) {
@@ -119,7 +119,7 @@ const CommonLogin = () => {
 
             setLoginAttempts(newAttempts);
             localStorage.setItem('common_login_attempts', newAttempts);
-            
+
             if (newAttempts >= 3) {
                 const lockoutTime = Date.now() + 30000;
                 localStorage.setItem('common_lockout_until', lockoutTime.toString());
@@ -135,15 +135,20 @@ const CommonLogin = () => {
 
     const handleRequestOtp = async (e) => {
         e.preventDefault();
-        setError(''); setSuccessMsg(''); setIsSubmitting(true);
+        setError('');
+        setSuccessMsg('');
+        setIsSubmitting(true);
         try {
-            await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/request-otp`, { 
-                email: forgotEmail.trim(), 
-                role: loginRole 
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/request-otp`, {
+                email: forgotEmail.trim(),
+                role: loginRole
             });
-            
+
             setSuccessMsg('OTP sent to your email successfully.');
-            setTimeout(() => { setSuccessMsg(''); setFlowView('verify'); }, 1500);
+            setTimeout(() => {
+                setSuccessMsg('');
+                setFlowView('verify');
+            }, 1500);
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to send OTP. Ensure email is correct.');
         } finally {
@@ -153,13 +158,14 @@ const CommonLogin = () => {
 
     const handleVerifyOtp = async (e) => {
         e.preventDefault();
-        setError(''); setIsSubmitting(true);
+        setError('');
+        setIsSubmitting(true);
         try {
-            await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/verify-otp`, { 
-                email: forgotEmail.trim(), 
-                otp: forgotOtp.trim() 
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/verify-otp`, {
+                email: forgotEmail.trim(),
+                otp: forgotOtp.trim()
             });
-            
+
             setFlowView('reset');
         } catch (err) {
             setError(err.response?.data?.message || 'Invalid or expired OTP.');
@@ -171,17 +177,18 @@ const CommonLogin = () => {
     const handleResetPassword = async (e) => {
         e.preventDefault();
         if (forgotNewPwd.length < 8 || forgotNewPwd.length > 128) {
-            return setError("Password must be between 8 and 128 characters.");
+            return setError('Password must be between 8 and 128 characters.');
         }
 
-        setError(''); setIsSubmitting(true);
+        setError('');
+        setIsSubmitting(true);
         try {
             await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/reset-password`, {
-                email: forgotEmail.trim(), 
-                role: loginRole, 
+                email: forgotEmail.trim(),
+                role: loginRole,
                 newPassword: forgotNewPwd
             });
-            
+
             setSuccessMsg('Password has been reset successfully!');
             setTimeout(() => {
                 setSuccessMsg('');
@@ -198,14 +205,27 @@ const CommonLogin = () => {
 
     const resetToLogin = () => {
         setFlowView('login');
-        setError(''); setSuccessMsg('');
+        setError('');
+        setSuccessMsg('');
     };
 
     const roles = [
         { id: 'employee', label: 'Employee', icon: FaUser },
         { id: 'hr', label: 'HR', icon: FaUserTie },
-        { id: 'manager', label: 'Manager', icon: FaBriefcase },
+        { id: 'coordinator', label: 'Coordinator', icon: FaShieldAlt },
     ];
+
+    const getIdentifierLabel = () => {
+        if (loginRole === 'employee') return 'Employee ID / Email';
+        if (loginRole === 'coordinator') return 'Coordinator ID / Email';
+        return 'Official Email';
+    };
+
+    const getIdentifierPlaceholder = () => {
+        if (loginRole === 'employee') return 'AVG-2026-001 or email';
+        if (loginRole === 'coordinator') return 'CRD-001 or email';
+        return 'Enter your email address';
+    };
 
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 p-3 sm:p-6 relative overflow-hidden">
@@ -273,7 +293,7 @@ const CommonLogin = () => {
                             <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
                                 <div className="space-y-1.5">
                                     <label className="text-[11px] sm:text-xs font-bold text-[#010a1f] uppercase tracking-wider">
-                                        {loginRole === 'employee' ? 'Employee ID / Email' : 'Official Email'}
+                                        {getIdentifierLabel()}
                                     </label>
                                     <div className="relative group">
                                         <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors ${focusedField === 'identifier' ? 'text-[#0437cc]' : 'text-slate-400'}`}>
@@ -286,7 +306,7 @@ const CommonLogin = () => {
                                             onChange={(e) => { setIdentifier(e.target.value); setError(''); }}
                                             onFocus={() => setFocusedField('identifier')}
                                             onBlur={() => setFocusedField(null)}
-                                            placeholder={loginRole === 'employee' ? "AVG-2026-001 or email" : "Enter your email address"}
+                                            placeholder={getIdentifierPlaceholder()}
                                             required
                                             disabled={isSubmitting || blockCountdown > 0}
                                             className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-[#0437cc]/10 focus:border-[#0437cc] focus:bg-white transition-all outline-none text-[#010a1f] disabled:opacity-60 placeholder:text-slate-400 placeholder:font-normal"
@@ -311,7 +331,7 @@ const CommonLogin = () => {
                                             <FaLock className="text-sm" />
                                         </div>
                                         <input
-                                            type={showPassword ? "text" : "password"}
+                                            type={showPassword ? 'text' : 'password'}
                                             name="password"
                                             value={password}
                                             onChange={(e) => { setPassword(e.target.value); setError(''); }}
@@ -352,7 +372,7 @@ const CommonLogin = () => {
                                 <div className="pt-2 sm:pt-3">
                                     <Button
                                         type="submit"
-                                        variant={blockCountdown > 0 ? "danger" : "primary"}
+                                        variant={blockCountdown > 0 ? 'danger' : 'primary'}
                                         disabled={isSubmitting || blockCountdown > 0}
                                         className={`w-full !py-3.5 !text-[13px] sm:!text-sm ${blockCountdown > 0 ? 'bg-red-50 text-red-500 border-red-100 cursor-not-allowed opacity-100' : 'shadow-lg shadow-[#0437cc]/25'}`}
                                     >
@@ -394,8 +414,7 @@ const CommonLogin = () => {
                                             key={r.id}
                                             type="button"
                                             onClick={() => setLoginRole(r.id)}
-                                            className={`flex-1 flex justify-center py-2 text-[11px] font-bold rounded-xl transition-all ${isActive ? 'bg-white text-[#0437cc] shadow-sm' : 'text-slate-500'
-                                                }`}
+                                            className={`flex-1 flex justify-center py-2 text-[11px] font-bold rounded-xl transition-all ${isActive ? 'bg-white text-[#0437cc] shadow-sm' : 'text-slate-500'}`}
                                         >
                                             {r.label}
                                         </button>
@@ -502,7 +521,7 @@ const CommonLogin = () => {
                                             <FaLock className="text-sm" />
                                         </div>
                                         <input
-                                            type={showPassword ? "text" : "password"}
+                                            type={showPassword ? 'text' : 'password'}
                                             value={forgotNewPwd}
                                             onChange={(e) => { setForgotNewPwd(e.target.value); setError(''); }}
                                             placeholder="Min. 8 characters"

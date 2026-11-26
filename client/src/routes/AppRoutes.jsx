@@ -20,6 +20,7 @@ import SuperAdminLocations from '../pages/superadmin/organization/SuperAdminLoca
 // Superadmin Users
 import SuperAdminHR from '../pages/superadmin/users/SuperAdminHR';
 import SuperAdminManagers from '../pages/superadmin/users/SuperAdminManagers';
+import SuperAdminCoordinator from '../pages/superadmin/users/SuperAdminCoordinator';
 import SuperAdminEmployee from '../pages/superadmin/users/SuperAdminEmployee';
 import SuperAdminEmployeeManagement from '../pages/superadmin/SuperAdminEmployeeManagement';
 // Super Admin Payroll
@@ -80,6 +81,9 @@ import HRPayroll from '../pages/hr/HRPayroll';
 import HRReports from '../pages/hr/HRReports';
 import HRNotifications from '../pages/hr/HRNotifications';
 
+// Coordinators
+import CoordinatorsLayout from '../layouts/CoordinatorsLayout';
+
 // Manager
 import ManagerLayout from '../layouts/ManagerLayout';
 import ManagerDashboard from '../pages/manager/ManagerDashboard';
@@ -133,6 +137,7 @@ const AppRoutes = () => {
                 {/* Users */}
                 <Route path="users/hr" element={<SuperAdminHR />} />
                 <Route path="users/managers" element={<SuperAdminManagers />} />
+                <Route path="users/coordinators" element={<SuperAdminCoordinator />} />
                 <Route path="users/employees" element={<SuperAdminEmployee />} />
 
                 <Route path="employee-management" element={<SuperAdminEmployeeManagement />} />
@@ -207,6 +212,18 @@ const AppRoutes = () => {
                 <Route path="payroll" element={<HRPayroll />} />
                 <Route path="reports" element={<HRReports />} />
                 <Route path="notifications" element={<HRNotifications />} />
+            </Route>
+
+            <Route
+                path="/coordinator"
+                element={
+                    <ProtectedRoute allowedRoles={['coordinator']}>
+                        <CoordinatorsLayout />
+                    </ProtectedRoute>
+                }
+            >
+                {/* <Route index element={<CoordinatorsDashboard />} /> */}
+                {/* <Route path="*" element={<CoordinatorsDashboard />} /> */}
             </Route>
 
             {/* Manager Protected Routes */}
