@@ -1,11 +1,11 @@
 
-name: AVG Payroll - Deployment Email Notifications
+name: AVG Payroll - Email Notifications Deployment
 
 on:
   workflow_run:
     workflows:
       - AVG Payroll - Build and Publish Images
-      - AVG Payroll - Deploy Fresh Test
+      - AVG Payroll - Final Deployment
     types:
       - completed
 
@@ -23,7 +23,7 @@ jobs:
       (
         (github.event.workflow_run.name == 'AVG Payroll - Build and Publish Images' &&
          github.event.workflow_run.conclusion != 'success') ||
-        github.event.workflow_run.name == 'AVG Payroll - Deploy Fresh Test'
+        github.event.workflow_run.name == 'AVG Payroll - Final Deployment'
       )
 
     runs-on: ubuntu-latest

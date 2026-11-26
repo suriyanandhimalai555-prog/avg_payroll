@@ -1,4 +1,4 @@
-name: AVG Payroll - Deploy Fresh Test
+name: AVG Payroll - Final Deployment
 
 on:
   workflow_run:
