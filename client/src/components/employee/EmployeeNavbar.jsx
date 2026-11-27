@@ -1,4 +1,7 @@
-import { FaBell, FaSearch, FaAlignLeft, FaMapMarkerAlt, FaExclamationTriangle } from 'react-icons/fa';
+import {
+    FaBell, FaSearch, FaAlignLeft, FaMapMarkerAlt,
+    FaExclamationTriangle, FaCrown, FaUserTie
+} from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
@@ -13,14 +16,18 @@ const EmployeeNavbar = ({
     const navigate = useNavigate();
 
     const isGpsGranted = locationStatus === 'granted';
+    const hasCoordinatorHead = Boolean(user?.coordinator_head_name);
+    const hasCoordinator = Boolean(user?.coordinator_name);
+    const hasAnyCoordinator = hasCoordinatorHead || hasCoordinator;
+
+    const coordinatorTooltip = [
+        hasCoordinatorHead ? `Coordinator Head: ${user.coordinator_head_name}` : null,
+        hasCoordinator ? `Coordinator: ${user.coordinator_name}` : null
+    ].filter(Boolean).join(' | ');
 
     return (
         <header className="h-16 lg:h-20 bg-white/90 backdrop-blur-xl border-b border-slate-200/70 flex items-center justify-between px-3 sm:px-5 lg:px-6 shrink-0 z-30 w-full transition-all duration-300">
-
-            {/* ==================== LEFT: MOBILE/TABLET APP BRAND + DESKTOP TOGGLE/SEARCH ==================== */}
             <div className="flex items-center gap-2.5 sm:gap-3 lg:gap-5 flex-1 min-w-0">
-
-                {/* Mobile & Tablet Native App Brand Header */}
                 <div
                     onClick={() => navigate('/employee')}
                     className="lg:hidden flex items-center gap-2.5 cursor-pointer shrink-0"
@@ -35,8 +42,8 @@ const EmployeeNavbar = ({
                     </span>
                 </div>
 
-                {/* Desktop collapse toggle */}
                 <button
+                    type="button"
                     onClick={toggleDesktopSidebar}
                     className="hidden lg:flex items-center justify-center w-10 h-10 text-slate-600 hover:text-[#0437cc] hover:bg-slate-100/80 active:scale-95 rounded-xl transition-all shrink-0"
                     aria-label="Toggle sidebar"
@@ -44,7 +51,6 @@ const EmployeeNavbar = ({
                     <FaAlignLeft className={`text-lg transition-transform duration-300 ${isDesktopCollapsed ? 'rotate-180' : ''}`} />
                 </button>
 
-                {/* Desktop search */}
                 <div className="relative w-full max-w-md hidden lg:block group">
                     <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm group-focus-within:text-[#0437cc] transition-colors pointer-events-none" />
                     <input
@@ -58,10 +64,26 @@ const EmployeeNavbar = ({
                 </div>
             </div>
 
-            {/* ==================== RIGHT: GPS STATUS + DATE + BELL + PROFILE ==================== */}
             <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 shrink-0">
+                {hasAnyCoordinator && (
+                    <div
+                        title={coordinatorTooltip}
+                        className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border bg-blue-50/80 text-[#0437cc] border-blue-200/80 max-w-[220px]"
+                    >
+                        {hasCoordinator ? (
+                            <>
+                                <FaUserTie className="text-[11px] shrink-0" />
+                                <span className="truncate">Coord: {user.coordinator_name}</span>
+                            </>
+                        ) : (
+                            <>
+                                <FaCrown className="text-[11px] text-[#f77704] shrink-0" />
+                                <span className="truncate text-[#f77704]">Head: {user.coordinator_head_name}</span>
+                            </>
+                        )}
+                    </div>
+                )}
 
-                {/* Global GPS Location Status Pill */}
                 <button
                     type="button"
                     onClick={() => !isGpsGranted && onRequestLocation && onRequestLocation()}
@@ -88,14 +110,13 @@ const EmployeeNavbar = ({
                     )}
                 </button>
 
-                {/* Date pill */}
                 <div className="hidden xl:inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                     {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </div>
 
-                {/* Notification bell */}
                 <button
+                    type="button"
                     className="relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 hover:text-[#0437cc] hover:bg-white hover:border-[#0437cc]/30 active:scale-95 transition-all"
                     aria-label="Notifications"
                 >
@@ -105,10 +126,8 @@ const EmployeeNavbar = ({
                     </span>
                 </button>
 
-                {/* Vertical divider */}
                 <div className="hidden lg:block w-px h-8 bg-slate-200/80"></div>
 
-                {/* Profile */}
                 <div
                     onClick={() => navigate('/employee/profile')}
                     className="flex items-center gap-2 sm:gap-3 cursor-pointer group rounded-xl px-1 py-1 lg:pl-2 hover:bg-slate-50 transition-colors"

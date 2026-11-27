@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import CoordinatorsSidebar from '../components/coordinators/CoordinatorsSidebar';
-import CoordinatorsNavbar from '../components/coordinators/CoordinatorsNavbar';
+import CoordinatorsSidebar from '../components/coordinator/CoordinatorsSidebar';
+import CoordinatorsNavbar from '../components/coordinator/CoordinatorsNavbar';
 
 const CoordinatorsLayout = () => {
     const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);

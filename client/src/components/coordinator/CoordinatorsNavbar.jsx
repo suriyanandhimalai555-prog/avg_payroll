@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import {
     FaBell, FaSearch, FaAlignLeft, FaMapMarkerAlt,
     FaExclamationTriangle, FaCrown, FaUserTie
@@ -8,12 +9,87 @@ import { useAuth } from '../../context/AuthContext';
 const CoordinatorsNavbar = ({
     toggleDesktopSidebar,
     isDesktopCollapsed,
-    locationStatus = 'checking',
-    onRequestLocation,
-    isRequestingLocation = false
+    locationStatus: propLocationStatus,
+    onRequestLocation: propOnRequestLocation,
+    isRequestingLocation: propIsRequestingLocation
 }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
+
+    const [internalLocationStatus, setInternalLocationStatus] = useState('checking');
+    const [internalIsRequesting, setInternalIsRequesting] = useState(false);
+
+    const isControlled = propLocationStatus !== undefined;
+    const locationStatus = isControlled ? propLocationStatus : internalLocationStatus;
+    const isRequestingLocation = propIsRequestingLocation !== undefined ? propIsRequestingLocation : internalIsRequesting;
+
+    const requestLocationInternal = useCallback(() => {
+        if (!navigator.geolocation) {
+            setInternalLocationStatus('denied');
+            return;
+        }
+
+        setInternalIsRequesting(true);
+        navigator.geolocation.getCurrentPosition(
+            () => {
+                setInternalLocationStatus('granted');
+                setInternalIsRequesting(false);
+            },
+            (error) => {
+                if (error.code === 1) {
+                    setInternalLocationStatus('denied');
+                } else {
+                    setInternalLocationStatus('prompt');
+                }
+                setInternalIsRequesting(false);
+            },
+            { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
+        );
+    }, []);
+
+    useEffect(() => {
+        if (isControlled) return;
+
+        if (!navigator.geolocation) {
+            setInternalLocationStatus('denied');
+            return;
+        }
+
+        let permStatusObj = null;
+
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'geolocation' })
+                .then((result) => {
+                    permStatusObj = result;
+                    setInternalLocationStatus(result.state);
+                    if (result.state === 'prompt') {
+                        requestLocationInternal();
+                    }
+
+                    result.onchange = () => {
+                        setInternalLocationStatus(result.state);
+                    };
+                })
+                .catch(() => {
+                    requestLocationInternal();
+                });
+        } else {
+            requestLocationInternal();
+        }
+
+        return () => {
+            if (permStatusObj) permStatusObj.onchange = null;
+        };
+    }, [isControlled, requestLocationInternal]);
+
+    const handleGpsClick = () => {
+        if (locationStatus === 'granted' || isRequestingLocation) return;
+        if (propOnRequestLocation) {
+            propOnRequestLocation();
+        } else {
+            requestLocationInternal();
+        }
+    };
 
     const isGpsGranted = locationStatus === 'granted';
     const isHead = user?.coordinator_level === 'Coordinator Head';
@@ -86,7 +162,7 @@ const CoordinatorsNavbar = ({
 
                 <button
                     type="button"
-                    onClick={() => !isGpsGranted && onRequestLocation && onRequestLocation()}
+                    onClick={handleGpsClick}
                     disabled={isRequestingLocation}
                     title={isGpsGranted ? 'Location Access Active' : 'Click to enable mandatory GPS location access'}
                     className={`inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-xl text-[11px] font-bold border transition-all shrink-0 ${

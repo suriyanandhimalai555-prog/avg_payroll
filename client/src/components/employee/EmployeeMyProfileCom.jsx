@@ -7,7 +7,7 @@ import {
     FaPhoneAlt, FaEnvelope, FaMapMarkerAlt,
     FaFileAlt, FaTimes, FaFileInvoiceDollar,
     FaPlusCircle, FaMinusCircle, FaUniversity,
-    FaIdBadge, FaTint
+    FaIdBadge, FaTint, FaCrown, FaUserTie
 } from 'react-icons/fa';
 import Button from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -47,7 +47,6 @@ const BLOOD_GROUP_OPTIONS = [
     'A +ve', 'A -ve', 'B +ve', 'B -ve', 'O +ve', 'O -ve', 'AB +ve', 'AB -ve'
 ];
 
-// Bulletproof Stateless Auth Config (No Cookies)
 const getAuthConfig = () => {
     return {
         headers: {
@@ -63,11 +62,9 @@ const EmployeeMyProfileCom = () => {
     const [loading, setLoading] = useState(true);
     const [profileData, setProfileData] = useState(null);
 
-    // Edit States
     const [isEditing, setIsEditing] = useState({ personal: false, bank: false, emergency: false });
     const [editForm, setEditForm] = useState({ personal: {}, bank: {}, emergency: {} });
 
-    // Photo Upload & Crop States
     const fileInputRef = useRef(null);
     const [photoModalOpen, setPhotoModalOpen] = useState(false);
     const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -76,7 +73,6 @@ const EmployeeMyProfileCom = () => {
     const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
     const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
-    /* -------- Inject DM Sans font -------- */
     useEffect(() => {
         const styleEl = document.createElement('style');
         styleEl.setAttribute('data-dm-sans', 'true');
@@ -120,7 +116,7 @@ const EmployeeMyProfileCom = () => {
 
             setProfileData({
                 personal: {
-                    photo: data.profile_photo || "/logo.jpg",
+                    photo: data.profile_photo || '/logo.jpg',
                     fullName: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
                     firstName: data.first_name || 'Employee',
                     employeeId: data.employee_id,
@@ -133,16 +129,20 @@ const EmployeeMyProfileCom = () => {
                     address: data.address
                 },
                 employment: {
-                    company: data.company || "AGILAVETRI PRIMETECH PVT. LTD",
-                    branch: data.branch || "Not Assigned",
-                    department: data.department || "Not Assigned",
-                    designation: data.designation || "Not Assigned",
-                    location: data.location || "Not Assigned",
-                    shift: data.shift || "Not Assigned",
+                    company: data.company || 'AGILAVETRI PRIMETECH PVT. LTD',
+                    branch: data.branch || 'Not Assigned',
+                    department: data.department || 'Not Assigned',
+                    designation: data.designation || 'Not Assigned',
+                    location: data.location || 'Not Assigned',
+                    shift: data.shift || 'Not Assigned',
                     joiningDate: formatDateForDisplay(data.joining_date),
-                    employmentType: data.emp_type || "Not Assigned",
-                    reportingManager: data.manager || "Not Assigned",
-                    status: data.status || "Unknown"
+                    employmentType: data.emp_type || 'Not Assigned',
+                    reportingManager: data.manager || 'Not Assigned',
+                    coordinatorHeadName: data.coordinator_head_name || '',
+                    coordinatorHeadCode: data.coordinator_head_code || '',
+                    coordinatorName: data.coordinator_name || '',
+                    coordinatorCode: data.coordinator_code || '',
+                    status: data.status || 'Unknown'
                 },
                 salary: {
                     ctc: data.ctc || 0,
@@ -153,7 +153,6 @@ const EmployeeMyProfileCom = () => {
                     medical: data.medical || 0,
                     specialAllowance: data.special_allowance || 0,
                     otherAllowances: data.other_allowances || 0,
-
                     epf: data.epf || 0,
                     esi: data.esi || 0,
                     healthInsurance: data.health_insurance || 0,
@@ -169,9 +168,9 @@ const EmployeeMyProfileCom = () => {
                     ifsc: data.ifsc || 'Not Provided'
                 },
                 emergency: {
-                    name: data.emergency_name || "Not Provided",
-                    relationship: data.emergency_relationship || "Not Provided",
-                    phone: data.emergency_phone || "Not Provided"
+                    name: data.emergency_name || 'Not Provided',
+                    relationship: data.emergency_relationship || 'Not Provided',
+                    phone: data.emergency_phone || 'Not Provided'
                 }
             });
 
@@ -199,17 +198,15 @@ const EmployeeMyProfileCom = () => {
 
             setLoading(false);
         } catch (error) {
-            console.error("Error fetching profile data", error);
+            console.error('Error fetching profile data', error);
             setLoading(false);
         }
     };
 
-    // Guarded execution
     useEffect(() => {
         if (user && user.employee_id) {
             fetchProfile();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const toggleEdit = (section) => setIsEditing({ ...isEditing, [section]: true });
@@ -230,12 +227,12 @@ const EmployeeMyProfileCom = () => {
                 data: editForm[section]
             }, getAuthConfig());
             const updatedUser = { ...response.data.user, role: 'employee' };
-            login(updatedUser); // Token manages itself locally
+            login(updatedUser);
             setIsEditing({ ...isEditing, [section]: false });
             fetchProfile();
         } catch (error) {
-            console.error("Error updating profile", error);
-            alert("Failed to update profile. Please try again.");
+            console.error('Error updating profile', error);
+            alert('Failed to update profile. Please try again.');
         }
     };
 
@@ -273,8 +270,8 @@ const EmployeeMyProfileCom = () => {
             setPhotoModalOpen(false);
             fetchProfile();
         } catch (error) {
-            console.error("Error updating photo", error);
-            alert("Failed to update photo.");
+            console.error('Error updating photo', error);
+            alert('Failed to update photo.');
         } finally {
             setIsUploadingPhoto(false);
         }
@@ -286,7 +283,6 @@ const EmployeeMyProfileCom = () => {
 
     const parseNum = (val) => (val && !isNaN(val) ? parseFloat(val) : 0);
 
-    // ==================== SHIMMER ====================
     if (loading || !profileData) {
         return (
             <div className="dm-sans-root space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden animate-pulse">
@@ -346,7 +342,10 @@ const EmployeeMyProfileCom = () => {
     const liveDeductions = parseNum(profileData.salary.epf) + parseNum(profileData.salary.esi) + parseNum(profileData.salary.healthInsurance) + parseNum(profileData.salary.pt) + parseNum(profileData.salary.tds) + parseNum(profileData.salary.leaves);
     const liveNet = liveGross - liveDeductions;
 
-    const inputStyles = "w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-[#010a1f] outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 transition-all";
+    const hasCoordinatorHead = Boolean(profileData.employment.coordinatorHeadName);
+    const hasCoordinator = Boolean(profileData.employment.coordinatorName);
+
+    const inputStyles = 'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-[#010a1f] outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 transition-all';
 
     const SectionHeader = ({ icon: Icon, iconBg, iconColor, title, badge, action }) => (
         <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
@@ -380,7 +379,6 @@ const EmployeeMyProfileCom = () => {
     return (
         <div className="dm-sans-root space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
 
-            {/* ==================== PAGE HEADER ==================== */}
             <div className="relative bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -412,7 +410,6 @@ const EmployeeMyProfileCom = () => {
                 </div>
             </div>
 
-            {/* ==================== HERO / SUMMARY CARD ==================== */}
             <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="absolute top-0 right-0 w-80 h-40 bg-gradient-to-br from-[#0437cc]/[0.05] via-[#0437cc]/[0.02] to-transparent pointer-events-none"></div>
                 <div className="absolute bottom-0 left-0 w-64 h-32 bg-gradient-to-tr from-[#f77704]/[0.03] to-transparent pointer-events-none"></div>
@@ -472,10 +469,8 @@ const EmployeeMyProfileCom = () => {
                 </div>
             </div>
 
-            {/* ==================== PROFILE GRIDS ==================== */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
 
-                {/* PERSONAL INFORMATION */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex flex-col h-full transition-shadow hover:shadow-md">
                     <SectionHeader
                         icon={FaUserEdit}
@@ -564,7 +559,6 @@ const EmployeeMyProfileCom = () => {
                     </div>
                 </div>
 
-                {/* EMPLOYMENT INFO */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex flex-col h-full relative overflow-hidden transition-shadow hover:shadow-md">
                     <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#0437cc]/[0.03] rounded-full blur-3xl pointer-events-none"></div>
 
@@ -592,10 +586,43 @@ const EmployeeMyProfileCom = () => {
 
                         <InfoTile label="Joining Date" value={profileData.employment.joiningDate} />
                         <InfoTile label="Reporting Manager" value={profileData.employment.reportingManager} />
+
+                        {hasCoordinatorHead && (
+                            <div className="bg-orange-50/70 border border-orange-100 p-3 rounded-xl min-w-0">
+                                <p className="text-[10px] font-bold text-[#f77704] uppercase tracking-wider mb-1.5 flex items-center gap-1 truncate">
+                                    <FaCrown className="text-[9px] shrink-0" />
+                                    <span>Coordinator Head</span>
+                                </p>
+                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">
+                                    {profileData.employment.coordinatorHeadName}
+                                </p>
+                                {profileData.employment.coordinatorHeadCode && (
+                                    <p className="text-[10px] font-mono font-semibold text-orange-700/80 mt-0.5 truncate">
+                                        {profileData.employment.coordinatorHeadCode}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {hasCoordinator && (
+                            <div className="bg-blue-50/70 border border-blue-100 p-3 rounded-xl min-w-0">
+                                <p className="text-[10px] font-bold text-[#0437cc] uppercase tracking-wider mb-1.5 flex items-center gap-1 truncate">
+                                    <FaUserTie className="text-[9px] shrink-0" />
+                                    <span>Coordinator</span>
+                                </p>
+                                <p className="text-[13px] sm:text-sm font-bold text-[#010a1f] truncate">
+                                    {profileData.employment.coordinatorName}
+                                </p>
+                                {profileData.employment.coordinatorCode && (
+                                    <p className="text-[10px] font-mono font-semibold text-[#0437cc]/80 mt-0.5 truncate">
+                                        {profileData.employment.coordinatorCode}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* FINANCIAL STRUCTURE */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 relative overflow-hidden lg:col-span-2 transition-shadow hover:shadow-md">
                     <div className="absolute -bottom-20 -left-20 w-56 h-56 bg-green-100/30 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -679,7 +706,6 @@ const EmployeeMyProfileCom = () => {
                     </div>
                 </div>
 
-                {/* BANK INFO */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex flex-col h-full transition-shadow hover:shadow-md">
                     <SectionHeader
                         icon={FaUniversity}
@@ -745,7 +771,6 @@ const EmployeeMyProfileCom = () => {
                     </div>
                 </div>
 
-                {/* EMERGENCY CONTACT */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6 flex flex-col h-full transition-shadow hover:shadow-md">
                     <SectionHeader
                         icon={FaPhoneAlt}
@@ -794,7 +819,6 @@ const EmployeeMyProfileCom = () => {
                 </div>
             </div>
 
-            {/* ==================== PHOTO CROP MODAL ==================== */}
             {photoModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#010a1f]/80 backdrop-blur-sm p-4">
                     <div className="relative bg-white rounded-3xl shadow-2xl p-6 sm:p-7 max-w-sm w-full animate-in zoom-in-95 duration-200">

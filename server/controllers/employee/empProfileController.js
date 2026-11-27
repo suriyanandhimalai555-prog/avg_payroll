@@ -1,8 +1,6 @@
 import pool from '../../config/db.js';
 import { isS3Configured, uploadBase64ToS3, deleteFromS3ByUrl } from '../../services/s3Service.js';
 
-// Employees/managers can access only their own employee profile.
-// HR/superadmin access is retained for existing workflows.
 const canAccessEmployeeProfile = async (req, employeeId) => {
     if (['hr', 'superadmin'].includes(req.user.role)) return true;
     if (!['employee', 'manager'].includes(req.user.role)) return false;
@@ -28,7 +26,29 @@ export const getProfile = async (req, res) => {
                 message: 'You are not authorized to access this employee profile.'
             });
         }
-        const result = await pool.query('SELECT * FROM sa_employees WHERE employee_id = $1', [employeeId]);
+
+        let result;
+        try {
+            result = await pool.query(
+                `SELECT
+                    e.*,
+                    COALESCE(NULLIF(TRIM(CONCAT(ch.first_name, ' ', ch.last_name)), ''), e.coordinator_head_name) AS coordinator_head_name,
+                    ch.coordinator_id AS coordinator_head_code,
+                    COALESCE(NULLIF(TRIM(CONCAT(co.first_name, ' ', co.last_name)), ''), e.coordinator_name) AS coordinator_name,
+                    co.coordinator_id AS coordinator_code
+                 FROM sa_employees e
+                 LEFT JOIN sa_coordinators ch ON e.coordinator_head_id = ch.id
+                 LEFT JOIN sa_coordinators co ON e.coordinator_id = co.id
+                 WHERE e.employee_id = $1`,
+                [employeeId]
+            );
+        } catch (joinError) {
+            if (joinError.code === '42P01') {
+                result = await pool.query('SELECT * FROM sa_employees WHERE employee_id = $1', [employeeId]);
+            } else {
+                throw joinError;
+            }
+        }
 
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Employee profile not found.' });
@@ -63,21 +83,21 @@ export const updateProfile = async (req, res) => {
 
         if (section === 'personal') {
             query = `
-                UPDATE sa_employees 
+                UPDATE sa_employees
                 SET phone = $1, address = $2, dob = $3, gender = $4, blood_group = $5
                 WHERE employee_id = $6 RETURNING *;
             `;
             values = [data.phone, data.address, data.dob || null, data.gender, data.blood_group || null, employeeId];
         } else if (section === 'bank') {
             query = `
-                UPDATE sa_employees 
+                UPDATE sa_employees
                 SET uan_no = $1, bank_name = $2, account_holder = $3, account_number = $4, ifsc = $5
                 WHERE employee_id = $6 RETURNING *;
             `;
             values = [data.uan_no, data.bank_name, data.account_holder, data.account_number, data.ifsc, employeeId];
         } else if (section === 'emergency') {
             query = `
-                UPDATE sa_employees 
+                UPDATE sa_employees
                 SET emergency_name = $1, emergency_relationship = $2, emergency_phone = $3
                 WHERE employee_id = $4 RETURNING *;
             `;
@@ -87,7 +107,6 @@ export const updateProfile = async (req, res) => {
 
             if (finalPhotoUrl && typeof finalPhotoUrl === 'string' && finalPhotoUrl.startsWith('data:image/')) {
                 if (isS3Configured()) {
-                    // Fetch existing photo URL so we can clean it up after uploading the new one
                     const existingRes = await pool.query(
                         'SELECT profile_photo FROM sa_employees WHERE employee_id = $1',
                         [employeeId]
@@ -105,7 +124,7 @@ export const updateProfile = async (req, res) => {
             }
 
             query = `
-                UPDATE sa_employees 
+                UPDATE sa_employees
                 SET profile_photo = $1
                 WHERE employee_id = $2 RETURNING *;
             `;

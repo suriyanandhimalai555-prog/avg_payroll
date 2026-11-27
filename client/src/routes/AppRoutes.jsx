@@ -83,6 +83,14 @@ import HRNotifications from '../pages/hr/HRNotifications';
 
 // Coordinators
 import CoordinatorsLayout from '../layouts/CoordinatorsLayout';
+import CoordinatorsDashboard from '../pages/coordinator/CoordinatorsDashboard';
+import CoordinatorsAttendance from '../pages/coordinator/CoordinatorsAttendance';
+import CoordinatorMyCoordinators from '../pages/coordinator/CoordinatorMyCoordinators';
+import CoordinatorCoordinatorsAttendance from '../pages/coordinator/CoordinatorCoordinatorsAttendance';
+import CoordinatorsStateHeadsOverviews from '../pages/coordinator/CoordinatorsStateHeadsOverviews';
+import CoordinatorLiveTracking from '../pages/coordinator/CoordinatorLiveTracking';
+import CoordinatorMyProfile from '../pages/coordinator/CoordinatorMyProfile';
+import CoordinatorSettings from '../pages/coordinator/CoordinatorSettings';
 
 // Manager
 import ManagerLayout from '../layouts/ManagerLayout';
@@ -127,6 +135,7 @@ const AppRoutes = () => {
                 }
             >
                 <Route index element={<SuperAdminDashboard />} />
+                <Route path='*' element={<SuperAdminDashboard />} />
                 {/* Org */}
                 <Route path="org/overview" element={<SuperAdminOrganizationOverview />} />
                 <Route path="org/profile" element={<SuperAdminCompanyProfile />} />
@@ -197,6 +206,7 @@ const AppRoutes = () => {
                 }
             >
                 <Route index element={<HRDashboard />} />
+                <Route path='*' element={<HRDashboard />} />
                 <Route path="profile" element={<HRProfile />} />
                 <Route path="virtual-id" element={<HRVirtualID />} />
                 <Route path="employees" element={<HREmployee />} />
@@ -222,8 +232,16 @@ const AppRoutes = () => {
                     </ProtectedRoute>
                 }
             >
-                {/* <Route index element={<CoordinatorsDashboard />} /> */}
-                {/* <Route path="*" element={<CoordinatorsDashboard />} /> */}
+                <Route index element={<CoordinatorsDashboard />} />
+                <Route path="*" element={<CoordinatorsDashboard />} />
+                <Route path='my-coordinators' element={<CoordinatorMyCoordinators />} />
+                <Route path='attendance/my-attendance' element={<CoordinatorsAttendance />} />
+                <Route path='attendance/coordinator-attendance' element={<CoordinatorCoordinatorsAttendance />} />
+                <Route path='attendance/state-heads-overview' element={<CoordinatorsStateHeadsOverviews />} />
+                <Route path='attendance/live-tracking' element={<CoordinatorLiveTracking />} />
+                <Route path='profile' element={<CoordinatorMyProfile />} />
+                <Route path='settings' element={<CoordinatorSettings />} />
+                
             </Route>
 
             {/* Manager Protected Routes */}
@@ -236,6 +254,7 @@ const AppRoutes = () => {
                 }
             >
                 <Route index element={<ManagerDashboard />} />
+                <Route path='*' element={<ManagerDashboard />} />
             </Route>
 
             {/* Employee Protected Routes */}
@@ -248,6 +267,7 @@ const AppRoutes = () => {
                 }
             >
                 <Route index element={<EmployeeDashboard />} />
+                <Route path='*' element={<EmployeeDashboard />} />
                 <Route path="profile" element={<EmployeeMyProfile />} />
                 <Route path="virtual-id" element={<EmployeeVirtualIDCom />} />
                 <Route path="assets" element={<EmployeeAssets />} />

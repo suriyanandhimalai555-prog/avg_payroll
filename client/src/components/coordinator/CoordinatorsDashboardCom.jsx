@@ -1,0 +1,1299 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import {
+    FaUserClock, FaRegClock, FaPlaneDeparture, FaRupeeSign,
+    FaSignInAlt, FaSignOutAlt, FaClipboardList, FaBell,
+    FaCheckCircle, FaChartLine, FaTimesCircle, FaClock,
+    FaTimes, FaExclamationTriangle, FaBullseye, FaBolt,
+    FaChevronRight, FaMapMarkerAlt, FaHandshake, FaUsers,
+    FaCrown, FaUserTie, FaMapMarkedAlt, FaChartBar,
+    FaClipboardCheck, FaUser, FaCog
+} from 'react-icons/fa';
+import Button from '../../components/common/Button';
+import { useAuth } from '../../context/AuthContext';
+
+const getAuthConfig = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token && (token === 'null' || token === 'undefined')) token = null;
+    if (token) token = token.replace(/^["']|["']$/g, '');
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+    };
+};
+
+const getSafeDateStr = (dateVal) => {
+    if (!dateVal) return '';
+    if (typeof dateVal === 'string' && dateVal.includes('T')) return dateVal.split('T')[0];
+    const d = new Date(dateVal);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+};
+
+const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const getGreeting = () => {
+    const hr = new Date().getHours();
+    if (hr < 12) return 'Good Morning';
+    if (hr < 17) return 'Good Afternoon';
+    return 'Good Evening';
+};
+
+const CoordinatorsDashboardCom = () => {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+
+    const isHead = user?.coordinator_level === 'Coordinator Head';
+    const userIdentifier = user?.coordinator_id || user?.employee_id || '';
+
+    const [loading, setLoading] = useState(true);
+    const [isActionLoading, setIsActionLoading] = useState(false);
+    const [todayLogs, setTodayLogs] = useState([]);
+    const [fullHistory, setFullHistory] = useState([]);
+    const [shiftDetails, setShiftDetails] = useState(null);
+    const [leaveBalances, setLeaveBalances] = useState([]);
+    const [alerts, setAlerts] = useState([]);
+    const [myCoordinatorsCount, setMyCoordinatorsCount] = useState(0);
+
+    const [completedMsToday, setCompletedMsToday] = useState(0);
+
+    const lastPingTimeRef = useRef(0);
+    const lastCoordsRef = useRef(null);
+    const [isLiveTracking, setIsLiveTracking] = useState(false);
+
+    const [isEodModalOpen, setIsEodModalOpen] = useState(false);
+    const [eodInput, setEodInput] = useState('');
+    const [isSubmittingEod, setIsSubmittingEod] = useState(false);
+
+    const [isLateModalOpen, setIsLateModalOpen] = useState(false);
+    const [lateReasonInput, setLateReasonInput] = useState('');
+
+    const getDeviceInfo = () => {
+        const ua = navigator.userAgent;
+        let browserName = 'Web Browser';
+        if (ua.match(/chrome|chromium|crios/i) && !ua.match(/edg/i)) browserName = 'Chrome';
+        else if (ua.match(/firefox|fxios/i)) browserName = 'Firefox';
+        else if (ua.match(/safari/i) && !ua.match(/chrome|chromium|crios/i)) browserName = 'Safari';
+        else if (ua.match(/edg/i)) browserName = 'Edge';
+
+        let osName = 'Unknown OS';
+        if (ua.match(/windows nt 10/i)) osName = 'Windows 10/11';
+        else if (ua.match(/macintosh|mac os x/i)) osName = 'Mac OS';
+        else if (ua.match(/linux/i)) osName = 'Linux';
+        else if (ua.match(/android/i)) osName = 'Android';
+        else if (ua.match(/iphone/i)) osName = 'iPhone';
+
+        return `${osName} - ${browserName}`;
+    };
+
+    const fetchLocationData = () => {
+        return new Promise((resolve) => {
+            if (!navigator.geolocation) {
+                resolve({ address: 'Location Unavailable (Browser unsupported)', latitude: null, longitude: null, accuracy: null });
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude, longitude, accuracy } = position.coords;
+                    try {
+                        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                        const data = await response.json();
+                        const address = data && data.display_name
+                            ? `${data.display_name} (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`
+                            : `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+                        resolve({ address, latitude, longitude, accuracy });
+                    } catch {
+                        resolve({ address: `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`, latitude, longitude, accuracy });
+                    }
+                },
+                (error) => {
+                    console.warn('Geolocation failed:', error.message);
+                    resolve({ address: 'Location Unavailable (Check Device Settings)', latitude: null, longitude: null, accuracy: null });
+                },
+                { enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 }
+            );
+        });
+    };
+
+    const isThisWeek = (dateString) => {
+        if (!dateString) return false;
+        const date = new Date(dateString);
+        const today = new Date();
+        const day = today.getDay() || 7;
+        if (day !== 1) today.setHours(-24 * (day - 1));
+        today.setHours(0, 0, 0, 0);
+        return date >= today;
+    };
+
+    const fetchDashboardData = async () => {
+        if (!user || !userIdentifier || !getAuthConfig().headers.Authorization) {
+            setLoading(false);
+            return;
+        }
+
+        const idStr = String(userIdentifier).trim();
+
+        try {
+            const requests = [
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/${idStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/attendance/shift/${idStr}`, getAuthConfig()).catch(() => ({ data: null })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/balances/${idStr}`, getAuthConfig()).catch(() => ({ data: [] })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/leave/requests/${idStr}`, getAuthConfig()).catch(() => ({ data: [] }))
+            ];
+
+            if (isHead) {
+                requests.push(
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/sa-coordinators`, getAuthConfig()).catch(() => ({ data: [] }))
+                );
+            }
+
+            const [attRes, shiftRes, leaveBalRes, leaveReqRes, coordRes] = await Promise.all(requests);
+
+            const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
+            setFullHistory(fetchedHistory);
+
+            const todayDateStr = getSafeDateStr(new Date());
+            const todays = fetchedHistory.filter(record => getSafeDateStr(record.date) === todayDateStr);
+            setTodayLogs(todays);
+
+            let previousMs = 0;
+            todays.forEach(log => {
+                if (log.clock_out && log.total_hours && log.total_hours !== 'Missed Checkout') {
+                    const [h, m] = log.total_hours.replace(' Hrs', '').split(':').map(Number);
+                    if (!isNaN(h) && !isNaN(m)) previousMs += (h * 3600000) + (m * 60000);
+                }
+            });
+            setCompletedMsToday(previousMs);
+
+            setShiftDetails(shiftRes.data || user?.shift_details || user?.shift_name || null);
+            setLeaveBalances(leaveBalRes.data || []);
+
+            const recentLeaves = (leaveReqRes.data || [])
+                .filter(req => isThisWeek(req.created_at || req.start_date || req.from_date))
+                .slice(0, 3)
+                .map(req => ({
+                    id: req.id,
+                    title: `Leave ${req.status}`,
+                    desc: `Your ${req.leave_type} request for ${req.total_days} days is currently ${req.status.toLowerCase()}.`,
+                    status: req.status
+                }));
+            setAlerts(recentLeaves);
+
+            if (isHead && Array.isArray(coordRes?.data)) {
+                const assignedCount = coordRes.data.filter(
+                    c => c.coordinator_level !== 'Coordinator Head' && String(c.coordinator_head_id) === String(user.id)
+                ).length;
+                setMyCoordinatorsCount(assignedCount);
+            }
+        } catch (error) {
+            console.error('Error fetching coordinator dashboard data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (user && userIdentifier) {
+            fetchDashboardData();
+        }
+    }, [user, userIdentifier]);
+
+    const activeSession = fullHistory.find(r => r.clock_in && !r.clock_out);
+    const isClockedIn = !!activeSession;
+    const isPendingOldCheckout = isClockedIn && getSafeDateStr(activeSession.date) !== getSafeDateStr(new Date());
+    const hasWorkedToday = todayLogs.length > 0;
+
+    useEffect(() => {
+        if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !userIdentifier || !navigator.geolocation) {
+            setIsLiveTracking(false);
+            return;
+        }
+
+        const watchId = navigator.geolocation.watchPosition(
+            async (position) => {
+                setIsLiveTracking(true);
+                const { latitude, longitude, accuracy } = position.coords;
+                const now = Date.now();
+                const timeElapsed = now - lastPingTimeRef.current;
+
+                let movedEnough = false;
+                if (lastCoordsRef.current) {
+                    const dist = getDistanceMeters(
+                        lastCoordsRef.current.latitude,
+                        lastCoordsRef.current.longitude,
+                        latitude,
+                        longitude
+                    );
+                    movedEnough = dist >= 30;
+                } else {
+                    movedEnough = true;
+                }
+
+                lastCoordsRef.current = { latitude, longitude, accuracy };
+
+                if (timeElapsed >= 30000 || movedEnough) {
+                    lastPingTimeRef.current = now;
+                    try {
+                        await axios.post(
+                            `${import.meta.env.VITE_API_URL}/api/attendance/location-ping`,
+                            {
+                                employeeId: userIdentifier,
+                                attendanceId: activeSession.id,
+                                latitude,
+                                longitude,
+                                accuracy
+                            },
+                            getAuthConfig()
+                        );
+                    } catch (err) {
+                        console.warn('Coordinator live location ping failed:', err.message);
+                    }
+                }
+            },
+            () => {
+                setIsLiveTracking(false);
+            },
+            { enableHighAccuracy: false, maximumAge: 30000, timeout: 20000 }
+        );
+
+        return () => {
+            navigator.geolocation.clearWatch(watchId);
+            setIsLiveTracking(false);
+        };
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, userIdentifier]);
+
+    useEffect(() => {
+        if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !userIdentifier) return;
+
+        const sendFinalKeepalivePing = () => {
+            const coords = lastCoordsRef.current;
+            const authHeader = getAuthConfig().headers.Authorization;
+            if (!coords || !authHeader) return;
+
+            try {
+                fetch(`${import.meta.env.VITE_API_URL}/api/attendance/location-ping`, {
+                    method: 'POST',
+                    keepalive: true,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: authHeader
+                    },
+                    body: JSON.stringify({
+                        employeeId: userIdentifier,
+                        attendanceId: activeSession.id,
+                        latitude: coords.latitude,
+                        longitude: coords.longitude,
+                        accuracy: coords.accuracy ?? null
+                    })
+                }).catch(() => {});
+            } catch {
+                return;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                sendFinalKeepalivePing();
+            }
+        };
+
+        window.addEventListener('pagehide', sendFinalKeepalivePing);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('pagehide', sendFinalKeepalivePing);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, userIdentifier]);
+
+    let parsedWorkingHours = 8;
+    if (shiftDetails && typeof shiftDetails === 'object') {
+        parsedWorkingHours = parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8);
+    }
+    const targetHours = parsedWorkingHours || 8;
+
+    let liveProgressMs = completedMsToday;
+    if (isClockedIn && !isPendingOldCheckout) {
+        liveProgressMs += new Date() - new Date(activeSession.clock_in);
+    }
+    const rHrs = Math.floor(liveProgressMs / 3600000);
+    const rMins = Math.floor((liveProgressMs % 3600000) / 60000);
+
+    const totalRemainingLeaves = leaveBalances.reduce((acc, curr) => {
+        if (curr.total_days === 'Unlimited') return acc;
+        return acc + (parseFloat(curr.total_days) - parseFloat(curr.used_days));
+    }, 0);
+
+    const formatTime = (isoString) => {
+        if (!isoString) return '—';
+        return new Date(isoString).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    };
+
+    const getLast5DaysAttendance = () => {
+        const days = [];
+        for (let i = 4; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dateStr = getSafeDateStr(d);
+            const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+
+            const recordsForDay = fullHistory.filter(r => getSafeDateStr(r.date) === dateStr);
+            let status = 'Absent';
+            let totalDecimal = 0;
+            let displayHrs = '0h 0m';
+
+            if (recordsForDay.length > 0) {
+                const isLate = recordsForDay.some(r => parseInt(r.late_minutes || 0, 10) > 0);
+                const isInProgress = recordsForDay.some(r => !r.clock_out);
+                status = isLate ? 'Late' : 'Present';
+
+                let totalMins = 0;
+                recordsForDay.forEach(r => {
+                    if (r.total_hours && r.total_hours !== 'Missed Checkout' && r.total_hours !== 'In Progress') {
+                        const [h, m] = r.total_hours.replace(' Hrs', '').split(':').map(Number);
+                        if (!isNaN(h)) totalMins += (h * 60) + (m || 0);
+                    }
+                });
+
+                if (isInProgress) {
+                    displayHrs = 'Active';
+                    totalDecimal = targetHours * 0.5;
+                } else {
+                    const hrs = Math.floor(totalMins / 60);
+                    const mins = totalMins % 60;
+                    displayHrs = `${hrs}h ${mins}m`;
+                    totalDecimal = hrs + (mins / 60);
+                }
+            } else if (d.getDay() === 0 || d.getDay() === 6) {
+                status = 'Off';
+            }
+
+            let heightPercent = (totalDecimal / targetHours) * 100;
+            if (heightPercent > 100) heightPercent = 100;
+            if (heightPercent === 0 && status !== 'Absent' && status !== 'Off') heightPercent = 10;
+            if (status === 'Absent' || status === 'Off') heightPercent = 6;
+
+            days.push({
+                day: dayName,
+                date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                status,
+                hrs: displayHrs,
+                height: heightPercent,
+                records: recordsForDay
+            });
+        }
+        return days;
+    };
+
+    const weeklyAttendance = getLast5DaysAttendance();
+
+    const weekTotalHours = weeklyAttendance.reduce((sum, d) => {
+        if (d.hrs === 'Active') return sum;
+        const m = d.hrs.match(/(\d+)h\s*(\d+)m/);
+        if (!m) return sum;
+        return sum + parseInt(m[1], 10) + parseInt(m[2], 10) / 60;
+    }, 0);
+
+    const daysPresent = weeklyAttendance.filter(d => d.status === 'Present' || d.status === 'Late').length;
+    const daysActive = weeklyAttendance.filter(d => d.hrs === 'Active').length;
+    const avgPerDay = daysPresent > 0 ? weekTotalHours / daysPresent : 0;
+
+    const fmtHrsMins = (val) => {
+        const h = Math.floor(val);
+        const m = Math.round((val - h) * 60);
+        return `${h}h ${m}m`;
+    };
+
+    const handleCheckIn = async (providedLateReason = null) => {
+        if (isActionLoading) return;
+        const now = new Date();
+        const currentHour = now.getHours();
+
+        if (shiftDetails?.shift_type === 'Flexible' && currentHour >= 17) {
+            alert('It is currently past 5:00 PM.\n\nFlexible shifts do not allow new logins this late into the day.\nYou will be marked as Absent for today.');
+            return;
+        }
+
+        setIsActionLoading(true);
+        try {
+            const locObj = await fetchLocationData();
+            const deviceData = getDeviceInfo();
+            const todayDate = getSafeDateStr(now);
+
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/attendance/check-in`, {
+                employeeId: userIdentifier,
+                todayDate,
+                locationData: locObj.address,
+                latitude: locObj.latitude,
+                longitude: locObj.longitude,
+                accuracy: locObj.accuracy,
+                deviceInfo: deviceData,
+                lateReason: providedLateReason
+            }, getAuthConfig());
+
+            setIsLateModalOpen(false);
+            setLateReasonInput('');
+            await fetchDashboardData();
+        } catch (error) {
+            if (error.response?.status === 428 && error.response?.data?.message === 'LATE_REASON_REQUIRED') {
+                setIsLateModalOpen(true);
+            } else {
+                alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
+            }
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const submitLateCheckIn = () => {
+        if (!lateReasonInput.trim()) {
+            return alert('Please provide a reason for clocking in late.');
+        }
+        handleCheckIn(lateReasonInput);
+    };
+
+    const initiateCheckOut = () => setIsEodModalOpen(true);
+
+    const executeCheckOut = async () => {
+        if (!eodInput.trim()) return alert('EOD Update is required to clock out.');
+        if (isActionLoading) return;
+
+        setIsSubmittingEod(true);
+        setIsActionLoading(true);
+        try {
+            const locObj = await fetchLocationData();
+            const deviceData = getDeviceInfo();
+            const recordToClose = activeSession;
+            const targetDate = getSafeDateStr(recordToClose.date);
+
+            await axios.put(`${import.meta.env.VITE_API_URL}/api/attendance/check-out`, {
+                employeeId: userIdentifier,
+                todayDate: targetDate,
+                locationData: locObj.address,
+                latitude: locObj.latitude,
+                longitude: locObj.longitude,
+                accuracy: locObj.accuracy,
+                deviceInfo: deviceData,
+                eodUpdate: eodInput
+            }, getAuthConfig());
+
+            lastPingTimeRef.current = 0;
+            lastCoordsRef.current = null;
+
+            setIsEodModalOpen(false);
+            setEodInput('');
+            await fetchDashboardData();
+        } catch (error) {
+            alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking out');
+        } finally {
+            setIsSubmittingEod(false);
+            setIsActionLoading(false);
+        }
+    };
+
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+    };
+
+    const quickActions = [
+        ...(isHead
+            ? [
+                  {
+                      label: 'My Coordinators',
+                      desc: 'Manage assigned coordinators',
+                      icon: FaUsers,
+                      action: () => navigate('/coordinator/my-coordinators'),
+                      color: 'text-[#f77704]',
+                      bg: 'bg-orange-50',
+                      ring: 'group-hover:ring-orange-200',
+                      accent: 'group-hover:border-orange-200'
+                  }
+              ]
+            : []),
+        {
+            label: 'My Attendance',
+            desc: 'View logs & hours',
+            icon: FaUserClock,
+            action: () => navigate('/coordinator/attendance/my-attendance'),
+            color: 'text-green-600',
+            bg: 'bg-green-50',
+            ring: 'group-hover:ring-green-200',
+            accent: 'group-hover:border-green-200'
+        },
+        ...(isHead
+            ? [
+                  {
+                      label: 'Coordinator Attendance',
+                      desc: 'Track team attendance',
+                      icon: FaClipboardCheck,
+                      action: () => navigate('/coordinator/attendance/coordinator-attendance'),
+                      color: 'text-indigo-600',
+                      bg: 'bg-indigo-50',
+                      ring: 'group-hover:ring-indigo-200',
+                      accent: 'group-hover:border-indigo-200'
+                  }
+              ]
+            : []),
+        {
+            label: isHead ? 'State Heads Overviews' : 'State Heads Attendance',
+            desc: 'Review state head status',
+            icon: FaChartBar,
+            action: () => navigate('/coordinator/attendance/state-heads-overview'),
+            color: 'text-purple-600',
+            bg: 'bg-purple-50',
+            ring: 'group-hover:ring-purple-200',
+            accent: 'group-hover:border-purple-200'
+        },
+        {
+            label: 'Live Tracking',
+            desc: 'Real-time GPS locations',
+            icon: FaMapMarkedAlt,
+            action: () => navigate('/coordinator/attendance/live-tracking'),
+            color: 'text-teal-600',
+            bg: 'bg-teal-50',
+            ring: 'group-hover:ring-teal-200',
+            accent: 'group-hover:border-teal-200'
+        },
+        {
+            label: 'Client Visit',
+            desc: 'Log meeting & photo',
+            icon: FaHandshake,
+            action: () => navigate('/coordinator/client-visit'),
+            color: 'text-[#0437cc]',
+            bg: 'bg-blue-50',
+            ring: 'group-hover:ring-blue-200',
+            accent: 'group-hover:border-blue-200'
+        },
+        {
+            label: 'My Profile',
+            desc: 'View your dossier',
+            icon: FaUser,
+            action: () => navigate('/coordinator/profile'),
+            color: 'text-[#010a1f]',
+            bg: 'bg-slate-100',
+            ring: 'group-hover:ring-slate-300',
+            accent: 'group-hover:border-slate-300'
+        },
+        {
+            label: 'Settings',
+            desc: 'Security & sessions',
+            icon: FaCog,
+            action: () => navigate('/coordinator/settings'),
+            color: 'text-rose-600',
+            bg: 'bg-rose-50',
+            ring: 'group-hover:ring-rose-200',
+            accent: 'group-hover:border-rose-200'
+        }
+    ];
+
+    const topCards = [
+        {
+            title: "Today's Status",
+            value: isClockedIn ? 'Working' : (hasWorkedToday ? 'Completed' : 'Absent'),
+            icon: FaUserClock,
+            color: 'text-green-600',
+            bg: 'bg-green-50',
+            border: 'border-l-green-500',
+            valueColor: hasWorkedToday || isClockedIn ? 'text-green-700' : 'text-red-600'
+        },
+        {
+            title: 'Working Hours',
+            value: rHrs > 0 || rMins > 0 ? `${rHrs}h ${rMins}m` : '0h 0m',
+            icon: FaRegClock,
+            color: 'text-[#0437cc]',
+            bg: 'bg-blue-50',
+            border: 'border-l-[#0437cc]',
+            valueColor: 'text-[#010a1f]'
+        },
+        {
+            title: 'Leave Balance',
+            value: `${totalRemainingLeaves}`,
+            suffix: 'Days',
+            icon: FaPlaneDeparture,
+            color: 'text-[#f77704]',
+            bg: 'bg-orange-50',
+            border: 'border-l-[#f77704]',
+            valueColor: 'text-[#010a1f]'
+        },
+        {
+            title: 'Basic Salary',
+            value: formatCurrency(user?.basic_salary || 0),
+            icon: FaRupeeSign,
+            color: 'text-emerald-600',
+            bg: 'bg-emerald-50',
+            border: 'border-l-emerald-500',
+            valueColor: 'text-[#010a1f]'
+        },
+        isHead
+            ? {
+                  title: 'My Coordinators',
+                  value: myCoordinatorsCount.toString(),
+                  suffix: 'Assigned',
+                  icon: FaUsers,
+                  color: 'text-indigo-600',
+                  bg: 'bg-indigo-50',
+                  border: 'border-l-indigo-500',
+                  valueColor: 'text-[#010a1f]'
+              }
+            : {
+                  title: 'Pending Leaves',
+                  value: alerts.filter(a => a.status === 'Pending').length.toString(),
+                  icon: FaClipboardList,
+                  color: 'text-indigo-600',
+                  bg: 'bg-indigo-50',
+                  border: 'border-l-indigo-500',
+                  valueColor: 'text-[#010a1f]'
+              }
+    ];
+
+    if (loading) {
+        return (
+            <div className="space-y-5 sm:space-y-7 pb-10 relative w-full overflow-hidden animate-pulse">
+                <div className="bg-white p-4 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-2 w-full sm:w-1/3">
+                            <div className="h-6 sm:h-7 bg-slate-200 rounded-md w-3/4"></div>
+                            <div className="h-3 sm:h-4 bg-slate-200 rounded-md w-1/2"></div>
+                        </div>
+                        <div className="h-11 bg-slate-200 rounded-xl w-full sm:w-32 shrink-0"></div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-5">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-3 sm:p-5 flex flex-col gap-3 border-l-4 border-slate-200 ${i === 5 ? 'col-span-2 sm:col-span-1' : ''}`}>
+                            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-slate-200 shrink-0"></div>
+                            <div className="space-y-2">
+                                <div className="h-6 sm:h-7 bg-slate-200 rounded-md w-3/4"></div>
+                                <div className="h-3 bg-slate-200 rounded-md w-1/2"></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
+                    <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-6 lg:p-7 min-h-[380px]">
+                        <div className="h-5 bg-slate-200 rounded-md w-1/3 mb-6"></div>
+                        <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                                <div key={i} className="flex flex-col items-center gap-2">
+                                    <div className="w-12 sm:w-16 h-12 sm:h-16 rounded-full bg-slate-200"></div>
+                                    <div className="h-3 w-8 sm:w-10 bg-slate-200 rounded"></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="space-y-5 flex flex-col">
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 h-64"></div>
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex-1"></div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4 sm:space-y-6 lg:space-y-7 pb-10 w-full overflow-hidden">
+            <style>
+                {`
+                    @keyframes livePulse {
+                        0%, 100% { opacity: 1; transform: scale(1); }
+                        50% { opacity: 0.55; transform: scale(1.15); }
+                    }
+                    .live-dot { animation: livePulse 1.6s ease-in-out infinite; }
+                    .custom-tooltip-scroll::-webkit-scrollbar { width: 4px; }
+                    .custom-tooltip-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
+                    .tap-highlight-transparent { -webkit-tap-highlight-color: transparent; }
+                `}
+            </style>
+
+            {isLateModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                    <div className="relative bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-400"></div>
+
+                        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-orange-50 to-amber-50/50">
+                            <div className="flex items-center gap-2.5 sm:gap-3">
+                                <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                                    <FaExclamationTriangle className="text-orange-600 text-xs sm:text-sm" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h2 className="text-sm sm:text-base font-bold text-orange-700 truncate">Late Login Detected</h2>
+                                    <p className="text-[10px] text-orange-500 font-medium">Please provide a reason to clock in</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsLateModalOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+
+                        <div className="p-4 sm:p-6">
+                            <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-3.5 sm:p-4">
+                                <p className="text-xs text-slate-600 leading-relaxed">
+                                    You are clocking in past your allowed grace time. <strong>Your status will be marked as &quot;Half Day Absent (Pending Approval)&quot;.</strong> Please provide a valid reason for the delay.
+                                </p>
+                            </div>
+
+                            <textarea
+                                value={lateReasonInput}
+                                onChange={(e) => setLateReasonInput(e.target.value)}
+                                placeholder="State your reason (e.g., Traffic, Medical emergency, Pre-approved late check-in)..."
+                                className="w-full h-28 p-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none text-slate-800 shadow-sm transition-all"
+                            ></textarea>
+
+                            <div className="pt-4">
+                                <Button
+                                    variant="primary"
+                                    fullWidth
+                                    onClick={submitLateCheckIn}
+                                    disabled={isActionLoading || !lateReasonInput.trim()}
+                                    className="py-3 bg-[#f77704] hover:bg-[#e06603] shadow-lg shadow-orange-500/25 text-sm rounded-xl"
+                                >
+                                    {isActionLoading ? 'Processing...' : 'Submit Reason & Clock In'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isEodModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                    <div className="relative bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 max-h-[92vh] sm:max-h-none">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-red-400 to-orange-400"></div>
+
+                        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-red-50 to-orange-50/50">
+                            <div className="flex items-center gap-2.5 sm:gap-3">
+                                <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                                    <FaSignOutAlt className="text-red-600 text-xs sm:text-sm" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h2 className="text-sm sm:text-base font-bold text-red-700 truncate">End of Day Update</h2>
+                                    <p className="text-[10px] text-red-500 font-medium">Required before clock out</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsEodModalOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+
+                        <div className="p-4 sm:p-6 overflow-y-auto">
+                            <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-3.5 sm:p-4">
+                                <h3 className="text-xs font-bold text-[#010a1f] mb-2 uppercase tracking-wider">Shift Summary Guidelines</h3>
+                                <p className="text-[11px] text-slate-600 mb-2">Please provide a clear update of your work before clocking out:</p>
+                                <ul className="list-disc pl-4 text-[11px] text-slate-600 space-y-1 marker:text-[#0437cc]">
+                                    <li><strong>Completed Tasks:</strong> What did you successfully finish?</li>
+                                    <li><strong>Pending Work:</strong> What carries over to the next shift?</li>
+                                    <li><em>Blockers:</em> Did you face any issues preventing progress?</li>
+                                </ul>
+                            </div>
+
+                            <textarea
+                                value={eodInput}
+                                onChange={(e) => setEodInput(e.target.value)}
+                                placeholder="E.g.,&#10;• Completed client visits & team attendance review&#10;• Pending: Follow-up with state head&#10;• Blockers: None"
+                                className="w-full h-28 p-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 resize-none text-slate-800 shadow-sm transition-all"
+                            ></textarea>
+
+                            <div className="pt-4">
+                                <Button variant="danger" fullWidth onClick={executeCheckOut} disabled={isSubmittingEod || isActionLoading || !eodInput.trim()} className="py-3 shadow-lg shadow-red-500/25 text-sm rounded-xl">
+                                    {isSubmittingEod || isActionLoading ? 'Finalizing...' : 'Submit EOD & Clock Out'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isPendingOldCheckout && (
+                <div className="relative bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl p-3.5 sm:p-4 flex gap-3 items-start shadow-sm overflow-hidden">
+                    <div className="absolute -top-8 -right-8 w-32 h-32 bg-red-200/30 rounded-full blur-2xl pointer-events-none"></div>
+                    <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0 relative">
+                        <FaExclamationTriangle className="text-red-600 text-xs sm:text-sm" />
+                    </span>
+                    <div className="min-w-0 flex-1 relative">
+                        <p className="text-sm font-bold text-red-800">Pending Session Detected</p>
+                        <p className="text-[11px] sm:text-xs text-red-700 mt-1 leading-relaxed">
+                            You have an open shift originating from <strong>{new Date(activeSession.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {formatTime(activeSession.clock_in)}</strong>. You must clock out and submit an EOD report for that session before you can initiate a new check-in today.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            <div className="relative bg-white p-4 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-[#0437cc]/[0.03] to-transparent pointer-events-none"></div>
+                <div className="absolute -top-16 -right-16 w-48 h-48 bg-[#0437cc]/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${isHead ? 'bg-orange-50 text-[#f77704] border-orange-200' : 'bg-blue-50 text-[#0437cc] border-blue-200'}`}>
+                                {isHead ? <FaCrown className="text-[9px]" /> : <FaUserTie className="text-[9px]" />}
+                                {isHead ? 'Coordinator Head' : 'Coordinator'}
+                            </span>
+                            {isClockedIn ? (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-50 border border-green-100">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 live-dot"></span>
+                                    <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider">Active Shift</span>
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Off Duty</span>
+                                </span>
+                            )}
+                            {isLiveTracking && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-100 text-[10px] font-bold text-[#0437cc] uppercase tracking-wider">
+                                    <FaMapMarkerAlt className="text-[9px]" /> Live GPS
+                                </span>
+                            )}
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                                {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
+                            </span>
+                        </div>
+                        <h1 className="text-lg sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">
+                            {getGreeting()}, {user?.first_name} {user?.last_name} 👋
+                        </h1>
+                        <p className="text-xs sm:text-sm text-slate-500 mt-1 truncate">
+                            {isHead
+                                ? `Managing ${user?.branch_name || 'your branch'} coordinators & field operations.`
+                                : user?.coordinator_head_name
+                                    ? `Reporting to ${user.coordinator_head_name} • ${user?.branch_name || 'Assigned Branch'}`
+                                    : "Have a productive day! Here's your daily overview."}
+                        </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2.5 sm:gap-3 shrink-0">
+                        <Button
+                            variant="outline"
+                            icon={FaHandshake}
+                            onClick={() => navigate('/coordinator/client-visit')}
+                            fullWidth
+                            className="sm:w-auto border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white shadow-sm transition-all rounded-xl text-sm"
+                        >
+                            Log Client Visit
+                        </Button>
+                        {!isClockedIn ? (
+                            <Button
+                                variant="outline"
+                                icon={FaSignInAlt}
+                                onClick={() => handleCheckIn(null)}
+                                fullWidth
+                                disabled={isActionLoading}
+                                className="sm:w-auto border-green-500 text-green-600 hover:bg-green-500 hover:text-white shadow-sm transition-all rounded-xl text-sm"
+                            >
+                                {isActionLoading ? 'Processing...' : (hasWorkedToday ? 'Resume Shift' : 'Clock In')}
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="danger"
+                                icon={FaSignOutAlt}
+                                onClick={initiateCheckOut}
+                                fullWidth
+                                disabled={isActionLoading}
+                                className="sm:w-auto transition-all rounded-xl text-sm shadow-md shadow-red-500/20"
+                            >
+                                {isPendingOldCheckout ? 'Resolve Old Checkout' : 'Clock Out'}
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-4 lg:gap-5">
+                {topCards.map((card, index) => (
+                    <div
+                        key={index}
+                        className={`group relative bg-white rounded-2xl shadow-sm border border-slate-100 p-3 sm:p-5 flex flex-col gap-2.5 sm:gap-3 border-l-4 transition-all duration-300 hover:shadow-lg hover:shadow-slate-200/60 hover:-translate-y-0.5 overflow-hidden ${card.border} ${index === 4 ? 'col-span-2 sm:col-span-1' : ''}`}
+                    >
+                        <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-gradient-to-br from-slate-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+
+                        <div className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center ${card.bg} shrink-0 transition-transform duration-300 group-hover:scale-110`}>
+                            <card.icon className={`text-sm sm:text-lg ${card.color}`} />
+                        </div>
+                        <div className="min-w-0 relative">
+                            <p className={`text-base sm:text-xl lg:text-2xl font-bold tracking-tight truncate ${card.valueColor}`}>
+                                {card.value}
+                                {card.suffix && (
+                                    <span className="text-[10px] sm:text-sm font-semibold text-slate-400 ml-1">{card.suffix}</span>
+                                )}
+                            </p>
+                            <p className="text-[9px] sm:text-[11px] lg:text-xs font-semibold text-slate-500 mt-0.5 truncate uppercase tracking-wide">{card.title}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6 items-stretch">
+                <div className="lg:col-span-2 flex min-w-0 w-full">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-6 lg:p-7 flex flex-col relative w-full min-w-0 transition-shadow hover:shadow-md">
+                        <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+                            <div className="absolute -top-24 -right-24 w-72 h-72 bg-[#0437cc]/[0.05] rounded-full blur-[100px]"></div>
+                            <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-[#f77704]/[0.04] rounded-full blur-[100px]"></div>
+                        </div>
+
+                        <div className="relative mb-4 sm:mb-5 flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 pb-3.5 sm:pb-4">
+                            <div className="min-w-0">
+                                <h2 className="text-sm sm:text-base font-bold text-[#010a1f] flex items-center gap-2 truncate">
+                                    <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center shrink-0">
+                                        <FaChartLine className="text-[#0437cc] text-xs sm:text-sm" />
+                                    </span>
+                                    Weekly Overview
+                                </h2>
+                                <p className="text-[10px] sm:text-xs text-slate-400 mt-1.5 truncate pl-9 sm:pl-10">
+                                    Your daily progression versus assigned target hours
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                                <span className="hidden md:inline-flex items-center gap-1.5 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                    <FaBullseye className="text-[#0437cc] text-[9px]" />
+                                    Target {targetHours}h
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => navigate('/coordinator/attendance/my-attendance')}
+                                    className="w-full sm:w-auto bg-white text-slate-600 hover:text-[#0437cc] hover:border-[#0437cc]/30 border-slate-200 shrink-0 text-[11px] sm:text-[13px] rounded-lg transition-all py-1.5 sm:py-2"
+                                >
+                                    View Full History
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="relative flex items-center gap-2 sm:gap-4 flex-wrap mb-3 sm:mb-4 text-[8px] sm:text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]"></span>
+                                Present
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.5)]"></span>
+                                Late
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]"></span>
+                                Absent
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[#0437cc] shadow-[0_0_6px_rgba(4,55,204,0.5)]"></span>
+                                Active
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-slate-300"></span>
+                                Off
+                            </span>
+                        </div>
+
+                        <div className="relative flex-1 flex items-center py-2">
+                            <div className="w-full grid grid-cols-5 gap-1 sm:gap-2 md:gap-3 lg:gap-4">
+                                {weeklyAttendance.map((day, i) => {
+                                    const isToday = i === 4;
+                                    const isActive = day.hrs === 'Active';
+
+                                    const CIRC = 2 * Math.PI * 42;
+                                    const progress = Math.max(0, Math.min(100, day.height)) / 100;
+                                    const dashOffset = CIRC * (1 - progress);
+
+                                    let gradFrom = '#cbd5e1';
+                                    let gradTo = '#94a3b8';
+                                    let pillBg = 'bg-slate-50';
+                                    let pillText = 'text-slate-500';
+                                    let pillDot = 'bg-slate-300';
+                                    let pillBorder = 'border-slate-100';
+
+                                    if (day.status === 'Present') {
+                                        gradFrom = '#34d399'; gradTo = '#059669';
+                                        pillBg = 'bg-green-50'; pillText = 'text-green-700';
+                                        pillDot = 'bg-green-500'; pillBorder = 'border-green-100';
+                                    } else if (day.status === 'Late') {
+                                        gradFrom = '#fbbf24'; gradTo = '#ea580c';
+                                        pillBg = 'bg-orange-50'; pillText = 'text-orange-700';
+                                        pillDot = 'bg-orange-500'; pillBorder = 'border-orange-100';
+                                    } else if (isActive) {
+                                        gradFrom = '#60a5fa'; gradTo = '#0437cc';
+                                        pillBg = 'bg-blue-50'; pillText = 'text-[#0437cc]';
+                                        pillDot = 'bg-[#0437cc]'; pillBorder = 'border-blue-100';
+                                    } else if (day.status === 'Absent') {
+                                        gradFrom = '#fca5a5'; gradTo = '#dc2626';
+                                        pillBg = 'bg-red-50'; pillText = 'text-red-700';
+                                        pillDot = 'bg-red-500'; pillBorder = 'border-red-100';
+                                    }
+
+                                    let centerMain = '—';
+                                    let centerSub = '';
+                                    if (isActive) {
+                                        centerMain = 'LIVE';
+                                    } else {
+                                        const m = day.hrs.match(/(\d+)h\s*(\d+)m/);
+                                        if (m) {
+                                            centerMain = `${m[1]}h`;
+                                            if (parseInt(m[2], 10) > 0) centerSub = `${m[2]}m`;
+                                        }
+                                    }
+
+                                    const pillLabel = isActive ? 'Active' : day.status;
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            tabIndex="0"
+                                            className={`relative group flex flex-col items-center justify-between gap-1.5 sm:gap-3 p-1.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-300 outline-none cursor-pointer tap-highlight-transparent
+                                                ${isToday
+                                                    ? 'bg-gradient-to-b from-blue-50/70 via-white to-white border-[#0437cc]/25 shadow-md shadow-[#0437cc]/10'
+                                                    : 'bg-white border-slate-100 hover:border-slate-200 hover:shadow-lg hover:shadow-slate-200/60 hover:-translate-y-0.5'
+                                                }`}
+                                        >
+                                            {isToday && (
+                                                <span className="absolute -top-1.5 sm:-top-2 left-1/2 -translate-x-1/2 z-10 bg-[#0437cc] text-white text-[6px] sm:text-[8px] font-bold px-1 sm:px-2 py-[1px] sm:py-0.5 rounded-full uppercase tracking-wider shadow-sm shadow-[#0437cc]/30 whitespace-nowrap">
+                                                    Today
+                                                </span>
+                                            )}
+
+                                            <div className="hidden sm:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus:opacity-100 group-focus:visible transition-all duration-300 z-[60] pointer-events-none w-max">
+                                                <div className="bg-[#010a1f] text-white p-3 rounded-xl shadow-xl max-w-[200px] sm:max-w-[240px]">
+                                                    <p className="text-[10px] text-blue-300 font-bold uppercase tracking-wider border-b border-white/10 pb-1.5 mb-1.5 truncate">
+                                                        {day.day}, {day.date}
+                                                    </p>
+                                                    {day.records && day.records.length > 0 ? (
+                                                        <div className="space-y-1.5 max-h-24 overflow-y-auto custom-tooltip-scroll pr-1">
+                                                            {day.records.map((r, rIdx) => (
+                                                                <div key={rIdx} className="flex justify-between text-xs gap-3">
+                                                                    <span className="text-green-400 font-mono shrink-0">{formatTime(r.clock_in)}</span>
+                                                                    <span className="text-slate-400">-</span>
+                                                                    <span className={`shrink-0 ${r.clock_out ? 'text-orange-400 font-mono' : 'text-blue-300 font-bold animate-pulse'}`}>
+                                                                        {r.clock_out ? formatTime(r.clock_out) : 'Active'}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-xs text-slate-400 italic">No punches recorded</p>
+                                                    )}
+                                                    <div className="mt-2 pt-1.5 border-t border-white/10 flex justify-between items-center font-bold">
+                                                        <span className="text-[10px] text-slate-300">Total</span>
+                                                        <span className="text-xs text-white">{day.hrs}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="w-3 h-3 bg-[#010a1f] transform rotate-45 mx-auto -mt-1.5"></div>
+                                            </div>
+
+                                            <div className="flex flex-col items-center gap-0">
+                                                <span className={`text-[9px] sm:text-xs font-bold uppercase tracking-wider ${isToday ? 'text-[#0437cc]' : 'text-slate-600 group-hover:text-[#0437cc] transition-colors'}`}>
+                                                    {day.day}
+                                                </span>
+                                                <span className="text-[7px] sm:text-[9px] font-medium text-slate-400 whitespace-nowrap">
+                                                    {day.date}
+                                                </span>
+                                            </div>
+
+                                            <div className="relative w-full aspect-square max-w-[52px] sm:max-w-[100px] md:max-w-[120px] lg:max-w-[130px]">
+                                                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                                                    <defs>
+                                                        <linearGradient id={`cwkg-${i}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                                                            <stop offset="0%" stopColor={gradFrom} />
+                                                            <stop offset="100%" stopColor={gradTo} />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <circle cx="50" cy="50" r="42" fill="none" stroke="#f1f5f9" strokeWidth="9" />
+                                                    <circle
+                                                        cx="50" cy="50" r="42"
+                                                        fill="none"
+                                                        stroke={`url(#cwkg-${i})`}
+                                                        strokeWidth="9"
+                                                        strokeDasharray={CIRC}
+                                                        strokeDashoffset={dashOffset}
+                                                        strokeLinecap="round"
+                                                        className="transition-all duration-1000 ease-out"
+                                                    />
+                                                </svg>
+
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                                                    <span className={`text-[10px] sm:text-sm md:text-base lg:text-lg font-black tabular-nums ${isToday || isActive ? 'text-[#0437cc]' : 'text-[#010a1f]'}`}>
+                                                        {centerMain}
+                                                    </span>
+                                                    {centerSub && (
+                                                        <span className="text-[7px] sm:text-[9px] md:text-[10px] font-bold text-slate-400 tabular-nums mt-0.5">
+                                                            {centerSub}
+                                                        </span>
+                                                    )}
+                                                    {isActive && (
+                                                        <span className="w-1 h-1 rounded-full bg-[#0437cc] live-dot mt-0.5 sm:mt-1"></span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className={`inline-flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 rounded-full border max-w-full ${pillBg} ${pillBorder}`}>
+                                                <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full shrink-0 ${pillDot} ${isActive ? 'live-dot' : ''}`}></span>
+                                                <span className={`text-[7px] sm:text-[9px] md:text-[10px] font-bold uppercase tracking-wide truncate ${pillText}`}>
+                                                    {pillLabel}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="relative grid grid-cols-3 gap-2 sm:gap-3 pt-4 sm:pt-5 mt-3 sm:mt-4 border-t border-slate-100">
+                            <div className="flex flex-col gap-0.5 sm:gap-1 min-w-0">
+                                <div className="flex items-center gap-1 sm:gap-1.5">
+                                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-[#0437cc]"></span>
+                                    <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">Total This Week</p>
+                                </div>
+                                <p className="text-sm sm:text-lg lg:text-xl font-black text-[#010a1f] tabular-nums leading-none">
+                                    {fmtHrsMins(weekTotalHours)}
+                                </p>
+                            </div>
+
+                            <div className="flex flex-col gap-0.5 sm:gap-1 pl-2 sm:pl-3 border-l border-slate-100 min-w-0">
+                                <div className="flex items-center gap-1 sm:gap-1.5">
+                                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-green-500"></span>
+                                    <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">Days Present</p>
+                                </div>
+                                <p className="text-sm sm:text-lg lg:text-xl font-black text-[#010a1f] tabular-nums leading-none">
+                                    {daysPresent}
+                                    <span className="text-[10px] sm:text-sm font-bold text-slate-400 ml-1">
+                                        / 5{daysActive > 0 && <span className="text-[#0437cc] hidden sm:inline"> + {daysActive} live</span>}
+                                    </span>
+                                </p>
+                            </div>
+
+                            <div className="flex flex-col gap-0.5 sm:gap-1 pl-2 sm:pl-3 border-l border-slate-100 min-w-0">
+                                <div className="flex items-center gap-1 sm:gap-1.5">
+                                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-[#f77704]"></span>
+                                    <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">Avg / Day</p>
+                                </div>
+                                <p className="text-sm sm:text-lg lg:text-xl font-black text-[#010a1f] tabular-nums leading-none">
+                                    {fmtHrsMins(avgPerDay)}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-5 sm:gap-6 min-w-0">
+                    <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-6 transition-shadow hover:shadow-md overflow-hidden">
+                        <div className="absolute -top-16 -right-16 w-40 h-40 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
+
+                        <div className="relative flex items-center justify-between mb-3.5 sm:mb-4 pb-3 border-b border-slate-100">
+                            <h2 className="text-sm font-bold text-[#010a1f] flex items-center gap-2">
+                                <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+                                    <FaBolt className="text-[#0437cc] text-xs" />
+                                </span>
+                                Quick Actions
+                            </h2>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                                {quickActions.length} Tools
+                            </span>
+                        </div>
+
+                        <div className="relative space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                            {quickActions.map((action, index) => (
+                                <button
+                                    key={index}
+                                    type="button"
+                                    onClick={action.action}
+                                    className={`group w-full flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-slate-50/70 border border-transparent ${action.accent} hover:bg-white hover:shadow-sm transition-all duration-200 text-left`}
+                                >
+                                    <span className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${action.bg} flex items-center justify-center shrink-0 ring-2 ring-transparent ${action.ring} transition-all duration-200 group-hover:scale-105`}>
+                                        <action.icon className={`text-sm sm:text-base ${action.color}`} />
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs sm:text-[13px] font-bold text-[#010a1f] truncate">{action.label}</p>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate mt-0.5">{action.desc}</p>
+                                    </div>
+                                    <span className="shrink-0 w-6 h-6 rounded-lg bg-white border border-slate-100 flex items-center justify-center group-hover:border-[#0437cc]/30 group-hover:bg-blue-50 transition-all">
+                                        <FaChevronRight className="text-[9px] text-slate-300 group-hover:text-[#0437cc] group-hover:translate-x-0.5 transition-all" />
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-6 flex-1 flex flex-col transition-shadow hover:shadow-md overflow-hidden">
+                        <div className="absolute -bottom-16 -left-16 w-40 h-40 bg-[#f77704]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
+
+                        <div className="relative flex items-center justify-between mb-3.5 sm:mb-4 pb-3 border-b border-slate-100">
+                            <h2 className="text-sm font-bold text-[#010a1f] flex items-center gap-2">
+                                <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center">
+                                    <FaBell className="text-[#f77704] text-xs" />
+                                </span>
+                                Recent Alerts
+                            </h2>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wide shadow-sm ${alerts.length > 0 ? 'bg-[#f77704] text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                {alerts.length} New
+                            </span>
+                        </div>
+
+                        <div className="relative space-y-3 flex-1 flex flex-col">
+                            {alerts.length === 0 ? (
+                                <div className="flex-1 flex flex-col items-center justify-center py-8">
+                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center mb-3 border border-slate-100 relative">
+                                        <FaBell className="text-slate-300 text-xl" />
+                                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-white flex items-center justify-center">
+                                            <FaCheckCircle className="text-white text-[7px]" />
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-600 font-bold">No alerts this week</p>
+                                    <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">You&apos;re all caught up!</p>
+                                </div>
+                            ) : (
+                                alerts.map((alert, i) => {
+                                    const isApproved = alert.status === 'Approved';
+                                    const isRejected = alert.status === 'Rejected';
+                                    const isPending = alert.status === 'Pending';
+
+                                    const accentBar = isApproved ? 'border-l-green-500' : isRejected ? 'border-l-red-500' : 'border-l-[#f77704]';
+                                    const bgTint = isApproved ? 'bg-gradient-to-r from-green-50/60 to-white' : isRejected ? 'bg-gradient-to-r from-red-50/60 to-white' : 'bg-gradient-to-r from-orange-50/60 to-white';
+                                    const iconBg = isApproved ? 'bg-green-100' : isRejected ? 'bg-red-100' : 'bg-orange-100';
+                                    const iconColor = isApproved ? 'text-green-700' : isRejected ? 'text-red-600' : 'text-orange-600';
+                                    const badgeBg = isApproved ? 'bg-green-100 text-green-700 border-green-200' : isRejected ? 'bg-red-100 text-red-700 border-red-200' : 'bg-orange-100 text-orange-700 border-orange-200';
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            className={`relative group pl-3 sm:pl-3.5 pr-3 py-2.5 sm:py-3 rounded-xl border border-slate-100 border-l-4 ${accentBar} ${bgTint} transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5`}
+                                        >
+                                            <div className="flex items-start gap-2.5 sm:gap-3">
+                                                <span className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${iconBg} flex items-center justify-center shrink-0 transition-transform group-hover:scale-105`}>
+                                                    {isApproved ? <FaCheckCircle className={`text-xs sm:text-sm ${iconColor}`} />
+                                                        : isRejected ? <FaTimesCircle className={`text-xs sm:text-sm ${iconColor}`} />
+                                                            : <FaClock className={`text-xs sm:text-sm ${iconColor}`} />}
+                                                </span>
+
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <p className="text-xs font-bold text-[#010a1f] truncate">{alert.title}</p>
+                                                        {isPending && (
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-[#f77704] live-dot shrink-0"></span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[10px] sm:text-[11px] text-slate-500 leading-relaxed line-clamp-2 mb-1.5">{alert.desc}</p>
+
+                                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[9px] font-bold uppercase tracking-wider ${badgeBg}`}>
+                                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                                        {alert.status}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default CoordinatorsDashboardCom;

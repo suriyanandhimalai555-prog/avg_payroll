@@ -41,6 +41,11 @@ import empReimbursementRoutes from './routes/employee/empReimbursementRoutes.js'
 import empAssetRoutes from './routes/employee/empAssetRoutes.js';
 import empClientVisitRoutes from './routes/employee/empClientVisitRoutes.js';
 
+import coordAttendanceRoutes from './routes/coordinator/coordAttendanceRoutes.js';
+import coordLiveTrackingRoutes from './routes/coordinator/coordLiveTrackingRoutes.js';
+import coordProfileRoutes from './routes/coordinator/coordProfileRoutes.js';
+import coordSettingsRoutes from './routes/coordinator/coordSettingsRoutes.js';
+
 import initializeSASuperAdminModel from './models/superadmin/SASuperAdmin.js';
 import initializeSAEmployeeModel from './models/superadmin/SAEmployee.js';
 import initializeSACompanyProfileModel from './models/superadmin/SACompanyProfile.js';
@@ -198,6 +203,11 @@ if (cluster.isPrimary) {
     app.use('/api/reimbursements', empReimbursementRoutes);
     app.use('/api/assets', empAssetRoutes);
     app.use('/api/client-visits', empClientVisitRoutes);
+
+    app.use('/api/coordinator-attendance', coordAttendanceRoutes);
+    app.use('/api/coordinator-live-tracking', coordLiveTrackingRoutes);
+    app.use('/api/coordinator-profile', coordProfileRoutes);
+    app.use('/api/coordinator-settings', coordSettingsRoutes);
 
     app.listen(PORT, () => {
         console.log(`Worker ${process.pid} running and listening on port ${PORT}`);

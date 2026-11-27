@@ -1,0 +1,1380 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import Countdown from 'react-countdown';
+import {
+    FaClock, FaCalendarDay, FaHistory, FaCalendarAlt,
+    FaSignOutAlt, FaSignInAlt, FaTasks, FaFingerprint,
+    FaBusinessTime, FaWalking, FaExclamationTriangle,
+    FaMapMarkerAlt, FaDesktop, FaChevronDown, FaChevronUp,
+    FaTimes, FaCheck, FaEdit, FaFilter, FaUmbrellaBeach,
+    FaSyncAlt, FaHandshake, FaCrown, FaUserTie
+} from 'react-icons/fa';
+import Button from '../common/Button';
+import { useAuth } from '../../context/AuthContext';
+
+const getCleanToken = () => {
+    let token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token === 'null' || token === 'undefined') return null;
+    if (token) token = token.replace(/^["']|["']$/g, '');
+    return token;
+};
+
+const getAuthConfig = () => {
+    const token = getCleanToken();
+    return {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+    };
+};
+
+const getSafeDateStr = (dateVal) => {
+    if (!dateVal) return '';
+    if (typeof dateVal === 'string' && dateVal.includes('T')) return dateVal.split('T')[0];
+    const d = new Date(dateVal);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+};
+
+const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const CoordinatorsAttendanceCom = () => {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+
+    const isHead = user?.coordinator_level === 'Coordinator Head';
+    const coordId = user?.coordinator_id || '';
+
+    const [activeTab, setActiveTab] = useState('today');
+    const [loading, setLoading] = useState(true);
+    const [isActionLoading, setIsActionLoading] = useState(false);
+    const [todayLogs, setTodayLogs] = useState([]);
+    const [fullHistory, setFullHistory] = useState([]);
+    const [holidays, setHolidays] = useState([]);
+    const [shiftDetails, setShiftDetails] = useState(null);
+    const [joiningDate, setJoiningDate] = useState(null);
+
+    const [expandedDates, setExpandedDates] = useState([]);
+    const [selectedMonthYear, setSelectedMonthYear] = useState('');
+    const [historyFilterStatus, setHistoryFilterStatus] = useState('All');
+    const [historyFilterMonth, setHistoryFilterMonth] = useState('All');
+
+    const countdownRef = useRef(null);
+    const [completedMsToday, setCompletedMsToday] = useState(0);
+
+    const lastPingTimeRef = useRef(0);
+    const lastCoordsRef = useRef(null);
+    const [isLiveTracking, setIsLiveTracking] = useState(false);
+    const [gpsDenied, setGpsDenied] = useState(false);
+    const [gpsErrorMsg, setGpsErrorMsg] = useState('');
+    const [gpsRetryCount, setGpsRetryCount] = useState(0);
+    const [isRetryingGps, setIsRetryingGps] = useState(false);
+    const [locationPermState, setLocationPermState] = useState('prompt');
+
+    const [isEodModalOpen, setIsEodModalOpen] = useState(false);
+    const [eodInput, setEodInput] = useState('');
+    const [isSubmittingEod, setIsSubmittingEod] = useState(false);
+
+    const [isEditEodModalOpen, setIsEditEodModalOpen] = useState(false);
+    const [editingRecordId, setEditingRecordId] = useState(null);
+    const [editEodInput, setEditEodInput] = useState('');
+
+    const [isLateModalOpen, setIsLateModalOpen] = useState(false);
+    const [lateReasonInput, setLateReasonInput] = useState('');
+
+    useEffect(() => {
+        if (!user || !navigator.geolocation) return;
+
+        let permStatusObj = null;
+
+        const requestInitialPermission = () => {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setLocationPermState('granted');
+                    setGpsDenied(false);
+                    setGpsErrorMsg('');
+                    lastCoordsRef.current = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    };
+                },
+                (error) => {
+                    if (error.code === 1) {
+                        setLocationPermState('denied');
+                        setGpsDenied(true);
+                        setGpsErrorMsg('GPS Permission Denied');
+                    }
+                },
+                { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
+            );
+        };
+
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'geolocation' })
+                .then((result) => {
+                    permStatusObj = result;
+                    setLocationPermState(result.state);
+                    if (result.state === 'denied') {
+                        setGpsDenied(true);
+                        setGpsErrorMsg('GPS Permission Denied');
+                    } else {
+                        requestInitialPermission();
+                    }
+
+                    result.onchange = () => {
+                        setLocationPermState(result.state);
+                        if (result.state === 'granted') {
+                            setGpsDenied(false);
+                            setGpsErrorMsg('');
+                            setGpsRetryCount((prev) => prev + 1);
+                        } else if (result.state === 'denied') {
+                            setGpsDenied(true);
+                            setGpsErrorMsg('GPS Permission Denied');
+                        }
+                    };
+                })
+                .catch(() => requestInitialPermission());
+        } else {
+            requestInitialPermission();
+        }
+
+        return () => {
+            if (permStatusObj) permStatusObj.onchange = null;
+        };
+    }, [user]);
+
+    const fetchAttendanceData = async () => {
+        if (!coordId || !getCleanToken()) {
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const idStr = String(coordId).trim();
+
+            const [attRes, shiftRes, holRes] = await Promise.all([
+                axios.get(`${import.meta.env.VITE_API_URL}/api/coordinator-attendance/${idStr}`, getAuthConfig()).catch(() => ({ data: { history: [] } })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/coordinator-attendance/shift/${idStr}`, getAuthConfig()).catch(() => ({ data: null })),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/sa-holidays`, getAuthConfig()).catch(() => ({ data: [] }))
+            ]);
+
+            const fetchedHistory = attRes.data?.history || (Array.isArray(attRes.data) ? attRes.data : []);
+            setFullHistory(fetchedHistory);
+
+            const actualHolidays = (holRes.data || []).filter(h => h.status !== 'Draft' && h.type !== 'WEEKLY_OFF');
+            setHolidays(actualHolidays);
+            setShiftDetails(shiftRes.data);
+
+            const joinStr = user?.joining_date || user?.created_at;
+            if (joinStr) {
+                const jd = new Date(joinStr);
+                jd.setHours(0, 0, 0, 0);
+                setJoiningDate(jd);
+            }
+
+            const todayDateStr = getSafeDateStr(new Date());
+            const todays = fetchedHistory.filter(record => getSafeDateStr(record.date) === todayDateStr);
+            setTodayLogs(todays);
+
+            let previousMs = 0;
+            todays.forEach(log => {
+                if (log.clock_out && log.total_hours && log.total_hours !== 'Missed Checkout') {
+                    const [h, m] = log.total_hours.replace(' Hrs', '').split(':').map(Number);
+                    if (!isNaN(h) && !isNaN(m)) {
+                        previousMs += (h * 3600000) + (m * 60000);
+                    }
+                }
+            });
+            setCompletedMsToday(previousMs);
+        } catch (error) {
+            console.error('Error fetching coordinator attendance data', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (coordId) {
+            fetchAttendanceData();
+        } else {
+            setLoading(false);
+        }
+    }, [coordId]);
+
+    const latestRecord = todayLogs.length > 0 ? todayLogs[0] : null;
+    const activeSession = fullHistory.find(r => r.clock_in && !r.clock_out);
+    const isClockedIn = !!activeSession;
+    const activeSessionDateStr = activeSession ? getSafeDateStr(activeSession.date) : null;
+    const isPendingOldCheckout = isClockedIn && activeSessionDateStr !== getSafeDateStr(new Date());
+    const hasWorkedToday = todayLogs.length > 0;
+
+    useEffect(() => {
+        if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !coordId) {
+            setIsLiveTracking(false);
+            setIsRetryingGps(false);
+            return;
+        }
+
+        if (!navigator.geolocation) {
+            setIsLiveTracking(false);
+            setGpsErrorMsg('Browser does not support GPS');
+            setIsRetryingGps(false);
+            return;
+        }
+
+        setGpsErrorMsg('');
+
+        const watchId = navigator.geolocation.watchPosition(
+            async (position) => {
+                setLocationPermState('granted');
+                setGpsDenied(false);
+                setGpsErrorMsg('');
+                setIsLiveTracking(true);
+                setIsRetryingGps(false);
+
+                const { latitude, longitude, accuracy } = position.coords;
+                const now = Date.now();
+                const timeElapsed = now - lastPingTimeRef.current;
+
+                let movedEnough = false;
+                if (lastCoordsRef.current) {
+                    const dist = getDistanceMeters(
+                        lastCoordsRef.current.latitude,
+                        lastCoordsRef.current.longitude,
+                        latitude,
+                        longitude
+                    );
+                    movedEnough = dist >= 30;
+                } else {
+                    movedEnough = true;
+                }
+
+                lastCoordsRef.current = { latitude, longitude, accuracy };
+
+                if (timeElapsed >= 30000 || movedEnough) {
+                    lastPingTimeRef.current = now;
+                    try {
+                        await axios.post(
+                            `${import.meta.env.VITE_API_URL}/api/coordinator-attendance/location-ping`,
+                            {
+                                coordinatorId: coordId,
+                                attendanceId: activeSession.id,
+                                latitude,
+                                longitude,
+                                accuracy
+                            },
+                            getAuthConfig()
+                        );
+                    } catch (err) {
+                        console.warn('Live location ping failed:', err.message);
+                    }
+                }
+            },
+            (error) => {
+                setIsLiveTracking(false);
+                setIsRetryingGps(false);
+                if (error.code === 1) {
+                    setLocationPermState('denied');
+                    setGpsDenied(true);
+                    setGpsErrorMsg('GPS Permission Denied');
+                } else if (error.code === 3) {
+                    setGpsErrorMsg('GPS Timed Out');
+                } else {
+                    setGpsErrorMsg('GPS Unavailable');
+                }
+            },
+            { enableHighAccuracy: false, maximumAge: 30000, timeout: 20000 }
+        );
+
+        return () => {
+            navigator.geolocation.clearWatch(watchId);
+            setIsLiveTracking(false);
+        };
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, coordId, gpsRetryCount]);
+
+    useEffect(() => {
+        if (!isClockedIn || isPendingOldCheckout || !activeSession?.id || !coordId) return;
+
+        const sendFinalKeepalivePing = () => {
+            const coords = lastCoordsRef.current;
+            const token = getCleanToken();
+            if (!coords || !token) return;
+
+            try {
+                fetch(`${import.meta.env.VITE_API_URL}/api/coordinator-attendance/location-ping`, {
+                    method: 'POST',
+                    keepalive: true,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        coordinatorId: coordId,
+                        attendanceId: activeSession.id,
+                        latitude: coords.latitude,
+                        longitude: coords.longitude,
+                        accuracy: coords.accuracy ?? null
+                    })
+                }).catch(() => {});
+            } catch {
+                return;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                sendFinalKeepalivePing();
+            } else if (document.visibilityState === 'visible') {
+                lastPingTimeRef.current = 0;
+                setGpsRetryCount((prev) => prev + 1);
+            }
+        };
+
+        window.addEventListener('pagehide', sendFinalKeepalivePing);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('pagehide', sendFinalKeepalivePing);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [isClockedIn, isPendingOldCheckout, activeSession?.id, coordId]);
+
+    const handleRetryGps = () => {
+        if (!navigator.geolocation) {
+            setGpsErrorMsg('Browser does not support GPS');
+            return;
+        }
+        setIsRetryingGps(true);
+        setGpsDenied(false);
+        setGpsErrorMsg('');
+        lastPingTimeRef.current = 0;
+        lastCoordsRef.current = null;
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                setLocationPermState('granted');
+                lastCoordsRef.current = {
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy
+                };
+                setGpsRetryCount((prev) => prev + 1);
+            },
+            (err) => {
+                setIsRetryingGps(false);
+                if (err.code === 1) {
+                    setLocationPermState('denied');
+                    setGpsDenied(true);
+                    setGpsErrorMsg('GPS Permission Denied');
+                } else {
+                    setGpsErrorMsg('GPS Unavailable');
+                }
+            },
+            { enableHighAccuracy: false, timeout: 20000, maximumAge: 0 }
+        );
+    };
+
+    const targetHours = shiftDetails ? parseFloat(shiftDetails.total_working_hours || shiftDetails.working_hours || 8) : 8;
+    const targetMs = targetHours * 3600000;
+
+    const currentLateMins = latestRecord?.late_minutes || 0;
+    const isCurrentlyLate = currentLateMins > 0;
+
+    let liveProgressMs = completedMsToday;
+    if (isClockedIn && !isPendingOldCheckout) {
+        liveProgressMs += new Date() - new Date(activeSession.clock_in);
+    }
+    const rHrs = Math.floor(liveProgressMs / 3600000);
+    const rMins = Math.floor((liveProgressMs % 3600000) / 60000);
+
+    const totalWorkedMinutes = (rHrs * 60) + (rMins || 0);
+    const targetMinutes = Math.round(targetHours * 60);
+    const remainingMinutes = Math.max(0, targetMinutes - totalWorkedMinutes);
+    const remHrs = Math.floor(remainingMinutes / 60);
+    const remMins = remainingMinutes % 60;
+    const progressPercentage = Math.min((totalWorkedMinutes / targetMinutes) * 100, 100);
+
+    const getDeviceInfo = () => {
+        const ua = navigator.userAgent;
+        let browserName = 'Web Browser';
+        if (ua.match(/chrome|chromium|crios/i) && !ua.match(/edg/i)) browserName = 'Chrome';
+        else if (ua.match(/firefox|fxios/i)) browserName = 'Firefox';
+        else if (ua.match(/safari/i) && !ua.match(/chrome|chromium|crios/i)) browserName = 'Safari';
+        else if (ua.match(/edg/i)) browserName = 'Edge';
+
+        let osName = 'Unknown OS';
+        if (ua.match(/windows nt 10/i)) osName = 'Windows 10/11';
+        else if (ua.match(/macintosh|mac os x/i)) osName = 'Mac OS';
+        else if (ua.match(/linux/i)) osName = 'Linux';
+        else if (ua.match(/android/i)) osName = 'Android';
+        else if (ua.match(/iphone/i)) osName = 'iPhone';
+
+        return `${osName} - ${browserName}`;
+    };
+
+    const fetchLocationData = () => {
+        return new Promise((resolve) => {
+            if (!navigator.geolocation) {
+                resolve({ address: 'Location Unavailable (Browser unsupported)', latitude: null, longitude: null, accuracy: null });
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude, longitude, accuracy } = position.coords;
+                    try {
+                        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                        const data = await response.json();
+                        const address = data && data.display_name
+                            ? `${data.display_name} (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`
+                            : `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+                        resolve({ address, latitude, longitude, accuracy });
+                    } catch {
+                        resolve({ address: `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`, latitude, longitude, accuracy });
+                    }
+                },
+                () => {
+                    resolve({ address: 'Location Unavailable (Check Device Settings)', latitude: null, longitude: null, accuracy: null });
+                },
+                { enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 }
+            );
+        });
+    };
+
+    const handleCheckIn = async (providedLateReason = null) => {
+        if (isActionLoading) return;
+        const now = new Date();
+
+        setIsActionLoading(true);
+        try {
+            const locObj = await fetchLocationData();
+            const deviceData = getDeviceInfo();
+            const todayDate = getSafeDateStr(now);
+
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/coordinator-attendance/check-in`, {
+                coordinatorId: coordId,
+                todayDate,
+                locationData: locObj.address,
+                latitude: locObj.latitude,
+                longitude: locObj.longitude,
+                accuracy: locObj.accuracy,
+                deviceInfo: deviceData,
+                lateReason: providedLateReason
+            }, getAuthConfig());
+
+            setIsLateModalOpen(false);
+            setLateReasonInput('');
+            await fetchAttendanceData();
+        } catch (error) {
+            if (error.response?.status === 428 && error.response?.data?.message === 'LATE_REASON_REQUIRED') {
+                setIsLateModalOpen(true);
+            } else {
+                alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking in');
+            }
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const submitLateCheckIn = () => {
+        if (!lateReasonInput.trim()) return alert('Please provide a reason for clocking in late.');
+        handleCheckIn(lateReasonInput);
+    };
+
+    const initiateCheckOut = () => setIsEodModalOpen(true);
+
+    const executeCheckOut = async () => {
+        if (!eodInput.trim()) return alert('EOD Update is required to clock out.');
+        if (isActionLoading) return;
+
+        setIsSubmittingEod(true);
+        setIsActionLoading(true);
+        try {
+            const locObj = await fetchLocationData();
+            const deviceData = getDeviceInfo();
+            const targetDate = getSafeDateStr(activeSession.date);
+
+            await axios.put(`${import.meta.env.VITE_API_URL}/api/coordinator-attendance/check-out`, {
+                coordinatorId: coordId,
+                todayDate: targetDate,
+                locationData: locObj.address,
+                latitude: locObj.latitude,
+                longitude: locObj.longitude,
+                accuracy: locObj.accuracy,
+                deviceInfo: deviceData,
+                eodUpdate: eodInput
+            }, getAuthConfig());
+
+            lastPingTimeRef.current = 0;
+            lastCoordsRef.current = null;
+
+            setIsEodModalOpen(false);
+            setEodInput('');
+            await fetchAttendanceData();
+        } catch (error) {
+            alert(typeof error === 'string' ? error : error.response?.data?.message || 'Error clocking out');
+        } finally {
+            setIsSubmittingEod(false);
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleEditEodSubmit = async () => {
+        if (!editEodInput.trim()) return alert('Update cannot be empty.');
+        setIsSubmittingEod(true);
+        try {
+            await axios.put(`${import.meta.env.VITE_API_URL}/api/coordinator-attendance/eod-update`, {
+                recordId: editingRecordId,
+                eodUpdate: editEodInput
+            }, getAuthConfig());
+            setIsEditEodModalOpen(false);
+            setEditEodInput('');
+            setEditingRecordId(null);
+            fetchAttendanceData();
+        } catch (error) {
+            alert(error.response?.data?.message || 'Error updating EOD');
+        } finally {
+            setIsSubmittingEod(false);
+        }
+    };
+
+    const openEditEodModal = (session) => {
+        setEditingRecordId(session.id);
+        setEditEodInput(session.eod_update || '');
+        setIsEditEodModalOpen(true);
+    };
+
+    const monthOptions = useMemo(() => {
+        const options = [];
+        const curr = new Date();
+        for (let i = 0; i < 12; i++) {
+            const d = new Date(curr.getFullYear(), curr.getMonth() - i, 1);
+            options.push(`${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}`);
+        }
+        if (!selectedMonthYear && options.length > 0) setSelectedMonthYear(options[0]);
+        return options;
+    }, [selectedMonthYear]);
+
+    const getDisplayedHistory = () => {
+        let startDate, endDate;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (activeTab === 'today') {
+            startDate = new Date(today);
+            endDate = new Date(today);
+        } else if (activeTab === 'history' || activeTab === 'timesheet') {
+            startDate = new Date(today);
+            startDate.setDate(today.getDate() - 9);
+            endDate = new Date(today);
+        } else if (activeTab === 'monthly' && selectedMonthYear) {
+            const [monthStr, yearStr] = selectedMonthYear.split(' ');
+            const monthIdx = new Date(`${monthStr} 1, ${yearStr}`).getMonth();
+            startDate = new Date(yearStr, monthIdx, 1);
+            endDate = new Date(yearStr, monthIdx + 1, 0);
+            if (endDate > today) endDate = new Date(today);
+        } else {
+            startDate = new Date(today);
+            endDate = new Date(today);
+        }
+
+        if (joiningDate && startDate < joiningDate) {
+            startDate = new Date(joiningDate);
+        }
+
+        const dateArray = [];
+        for (let d = new Date(endDate); d >= startDate; d.setDate(d.getDate() - 1)) {
+            dateArray.push(new Date(d));
+        }
+
+        const displayData = dateArray.map(dateObj => {
+            const dateStr = getSafeDateStr(dateObj);
+            const sessions = fullHistory.filter(r => getSafeDateStr(r.date) === dateStr);
+            const holidayRecord = holidays.find(h => getSafeDateStr(h.holiday_date) === dateStr);
+
+            let totalMins = 0;
+            let first_clock_in = null;
+            let last_clock_out = null;
+            let late_minutes = 0;
+            let is_working = false;
+
+            if (sessions.length > 0) {
+                sessions.sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
+                first_clock_in = sessions[0].clock_in;
+                const lastSession = sessions[sessions.length - 1];
+                last_clock_out = lastSession.clock_out;
+                is_working = !lastSession.clock_out;
+                late_minutes = sessions[0].late_minutes || 0;
+
+                sessions.forEach(s => {
+                    if (s.total_hours && s.total_hours !== 'In Progress' && s.total_hours !== 'Missed Checkout') {
+                        const [h, m] = s.total_hours.replace(' Hrs', '').split(':').map(Number);
+                        if (!isNaN(h)) totalMins += (h * 60) + (m || 0);
+                    }
+                });
+            }
+
+            let total_hours_sum = null;
+            if (totalMins > 0) {
+                const hrs = Math.floor(totalMins / 60).toString().padStart(2, '0');
+                const mins = (totalMins % 60).toString().padStart(2, '0');
+                total_hours_sum = `${hrs}:${mins} Hrs`;
+            }
+
+            let status = 'Absent';
+            if (sessions.length > 0) {
+                status = sessions[0].status || 'Present';
+            } else if (holidayRecord) {
+                status = 'Holiday';
+            } else {
+                const dayOfWeek = dateObj.getDay();
+                if (dayOfWeek === 0) {
+                    status = 'Week Off';
+                } else if (dayOfWeek === 6) {
+                    const weekOfMonth = Math.ceil(dateObj.getDate() / 7);
+                    status = (weekOfMonth === 2 || weekOfMonth === 4) ? 'Week Off' : 'Absent';
+                }
+            }
+
+            if (dateObj > new Date() && status === 'Absent') {
+                status = 'Scheduled';
+            }
+
+            return {
+                date: dateObj.toISOString(),
+                dateStr,
+                sessions,
+                first_clock_in,
+                last_clock_out,
+                is_working,
+                late_minutes,
+                total_hours_sum,
+                status,
+                holidayName: holidayRecord ? holidayRecord.holiday_name : null
+            };
+        });
+
+        if (activeTab === 'history' && historyFilterStatus !== 'All') {
+            return displayData.filter(g => g.status === historyFilterStatus);
+        }
+        return displayData;
+    };
+
+    const toggleAccordion = (idStr) => setExpandedDates(prev => prev.includes(idStr) ? prev.filter(d => d !== idStr) : [...prev, idStr]);
+
+    const formatTime = (timestamp) => !timestamp ? '—' : new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    const format12Hour = (time24) => {
+        if (!time24) return '—';
+        if (time24.toUpperCase().includes('AM') || time24.toUpperCase().includes('PM')) return time24;
+        const [hourString, minute] = time24.split(':');
+        let hour = parseInt(hourString, 10);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        hour = hour ? (hour % 12 || 12) : 12;
+        return `${hour < 10 ? '0' + hour : hour}:${minute} ${ampm}`;
+    };
+
+    const getStatusStyle = (status) => {
+        if (status === 'Present') return 'text-teal-700 bg-teal-50 border-teal-200';
+        if (status === 'Late') return 'text-orange-700 bg-orange-50 border-orange-200';
+        if (status?.includes('Absent')) return 'text-red-700 bg-red-50 border-red-200';
+        if (status === 'Week Off') return 'text-purple-700 bg-purple-50 border-purple-200';
+        if (status === 'Holiday') return 'text-[#0437cc] bg-blue-50 border-blue-200';
+        if (status?.includes('Pending Approval')) return 'text-orange-700 bg-orange-50 border-orange-200';
+        return 'text-slate-600 bg-slate-50 border-slate-200';
+    };
+
+    const getStatusDot = (status) => {
+        if (status === 'Present') return 'bg-teal-500';
+        if (status === 'Late') return 'bg-orange-500';
+        if (status?.includes('Absent')) return 'bg-red-500';
+        if (status === 'Week Off') return 'bg-purple-500';
+        if (status === 'Holiday') return 'bg-[#0437cc]';
+        if (status?.includes('Pending Approval')) return 'bg-orange-500';
+        return 'bg-slate-500';
+    };
+
+    const tabsNav = [
+        { id: 'today', label: "Today's Logs", icon: FaCalendarDay },
+        { id: 'history', label: 'Last 10 Days', icon: FaHistory },
+        { id: 'monthly', label: 'Monthly Report', icon: FaCalendarAlt },
+        { id: 'timesheet', label: 'Timesheet & EOD', icon: FaTasks }
+    ];
+
+    if (loading) {
+        return (
+            <div className="space-y-5 sm:space-y-6 pb-10 w-full overflow-hidden animate-pulse">
+                <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 h-28"></div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
+                    <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-slate-100 h-[460px]"></div>
+                    <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-[460px]"></div>
+                </div>
+            </div>
+        );
+    }
+
+    const shiftTypeStr = shiftDetails?.shift_type ? shiftDetails.shift_type.trim() : 'Fixed';
+    const isFlexibleUI = shiftTypeStr === 'Flexible';
+
+    return (
+        <div className="space-y-5 sm:space-y-6 pb-10 relative w-full overflow-hidden">
+            <style>{`
+                @keyframes premiumPulse { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.05); opacity: 1; } }
+                @keyframes ringRotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                @keyframes liveGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); } 50% { box-shadow: 0 0 0 12px rgba(34,197,94,0); } }
+                .premium-clock-icon { animation: premiumPulse 2.5s ease-in-out infinite; }
+                .live-glow { animation: liveGlow 2s ease-in-out infinite; }
+                .digital-font { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+            `}</style>
+
+            {locationPermState === 'denied' && (
+                <div className="relative bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between shadow-sm">
+                    <div className="flex items-start gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                            <FaMapMarkerAlt className="text-amber-600 text-sm" />
+                        </span>
+                        <div className="min-w-0">
+                            <p className="text-sm font-bold text-amber-900">Location Access Required</p>
+                            <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                                Please allow Location access in your browser/device settings so your attendance and live field location can be recorded.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleRetryGps}
+                        disabled={isRetryingGps}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-colors shrink-0 shadow-sm"
+                    >
+                        <FaSyncAlt className={isRetryingGps ? 'animate-spin' : ''} />
+                        {isRetryingGps ? 'Checking...' : 'Enable Location'}
+                    </button>
+                </div>
+            )}
+
+            {isLateModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-400"></div>
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-orange-50 to-amber-50/50">
+                            <div className="flex items-center gap-3">
+                                <span className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                                    <FaExclamationTriangle className="text-orange-600 text-sm" />
+                                </span>
+                                <div>
+                                    <h2 className="text-sm sm:text-base font-bold text-orange-700">Late Login Detected</h2>
+                                    <p className="text-[10px] text-orange-500 font-medium">Please provide a reason to clock in</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsLateModalOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+                        <div className="p-5 sm:p-6">
+                            <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                <p className="text-xs text-slate-600 leading-relaxed">
+                                    You are clocking in past your allowed grace time. <strong>Your status will be marked as &quot;Half Day Absent (Pending Approval)&quot;.</strong> Please provide a valid reason for the delay.
+                                </p>
+                            </div>
+                            <textarea
+                                value={lateReasonInput}
+                                onChange={(e) => setLateReasonInput(e.target.value)}
+                                placeholder="State your reason (e.g., Traffic, Client meeting, Medical emergency)..."
+                                className="w-full h-28 p-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none text-slate-800 shadow-sm transition-all"
+                            ></textarea>
+                            <div className="pt-4">
+                                <Button variant="primary" fullWidth onClick={submitLateCheckIn} disabled={isActionLoading || !lateReasonInput.trim()} className="py-3 bg-[#f77704] hover:bg-[#e06603] shadow-lg shadow-orange-500/25 text-sm rounded-xl">
+                                    {isActionLoading ? 'Processing...' : 'Submit Reason & Clock In'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isEodModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-red-400 to-orange-400"></div>
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-red-50 to-orange-50/50">
+                            <div className="flex items-center gap-3">
+                                <span className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                                    <FaSignOutAlt className="text-red-600 text-sm" />
+                                </span>
+                                <div>
+                                    <h2 className="text-sm sm:text-base font-bold text-red-700">End of Day Update</h2>
+                                    <p className="text-[10px] text-red-500 font-medium">Required before clock out</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsEodModalOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+                        <div className="p-5 sm:p-6">
+                            <textarea
+                                value={eodInput}
+                                onChange={(e) => setEodInput(e.target.value)}
+                                placeholder="E.g.,&#10;• Completed coordinator follow-ups & client visits&#10;• Pending: Tomorrow's zone review&#10;• Blockers: None"
+                                className="w-full h-28 p-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 resize-none text-slate-800 shadow-sm transition-all"
+                            ></textarea>
+                            <div className="pt-4">
+                                <Button variant="danger" fullWidth onClick={executeCheckOut} disabled={isSubmittingEod || isActionLoading || !eodInput.trim()} className="py-3 shadow-lg shadow-red-500/25 text-sm rounded-xl">
+                                    {isSubmittingEod || isActionLoading ? 'Finalizing...' : 'Submit EOD & Clock Out'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isEditEodModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#010a1f]/70 backdrop-blur-md">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0437cc] via-blue-400 to-blue-300"></div>
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-blue-50/60">
+                            <div className="flex items-center gap-3">
+                                <span className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                                    <FaEdit className="text-[#0437cc] text-sm" />
+                                </span>
+                                <div>
+                                    <h2 className="text-sm sm:text-base font-bold text-[#0437cc]">Edit EOD Report</h2>
+                                    <p className="text-[10px] text-blue-500 font-medium">Update your daily report</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsEditEodModalOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <FaTimes className="text-sm" />
+                            </button>
+                        </div>
+                        <div className="p-5 sm:p-6 space-y-4">
+                            <textarea
+                                value={editEodInput}
+                                onChange={(e) => setEditEodInput(e.target.value)}
+                                className="w-full h-28 p-3.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0437cc]/20 focus:border-[#0437cc] resize-none bg-slate-50 text-slate-800 transition-all"
+                            ></textarea>
+                            <Button variant="primary" fullWidth onClick={handleEditEodSubmit} disabled={isSubmittingEod || !editEodInput.trim()} className="py-3 shadow-lg shadow-[#0437cc]/20 text-sm rounded-xl">
+                                {isSubmittingEod ? 'Saving...' : 'Update Records'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isPendingOldCheckout && (
+                <div className="relative bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl p-4 flex gap-3 items-start shadow-sm">
+                    <span className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                        <FaExclamationTriangle className="text-red-600 text-sm" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-red-800">Pending Session Detected</p>
+                        <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                            You have an open shift from <strong>{formatDate(activeSession.date)} at {formatTime(activeSession.clock_in)}</strong>. Please clock out and submit an EOD report before starting a new shift today.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            <div className="relative bg-white p-5 sm:p-6 lg:p-7 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#0437cc]/[0.04] rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border mb-2 bg-blue-50 border-blue-100">
+                            {isHead ? <FaCrown className="text-[9px] text-[#f77704]" /> : <FaUserTie className="text-[9px] text-[#0437cc]" />}
+                            <span className="text-[10px] font-bold text-[#0437cc] uppercase tracking-[0.1em]">
+                                {isHead ? 'Coordinator Head Attendance' : 'Coordinator Attendance'}
+                            </span>
+                        </div>
+                        <h1 className="text-xl sm:text-2xl font-bold text-[#010a1f] tracking-tight truncate">My Attendance & Shifts</h1>
+                        <p className="text-xs sm:text-sm text-slate-500 mt-1 truncate">Manage your daily logs, timesheets, and view shift rules.</p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 w-full md:w-auto shrink-0">
+                        <Button
+                            variant="outline"
+                            icon={FaHandshake}
+                            onClick={() => navigate('/coordinator/client-visit')}
+                            className="w-full sm:w-auto shadow-sm text-sm py-2.5 rounded-xl border-[#0437cc] text-[#0437cc] hover:bg-[#0437cc] hover:text-white transition-all"
+                        >
+                            Log Client Visit
+                        </Button>
+                        <Button
+                            variant="outline"
+                            icon={FaSignInAlt}
+                            onClick={() => handleCheckIn(null)}
+                            disabled={isClockedIn || isActionLoading}
+                            className={`w-full sm:w-auto shadow-sm text-sm py-2.5 rounded-xl transition-all ${isClockedIn ? 'border-slate-200 text-slate-400 bg-slate-50' : 'border-green-500 text-green-600 hover:bg-green-500 hover:text-white'}`}
+                        >
+                            {isActionLoading ? 'Processing...' : (isClockedIn ? 'Shift Active' : (hasWorkedToday ? 'Resume Shift' : 'Clock In'))}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            icon={FaSignOutAlt}
+                            onClick={initiateCheckOut}
+                            disabled={!isClockedIn || isActionLoading}
+                            className={`w-full sm:w-auto shadow-sm border-none text-sm py-2.5 rounded-xl transition-all ${!isClockedIn ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 focus:ring-red-600 shadow-lg shadow-red-500/20'}`}
+                        >
+                            {isPendingOldCheckout ? 'Resolve Pending Checkout' : 'Clock Out'}
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex overflow-x-auto gap-2 p-1 bg-white rounded-xl shadow-sm border border-slate-100 custom-scrollbar pb-1">
+                {tabsNav.map((tab) => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-lg text-xs sm:text-[13px] font-semibold transition-all whitespace-nowrap shrink-0 ${activeTab === tab.id
+                            ? 'bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white shadow-md shadow-[#0437cc]/20'
+                            : 'text-slate-500 hover:bg-slate-50 hover:text-[#010a1f]'
+                            }`}
+                    >
+                        <tab.icon className={activeTab === tab.id ? 'text-white' : 'text-slate-400'} />
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
+                <div className="lg:col-span-1">
+                    <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden h-full flex flex-col">
+                        <div className={`absolute -top-24 -right-24 w-56 h-56 rounded-full blur-3xl pointer-events-none transition-colors duration-500 ${isClockedIn ? 'bg-green-200/30' : 'bg-[#0437cc]/[0.04]'}`}></div>
+
+                        <div className="relative p-5 border-b border-slate-100 flex justify-between items-center">
+                            <div className="flex items-center gap-2.5">
+                                <span className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                                    <FaClock className="text-[#0437cc] text-sm" />
+                                </span>
+                                <h2 className="text-sm sm:text-[15px] font-bold text-[#010a1f]">Today&apos;s Status</h2>
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/70 shadow-sm shrink-0 uppercase tracking-wider">
+                                {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+                            </span>
+                        </div>
+
+                        <div className="relative p-5 flex-1 flex flex-col">
+                            {shiftDetails && (
+                                <div className={`relative p-4 rounded-2xl border mb-5 overflow-hidden ${isFlexibleUI ? 'bg-gradient-to-br from-green-50 to-emerald-50/50 border-green-100' : 'bg-gradient-to-br from-blue-50 to-indigo-50/40 border-blue-100'}`}>
+                                    <div className="relative flex justify-between items-start mb-2.5 gap-2">
+                                        <h3 className="text-[13px] font-bold text-[#010a1f] truncate">{shiftDetails.shift_name}</h3>
+                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0 ${isFlexibleUI ? 'bg-green-200 text-green-800' : 'bg-blue-200 text-blue-800'}`}>
+                                            {shiftTypeStr}
+                                        </span>
+                                    </div>
+                                    {isFlexibleUI ? (
+                                        <p className="text-[11px] text-green-700 font-semibold flex items-center gap-1.5">
+                                            <FaFingerprint className="shrink-0 text-xs" /> Target: Complete {targetHours} Hrs
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            <p className="text-[11px] text-blue-800 font-bold flex items-center gap-1.5">
+                                                <FaBusinessTime className="shrink-0 text-xs" /> {format12Hour(shiftDetails.start_time)} — {format12Hour(shiftDetails.end_time)}
+                                            </p>
+                                            <p className="text-[10px] text-blue-600 font-medium flex items-center gap-1.5">
+                                                <FaWalking className="shrink-0 text-xs" /> Grace Time: {shiftDetails.grace_time || shiftDetails.grace_period || 15} Mins
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="relative flex-1 flex flex-col items-center justify-center py-6 min-h-[280px]">
+                                {isCurrentlyLate && (
+                                    <div className="absolute top-0 left-0 right-0 flex justify-center">
+                                        <span className="bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                                            <FaExclamationTriangle className="text-[9px]" /> Late by {currentLateMins} mins
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="relative mt-2 mb-5">
+                                    {isClockedIn && !isPendingOldCheckout && (
+                                        <div className="absolute inset-0 rounded-full" style={{ background: 'conic-gradient(from 0deg, #0437cc, #22c55e, #0437cc)', padding: '3px', animation: 'ringRotate 3s linear infinite' }}>
+                                            <div className="w-full h-full rounded-full bg-white"></div>
+                                        </div>
+                                    )}
+
+                                    <svg className="relative w-28 h-28 -rotate-90" viewBox="0 0 120 120">
+                                        <circle cx="60" cy="60" r="52" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                                        <circle
+                                            cx="60" cy="60" r="52" fill="none"
+                                            stroke={progressPercentage >= 100 ? '#22c55e' : '#0437cc'}
+                                            strokeWidth="6" strokeLinecap="round"
+                                            strokeDasharray={`${(progressPercentage / 100) * 326.73} 326.73`}
+                                            className="transition-all duration-1000"
+                                        />
+                                    </svg>
+
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 ${isClockedIn ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/40 live-glow' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-400'}`}>
+                                            <FaClock className={`text-3xl ${isClockedIn ? 'premium-clock-icon' : ''}`} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">Total Worked</p>
+
+                                {isClockedIn && !isPendingOldCheckout ? (
+                                    <Countdown
+                                        ref={countdownRef}
+                                        date={Date.now() + targetMs - completedMsToday - (new Date() - new Date(activeSession.clock_in))}
+                                        renderer={() => {
+                                            const totalSecsPassed = Math.floor((completedMsToday + (new Date() - new Date(activeSession.clock_in))) / 1000);
+                                            const h = Math.floor(totalSecsPassed / 3600);
+                                            const m = Math.floor((totalSecsPassed % 3600) / 60);
+                                            const s = Math.floor(totalSecsPassed % 60);
+                                            return (
+                                                <div className="relative digital-font">
+                                                    <h3 className="text-4xl sm:text-[40px] font-black tracking-tight bg-gradient-to-br from-[#0437cc] to-[#1f56d6] bg-clip-text text-transparent">
+                                                        {String(h).padStart(2, '0')}<span className="text-[#0437cc]/30 mx-0.5">:</span>
+                                                        {String(m).padStart(2, '0')}<span className="text-[#0437cc]/30 mx-0.5">:</span>
+                                                        {String(s).padStart(2, '0')}
+                                                    </h3>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] text-center mt-1">Hours · Minutes · Seconds</p>
+                                                </div>
+                                            );
+                                        }}
+                                        overtime={true}
+                                    />
+                                ) : (
+                                    <div className="relative digital-font">
+                                        <h3 className={`text-4xl sm:text-[40px] font-black tracking-tight ${hasWorkedToday ? 'bg-gradient-to-br from-[#010a1f] to-slate-600 bg-clip-text text-transparent' : 'text-slate-300'}`}>
+                                            {String(Math.floor(completedMsToday / 3600000)).padStart(2, '0')}<span className="text-slate-300 mx-0.5">:</span>
+                                            {String(Math.floor((completedMsToday % 3600000) / 60000)).padStart(2, '0')}<span className="text-slate-300 mx-0.5">:</span>
+                                            {String(Math.floor((completedMsToday % 60000) / 1000)).padStart(2, '0')}
+                                        </h3>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] text-center mt-1">Hours · Minutes · Seconds</p>
+                                    </div>
+                                )}
+
+                                <div className="w-full mt-6">
+                                    <div className="flex justify-between items-center mb-2 text-[10px] font-bold">
+                                        <span className="text-slate-400 uppercase tracking-wider">Progress</span>
+                                        <span className={progressPercentage >= 100 ? 'text-green-600' : 'text-[#0437cc]'}>{progressPercentage.toFixed(0)}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full transition-all duration-1000 rounded-full ${progressPercentage >= 100 ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-[#0437cc] to-[#1f56d6]'}`}
+                                            style={{ width: `${progressPercentage}%` }}
+                                        ></div>
+                                    </div>
+                                    <div className="flex justify-between items-center mt-2.5 text-[11px] font-bold">
+                                        <span className="text-green-600 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                            {rHrs}h {rMins}m Done
+                                        </span>
+                                        {remainingMinutes > 0 ? (
+                                            <span className="text-orange-500 flex items-center gap-1">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>
+                                                {remHrs}h {remMins}m Left
+                                            </span>
+                                        ) : (
+                                            <span className="text-green-600 flex items-center gap-1">
+                                                <FaCheck className="text-[9px]" /> Goal Reached
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                                    <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-bold border ${isClockedIn ? 'text-green-700 bg-green-50 border-green-200' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
+                                        {isClockedIn && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>}
+                                        {isClockedIn ? 'Currently Working' : (hasWorkedToday ? 'Shift Paused / Completed' : 'Not Checked In')}
+                                    </div>
+
+                                    {isLiveTracking && (
+                                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border text-[#0437cc] bg-blue-50 border-blue-200">
+                                            <FaMapMarkerAlt className="text-[9px] animate-bounce" />
+                                            Live GPS Active
+                                        </div>
+                                    )}
+
+                                    {isClockedIn && !isPendingOldCheckout && !isLiveTracking && (
+                                        <>
+                                            {(gpsDenied || gpsErrorMsg) && (
+                                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border text-amber-700 bg-amber-50 border-amber-200">
+                                                    <FaExclamationTriangle className="text-[9px]" />
+                                                    {gpsErrorMsg || 'GPS Permission Denied'}
+                                                </div>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={handleRetryGps}
+                                                disabled={isRetryingGps}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border border-[#0437cc]/30 text-[#0437cc] bg-white hover:bg-blue-50 transition-colors shadow-sm disabled:opacity-60"
+                                            >
+                                                <FaSyncAlt className={`text-[9px] ${isRetryingGps ? 'animate-spin' : ''}`} />
+                                                {isRetryingGps ? 'Retrying GPS...' : 'Retry GPS'}
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 mt-5">
+                                <div className="bg-gradient-to-br from-green-50 to-emerald-50/50 p-3.5 rounded-xl border border-green-100">
+                                    <p className="text-[10px] font-bold text-green-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                        <FaSignInAlt className="text-green-500 text-[10px]" /> Last In
+                                    </p>
+                                    <p className={`text-sm font-bold truncate ${latestRecord?.clock_in ? 'text-[#010a1f]' : 'text-slate-400'}`}>
+                                        {formatTime(latestRecord?.clock_in)}
+                                    </p>
+                                </div>
+                                <div className="bg-gradient-to-br from-red-50 to-orange-50/40 p-3.5 rounded-xl border border-red-100">
+                                    <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                        <FaSignOutAlt className="text-red-400 text-[10px]" /> Last Out
+                                    </p>
+                                    <p className={`text-sm font-bold truncate ${latestRecord?.clock_out ? 'text-[#010a1f]' : 'text-slate-400'}`}>
+                                        {formatTime(latestRecord?.clock_out)}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="lg:col-span-2">
+                    <div className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full">
+                        <div className="p-5 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 gap-3">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                                        {activeTab === 'monthly' ? <FaCalendarAlt className="text-[#0437cc] text-sm" />
+                                            : activeTab === 'timesheet' ? <FaTasks className="text-[#0437cc] text-sm" />
+                                                : activeTab === 'today' ? <FaCalendarDay className="text-[#0437cc] text-sm" />
+                                                    : <FaHistory className="text-[#0437cc] text-sm" />}
+                                    </span>
+                                    <h2 className="text-sm sm:text-[15px] font-bold text-[#010a1f] truncate">
+                                        {activeTab === 'monthly' ? 'Monthly Records' : activeTab === 'timesheet' ? 'Timesheet Logs' : activeTab === 'today' ? "Today's Logs" : 'History (Last 10 Days)'}
+                                    </h2>
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-1 truncate pl-10">
+                                    {activeTab === 'timesheet' ? 'Review your daily shift summaries and EOD updates.' : 'Click a row to view multiple sessions'}
+                                </p>
+                            </div>
+
+                            {activeTab === 'history' && (
+                                <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
+                                    <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 shadow-sm">
+                                        <FaFilter className="text-slate-400 text-[10px] shrink-0" />
+                                        <select
+                                            value={historyFilterMonth}
+                                            onChange={(e) => setHistoryFilterMonth(e.target.value)}
+                                            className="text-[11px] font-semibold text-[#010a1f] pl-2 pr-3 py-2 outline-none cursor-pointer bg-transparent"
+                                        >
+                                            <option value="All">All Months</option>
+                                            {monthOptions.map((opt, idx) => <option key={idx} value={opt}>{opt}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 shadow-sm">
+                                        <select
+                                            value={historyFilterStatus}
+                                            onChange={(e) => setHistoryFilterStatus(e.target.value)}
+                                            className="text-[11px] font-semibold text-[#010a1f] pl-1 pr-3 py-2 outline-none cursor-pointer bg-transparent"
+                                        >
+                                            <option value="All">All Statuses</option>
+                                            <option value="Present">Present</option>
+                                            <option value="Late">Late</option>
+                                            <option value="Absent">Absent</option>
+                                            <option value="Week Off">Week Off</option>
+                                            <option value="Holiday">Holiday</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'monthly' && (
+                                <select
+                                    value={selectedMonthYear}
+                                    onChange={(e) => setSelectedMonthYear(e.target.value)}
+                                    className="text-[11px] font-semibold text-[#010a1f] border border-slate-200 px-3 py-2 rounded-xl bg-white outline-none cursor-pointer shadow-sm"
+                                >
+                                    {monthOptions.map((opt, idx) => (
+                                        <option key={idx} value={opt}>{opt}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+
+                        <div className="overflow-x-auto flex-1 w-full custom-scrollbar">
+                            <table className="w-full text-left border-collapse min-w-[600px]">
+                                <thead>
+                                    <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
+                                        <th className="px-4 py-3.5 font-bold whitespace-nowrap">Date</th>
+                                        <th className="px-4 py-3.5 font-bold whitespace-nowrap">First In</th>
+                                        <th className="px-4 py-3.5 font-bold whitespace-nowrap">Last Out</th>
+                                        <th className="px-4 py-3.5 font-bold whitespace-nowrap">Total Hours</th>
+                                        <th className="px-4 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
+                                        <th className="px-4 py-3.5 font-bold text-right whitespace-nowrap">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {getDisplayedHistory().length === 0 ? (
+                                        <tr>
+                                            <td colSpan="6" className="px-4 py-12 text-center">
+                                                <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                                                    <FaCalendarDay className="text-xl text-slate-300" />
+                                                </div>
+                                                <p className="text-xs font-medium text-slate-400">No attendance records found for this view.</p>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        getDisplayedHistory().map((group, i) => (
+                                            <React.Fragment key={i}>
+                                                <tr
+                                                    className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
+                                                    onClick={() => toggleAccordion(group.dateStr)}
+                                                >
+                                                    <td className="px-4 py-3.5">
+                                                        <p className="text-xs font-bold text-[#010a1f] whitespace-nowrap">{formatDate(group.date)}</p>
+                                                        {group.holidayName && (
+                                                            <span className="text-[9px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-purple-100">
+                                                                {group.holidayName}
+                                                            </span>
+                                                        )}
+                                                        {group.sessions.length > 1 && (
+                                                            <span className="text-[9px] text-[#0437cc] font-bold bg-blue-50 px-2 py-0.5 rounded-md mt-1 inline-block border border-blue-100">
+                                                                {group.sessions.length} Sessions
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3.5">
+                                                        <p className="text-xs font-semibold flex flex-col text-slate-700 whitespace-nowrap">
+                                                            {formatTime(group.first_clock_in)}
+                                                            {group.late_minutes > 0 && (
+                                                                <span className="inline-flex items-center gap-1 text-[9px] text-red-600 font-bold mt-1 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 w-max">
+                                                                    <FaExclamationTriangle className="text-[7px]" /> Late {group.late_minutes}m
+                                                                </span>
+                                                            )}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-4 py-3.5">
+                                                        <p className={`text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${group.last_clock_out ? 'text-slate-700' : (group.is_working ? 'text-green-600' : 'text-slate-400')}`}>
+                                                            {group.is_working && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>}
+                                                            {group.is_working ? 'Working...' : formatTime(group.last_clock_out)}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-4 py-3.5">
+                                                        <p className={`text-xs font-bold whitespace-nowrap ${group.total_hours_sum || group.is_working ? 'text-[#0437cc]' : 'text-slate-400'}`}>
+                                                            {group.is_working ? (group.total_hours_sum ? `${group.total_hours_sum} (In Progress)` : 'In Progress') : (group.total_hours_sum || '—')}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-4 py-3.5 text-center">
+                                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap border ${getStatusStyle(group.status)}`}>
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(group.status)}`}></span>
+                                                            {group.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3.5 text-right">
+                                                        <button className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all ${expandedDates.includes(group.dateStr) ? 'bg-[#0437cc] text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                                            {expandedDates.includes(group.dateStr) ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+
+                                                {expandedDates.includes(group.dateStr) && (
+                                                    <tr>
+                                                        <td colSpan="6" className="bg-gradient-to-b from-[#f8fafc] to-white border-b border-slate-100 px-4 py-4">
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                {group.sessions.length > 0 ? (
+                                                                    group.sessions.map((session, idx) => (
+                                                                        <div key={idx} className="relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm mt-3">
+                                                                            <span className="absolute -top-2.5 left-3 bg-gradient-to-r from-[#0437cc] to-[#1f56d6] text-white px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider shadow-sm">
+                                                                                Session {idx + 1}
+                                                                            </span>
+                                                                            <div className="mt-2 grid grid-cols-2 gap-3">
+                                                                                <div className="min-w-0">
+                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">In</p>
+                                                                                    <p className="text-xs font-bold text-slate-700 truncate">{formatTime(session.clock_in)}</p>
+                                                                                    <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_in_location}>
+                                                                                        <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_in_location || 'No Location'}
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                        <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_in_device || 'No Device'}
+                                                                                    </p>
+                                                                                </div>
+                                                                                <div className="min-w-0 border-l border-slate-100 pl-3">
+                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Out</p>
+                                                                                    <p className="text-xs font-bold text-slate-700 truncate">
+                                                                                        {session.clock_out ? formatTime(session.clock_out) : <span className="text-green-600">Working</span>}
+                                                                                    </p>
+                                                                                    {session.clock_out && (
+                                                                                        <>
+                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1.5 flex items-center gap-1" title={session.clock_out_location}>
+                                                                                                <FaMapMarkerAlt className="shrink-0 text-[9px]" /> {session.clock_out_location || 'No Location'}
+                                                                                            </p>
+                                                                                            <p className="text-[10px] text-slate-500 truncate mt-1 flex items-center gap-1">
+                                                                                                <FaDesktop className="shrink-0 text-[9px]" /> {session.clock_out_device || 'No Device'}
+                                                                                            </p>
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                            {session.total_hours && (
+                                                                                <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-3">
+                                                                                    <div className="flex justify-between items-center">
+                                                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Duration</span>
+                                                                                        <span className="text-sm font-bold text-[#0437cc]">{session.total_hours}</span>
+                                                                                    </div>
+                                                                                    {session.clock_out && (
+                                                                                        <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl">
+                                                                                            <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200/60">
+                                                                                                <span className="text-[10px] font-bold text-[#010a1f] uppercase tracking-wider flex items-center gap-1.5">
+                                                                                                    <FaTasks className="text-[#0437cc] text-xs" /> End of Day Report
+                                                                                                </span>
+                                                                                                <button onClick={(e) => { e.stopPropagation(); openEditEodModal(session); }} className="text-[#0437cc] hover:text-blue-800 text-[10px] font-bold flex items-center gap-1">
+                                                                                                    <FaEdit /> Edit Report
+                                                                                                </button>
+                                                                                            </div>
+                                                                                            <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                                                                                {session.eod_update || <span className="text-slate-400 italic">No EOD report submitted.</span>}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div className="col-span-2 text-center py-6">
+                                                                        <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-2 border border-slate-100">
+                                                                            {group.status === 'Holiday' || group.status === 'Week Off' ? (
+                                                                                <FaUmbrellaBeach className="text-purple-400" />
+                                                                            ) : (
+                                                                                <FaTimes className="text-red-400" />
+                                                                            )}
+                                                                        </div>
+                                                                        <p className="text-xs font-semibold text-slate-400">No punches recorded for this day.</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default CoordinatorsAttendanceCom;

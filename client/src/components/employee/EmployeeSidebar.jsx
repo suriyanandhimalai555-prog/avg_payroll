@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
     FaTachometerAlt, FaUserEdit, FaCalendarCheck, FaPlaneDeparture,
     FaMoneyCheckAlt, FaFileInvoiceDollar, FaCogs, FaSignOutAlt,
-    FaTimes, FaLaptop, FaThLarge, FaHandshake
+    FaTimes, FaLaptop, FaThLarge, FaHandshake, FaCrown, FaUserTie
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 
@@ -111,6 +111,10 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
     const flyoutTimeoutRef = useRef(null);
     const flyoutTitleRef = useRef(null);
 
+    const hasCoordinatorHead = Boolean(user?.coordinator_head_name);
+    const hasCoordinator = Boolean(user?.coordinator_name);
+    const hasAnyCoordinator = hasCoordinatorHead || hasCoordinator;
+
     const menuItems = [
         { title: 'Dashboard', shortTitle: 'Home', icon: FaTachometerAlt, path: '/employee' },
         { title: 'My Profile', shortTitle: 'Profile', icon: FaUserEdit, path: '/employee/profile' },
@@ -123,21 +127,19 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
         { title: 'Settings', shortTitle: 'Settings', icon: FaCogs, path: '/employee/settings' }
     ];
 
-    // Primary 4 tabs shown directly in the mobile/tablet bottom app bar
     const primaryBottomTabs = [
-        menuItems[0], // Home
-        menuItems[2], // Attendance
-        menuItems[4], // Leave
-        menuItems[5], // Payroll
+        menuItems[0],
+        menuItems[2],
+        menuItems[4],
+        menuItems[5],
     ];
 
-    // Secondary items shown inside the "More" app sheet
     const moreSheetItems = [
-        menuItems[3], // Client Visits
-        menuItems[1], // My Profile
-        menuItems[6], // Assigned Assets
-        menuItems[7], // Reimbursements
-        menuItems[8], // Settings
+        menuItems[3],
+        menuItems[1],
+        menuItems[6],
+        menuItems[7],
+        menuItems[8],
     ];
 
     const isMoreTabActive = moreSheetItems.some((item) => location.pathname === item.path);
@@ -191,7 +193,6 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
                 .employee-nav-scroll { scrollbar-width: none !important; -ms-overflow-style: none !important; }
             `}</style>
 
-            {/* ==================== DESKTOP SIDEBAR (BIG SCREENS lg+) ==================== */}
             <aside
                 className={`hidden lg:flex relative z-40 bg-white border-r border-slate-200/80 flex-col transition-[width] duration-300 ease-in-out shrink-0 ${
                     isDesktopCollapsed ? 'w-[76px]' : 'w-72'
@@ -249,12 +250,49 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
                     </ul>
                 </nav>
 
+                {!isDesktopCollapsed && hasAnyCoordinator && (
+                    <div className="px-4 pb-3 pt-1 shrink-0">
+                        <div className="rounded-xl bg-slate-50/90 border border-slate-200/80 p-3 space-y-2">
+                            <p className="text-[9.5px] font-bold text-slate-400 uppercase tracking-[0.12em]">
+                                Reporting Hierarchy
+                            </p>
+                            {hasCoordinatorHead && (
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="w-6 h-6 rounded-lg bg-orange-50 text-[#f77704] border border-orange-200 flex items-center justify-center shrink-0">
+                                        <FaCrown className="text-[10px]" />
+                                    </span>
+                                    <div className="min-w-0 leading-tight">
+                                        <p className="text-[9.5px] font-semibold text-slate-400">Coordinator Head</p>
+                                        <p className="text-[11.5px] font-bold text-[#010a1f] truncate">
+                                            {user.coordinator_head_name}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                            {hasCoordinator && (
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="w-6 h-6 rounded-lg bg-blue-50 text-[#0437cc] border border-blue-200 flex items-center justify-center shrink-0">
+                                        <FaUserTie className="text-[10px]" />
+                                    </span>
+                                    <div className="min-w-0 leading-tight">
+                                        <p className="text-[9.5px] font-semibold text-slate-400">Coordinator</p>
+                                        <p className="text-[11.5px] font-bold text-[#010a1f] truncate">
+                                            {user.coordinator_name}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 <div
                     className={`border-t border-slate-100 shrink-0 bg-gradient-to-t from-slate-50/80 to-white transition-all duration-300 ${
                         isDesktopCollapsed ? 'p-3 flex justify-center' : 'p-4'
                     }`}
                 >
                     <button
+                        type="button"
                         onClick={handleLogout}
                         title={isDesktopCollapsed ? 'Logout' : ''}
                         className={`group flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-200 text-red-600 hover:bg-red-50 hover:border-red-200 active:scale-[0.98] transition-colors duration-200 shadow-sm hover:shadow-md ${
@@ -283,7 +321,6 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
                 />
             )}
 
-            {/* ==================== MOBILE & TABLET: NATIVE APP BOTTOM BAR (< lg) ==================== */}
             <nav
                 className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-8px_24px_rgba(1,10,31,0.06)] px-2 sm:px-6 pb-[env(safe-area-inset-bottom)]"
                 aria-label="Mobile Navigation"
@@ -321,7 +358,6 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
                         );
                     })}
 
-                    {/* "More" App Drawer Trigger */}
                     <button
                         type="button"
                         onClick={() => setIsMoreOpen((prev) => !prev)}
@@ -343,7 +379,6 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
                 </div>
             </nav>
 
-            {/* ==================== MOBILE & TABLET: "MORE" BOTTOM SHEET ==================== */}
             {isMoreOpen && (
                 <div
                     className="lg:hidden fixed inset-0 z-50 bg-[#010a1f]/50 backdrop-blur-sm flex items-end justify-center animate-in fade-in duration-200"
@@ -353,10 +388,8 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
                         className="w-full max-w-xl bg-white rounded-t-3xl shadow-2xl border-t border-slate-200 p-5 pb-7 space-y-5 animate-in slide-in-from-bottom-6 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Sheet Drag Handle */}
                         <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-1"></div>
 
-                        {/* Sheet Header */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 min-w-0">
                                 <img
@@ -383,7 +416,23 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
                             </button>
                         </div>
 
-                        {/* App Grid Icons */}
+                        {hasAnyCoordinator && (
+                            <div className="flex flex-wrap gap-2">
+                                {hasCoordinatorHead && (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-50 text-[#f77704] border border-orange-200">
+                                        <FaCrown className="text-[10px]" />
+                                        Head: {user.coordinator_head_name}
+                                    </span>
+                                )}
+                                {hasCoordinator && (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-50 text-[#0437cc] border border-blue-200">
+                                        <FaUserTie className="text-[10px]" />
+                                        Coord: {user.coordinator_name}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
                         <div className="grid grid-cols-3 gap-3">
                             {moreSheetItems.map((item) => {
                                 const Icon = item.icon;
@@ -419,7 +468,6 @@ const EmployeeSidebar = ({ isDesktopCollapsed }) => {
                             })}
                         </div>
 
-                        {/* Logout Button */}
                         <button
                             type="button"
                             onClick={handleLogout}

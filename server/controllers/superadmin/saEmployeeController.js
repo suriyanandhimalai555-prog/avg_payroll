@@ -7,7 +7,6 @@ dotenv.config();
 
 const parseNum = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(val) ? parseFloat(val) : 0);
 
-// Helper to reliably parse both string dates and raw Excel numeric date serials
 const parseExcelDate = (val) => {
     if (!val) return null;
 
@@ -20,7 +19,6 @@ const parseExcelDate = (val) => {
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
 };
 
-// Outlook-safe, table-based HTML email generator
 const generateWelcomeEmailHtml = (data, activationLink) => {
     return `
     <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -39,14 +37,10 @@ const generateWelcomeEmailHtml = (data, activationLink) => {
         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f7f6; padding: 40px 10px;">
             <tr>
                 <td align="center">
-                    <!-- Main Card -->
                     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0;">
-                        <!-- Top Border -->
                         <tr>
                             <td height="6" style="background-color: #0437cc; border-top-left-radius: 8px; border-top-right-radius: 8px;"></td>
                         </tr>
-                        
-                        <!-- Header Row -->
                         <tr>
                             <td style="padding: 20px 30px; border-bottom: 1px solid #e2e8f0;">
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
@@ -70,8 +64,6 @@ const generateWelcomeEmailHtml = (data, activationLink) => {
                                 </table>
                             </td>
                         </tr>
-
-                        <!-- Banner Section -->
                         <tr>
                             <td align="center" style="background-color: #0437cc; padding: 40px 20px;">
                                 <h1 style="color: #ffffff; font-size: 22px; font-weight: bold; margin: 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
@@ -82,8 +74,6 @@ const generateWelcomeEmailHtml = (data, activationLink) => {
                                 </p>
                             </td>
                         </tr>
-
-                        <!-- Main Content -->
                         <tr>
                             <td style="padding: 40px 30px;">
                                 <h2 style="color: #010a1f; font-size: 18px; font-weight: bold; margin: 0 0 15px 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
@@ -92,11 +82,8 @@ const generateWelcomeEmailHtml = (data, activationLink) => {
                                 <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                     We are thrilled to welcome you aboard. Your official employee profile has been successfully generated in our system. Here is a quick summary of your profile:
                                 </p>
-
-                                <!-- Details Grid (Table based for Outlook) -->
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 30px;">
                                     <tr>
-                                        <!-- Box 1 -->
                                         <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
                                             <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Employee ID</p>
                                             <p style="margin: 4px 0 0 0; color: #0437cc; font-size: 15px; font-weight: bold; font-family: 'Courier New', Courier, monospace;">
@@ -104,7 +91,6 @@ const generateWelcomeEmailHtml = (data, activationLink) => {
                                             </p>
                                         </td>
                                         <td width="4%"></td>
-                                        <!-- Box 2 -->
                                         <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
                                             <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Designation</p>
                                             <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
@@ -114,7 +100,6 @@ const generateWelcomeEmailHtml = (data, activationLink) => {
                                     </tr>
                                     <tr><td height="10" colspan="3"></td></tr>
                                     <tr>
-                                        <!-- Box 3 -->
                                         <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
                                             <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Department</p>
                                             <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
@@ -122,22 +107,18 @@ const generateWelcomeEmailHtml = (data, activationLink) => {
                                             </p>
                                         </td>
                                         <td width="4%"></td>
-                                        <!-- Box 4 -->
                                         <td width="48%" valign="top" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 6px;">
                                             <p style="margin: 0; color: #64748b; font-size: 10px; font-weight: bold; text-transform: uppercase; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">Location</p>
                                             <p style="margin: 4px 0 0 0; color: #010a1f; font-size: 14px; font-weight: bold; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
-                                                ${data.location || data.Location || data.branch || data.Branch} 
+                                                ${data.location || data.Location || data.branch || data.Branch}
                                                 <span style="color: #64748b; font-size: 11px; font-weight: normal;">(${data.branch || data.Branch})</span>
                                             </p>
                                         </td>
                                     </tr>
                                 </table>
-
                                 <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; text-align: center; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
                                     To get started and access your employee dashboard, please activate your account and set up a secure password.
                                 </p>
-
-                                <!-- Call to Action Button -->
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                     <tr>
                                         <td align="center">
@@ -147,11 +128,8 @@ const generateWelcomeEmailHtml = (data, activationLink) => {
                                         </td>
                                     </tr>
                                 </table>
-
                             </td>
                         </tr>
-
-                        <!-- Footer -->
                         <tr>
                             <td align="center" style="background-color: #f8fafc; padding: 20px; border-top: 1px solid #e2e8f0;">
                                 <p style="margin: 0 0 5px 0; color: #64748b; font-size: 12px; font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;">
@@ -176,21 +154,23 @@ export const createEmployee = async (req, res) => {
         const data = req.body;
 
         if (!data.email || !data.firstName || !data.lastName || !data.company || !data.branch || !data.department || !data.uanNo || !data.employeeId) {
-            return res.status(400).json({ message: "Missing required employee details including Employee ID and UAN NO. Please complete all mandatory fields." });
+            return res.status(400).json({ message: 'Missing required employee details including Employee ID and UAN NO. Please complete all mandatory fields.' });
         }
 
         const insertQuery = `
             INSERT INTO sa_employees (
                 first_name, last_name, email, phone, dob, gender, address,
                 employee_id, joining_date, company, branch, department, designation, manager, emp_type, location, shift, status,
-                ctc, monthly_salary, basic_salary, hra, conveyance, medical, special_allowance, other_allowances, allowances, 
+                ctc, monthly_salary, basic_salary, hra, conveyance, medical, special_allowance, other_allowances, allowances,
                 epf, pf, esi, health_insurance, pt, tds, leaves, other_deductions,
-                uan_no, bank_name, account_holder, account_number, ifsc, permissions
+                uan_no, bank_name, account_holder, account_number, ifsc, permissions,
+                coordinator_head_id, coordinator_head_name, coordinator_id, coordinator_name
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
                 $19, $20, $21, $22, $23, $24, $25, $26, 0,
                 $27, 0, $28, $29, $30, $31, $32, 0,
-                $33, $34, $35, $36, $37, $38
+                $33, $34, $35, $36, $37, $38,
+                $39, $40, $41, $42
             ) RETURNING *;
         `;
 
@@ -232,7 +212,11 @@ export const createEmployee = async (req, res) => {
             data.accountHolder || data.account_holder || '',
             data.accountNumber || data.account_number || '',
             data.ifsc || '',
-            JSON.stringify(data.permissions || {})
+            JSON.stringify(data.permissions || {}),
+            data.coordinatorHeadId ? Number(data.coordinatorHeadId) : null,
+            data.coordinatorHeadName?.trim() || null,
+            data.coordinatorId ? Number(data.coordinatorId) : null,
+            data.coordinatorName?.trim() || null
         ];
 
         const result = await pool.query(insertQuery, values);
@@ -260,7 +244,6 @@ export const createEmployee = async (req, res) => {
             });
 
             res.status(201).json({ message: 'Employee created and email sent successfully via Microsoft Graph.', employee: newEmployee });
-
         } catch (emailError) {
             console.error('Microsoft Graph Email Error:', emailError.message);
             res.status(201).json({
@@ -268,7 +251,6 @@ export const createEmployee = async (req, res) => {
                 employee: newEmployee
             });
         }
-
     } catch (error) {
         console.error('Creation Error:', error);
         if (error.code === '23505') {
@@ -293,15 +275,15 @@ export const updateEmployee = async (req, res) => {
         if (data.employeeId && data.employeeId !== existing.employee_id) {
             try {
                 await pool.query(`
-                    DO $$ 
-                    BEGIN 
+                    DO $$
+                    BEGIN
                         IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'emp_attendance') THEN
                             ALTER TABLE emp_attendance DROP CONSTRAINT IF EXISTS emp_attendance_employee_id_fkey;
-                            ALTER TABLE emp_attendance 
-                                ADD CONSTRAINT emp_attendance_employee_id_fkey 
-                                FOREIGN KEY (employee_id) 
-                                REFERENCES sa_employees(employee_id) 
-                                ON UPDATE CASCADE 
+                            ALTER TABLE emp_attendance
+                                ADD CONSTRAINT emp_attendance_employee_id_fkey
+                                FOREIGN KEY (employee_id)
+                                REFERENCES sa_employees(employee_id)
+                                ON UPDATE CASCADE
                                 ON DELETE CASCADE;
                         END IF;
                     END $$;
@@ -311,15 +293,32 @@ export const updateEmployee = async (req, res) => {
             }
         }
 
+        const nextCoordHeadId = Object.prototype.hasOwnProperty.call(data, 'coordinatorHeadId')
+            ? (data.coordinatorHeadId ? Number(data.coordinatorHeadId) : null)
+            : existing.coordinator_head_id;
+
+        const nextCoordHeadName = Object.prototype.hasOwnProperty.call(data, 'coordinatorHeadName')
+            ? (data.coordinatorHeadName?.trim() || null)
+            : existing.coordinator_head_name;
+
+        const nextCoordId = Object.prototype.hasOwnProperty.call(data, 'coordinatorId')
+            ? (data.coordinatorId ? Number(data.coordinatorId) : null)
+            : existing.coordinator_id;
+
+        const nextCoordName = Object.prototype.hasOwnProperty.call(data, 'coordinatorName')
+            ? (data.coordinatorName?.trim() || null)
+            : existing.coordinator_name;
+
         const updateQuery = `
             UPDATE sa_employees SET
                 first_name = $1, last_name = $2, email = $3, phone = $4, dob = $5, gender = $6, address = $7,
-                joining_date = $8, company = $9, branch = $10, department = $11, designation = $12, manager = $13, emp_type = $14, 
-                location = $15, shift = $16, status = $17, 
+                joining_date = $8, company = $9, branch = $10, department = $11, designation = $12, manager = $13, emp_type = $14,
+                location = $15, shift = $16, status = $17,
                 ctc = $18, monthly_salary = $19, basic_salary = $20, hra = $21, conveyance = $22, medical = $23, special_allowance = $24, other_allowances = $25, allowances = 0,
-                epf = $26, pf = 0, esi = $27, health_insurance = $28, pt = $29, tds = $30, leaves = $31, other_deductions = 0, 
-                uan_no = $32, bank_name = $33, account_holder = $34, account_number = $35, ifsc = $36, permissions = $37, employee_id = $38
-            WHERE id = $39 RETURNING *;
+                epf = $26, pf = 0, esi = $27, health_insurance = $28, pt = $29, tds = $30, leaves = $31, other_deductions = 0,
+                uan_no = $32, bank_name = $33, account_holder = $34, account_number = $35, ifsc = $36, permissions = $37, employee_id = $38,
+                coordinator_head_id = $39, coordinator_head_name = $40, coordinator_id = $41, coordinator_name = $42
+            WHERE id = $43 RETURNING *;
         `;
 
         const values = [
@@ -361,6 +360,10 @@ export const updateEmployee = async (req, res) => {
             data.ifsc ?? existing.ifsc ?? '',
             JSON.stringify(data.permissions ?? existing.permissions ?? {}),
             data.employeeId ?? existing.employee_id,
+            nextCoordHeadId,
+            nextCoordHeadName,
+            nextCoordId,
+            nextCoordName,
             id
         ];
 
@@ -422,7 +425,7 @@ export const bulkUploadEmployees = async (req, res) => {
     try {
         const { employees } = req.body;
         if (!Array.isArray(employees) || employees.length === 0) {
-            return res.status(400).json({ message: "No valid employee data found in the uploaded file." });
+            return res.status(400).json({ message: 'No valid employee data found in the uploaded file.' });
         }
 
         let successCount = 0;
@@ -448,7 +451,7 @@ export const bulkUploadEmployees = async (req, res) => {
                     INSERT INTO sa_employees (
                         first_name, last_name, email, phone, dob, gender, address,
                         employee_id, joining_date, company, branch, department, designation, manager, emp_type, location, shift, status,
-                        ctc, monthly_salary, basic_salary, hra, conveyance, medical, special_allowance, other_allowances, allowances, 
+                        ctc, monthly_salary, basic_salary, hra, conveyance, medical, special_allowance, other_allowances, allowances,
                         epf, pf, esi, health_insurance, pt, tds, leaves, other_deductions,
                         uan_no, bank_name, account_holder, account_number, ifsc, permissions
                     ) VALUES (
@@ -518,7 +521,6 @@ export const bulkUploadEmployees = async (req, res) => {
                         errorList.push(`Row ${index + 2}: Inserted successfully but failed to send activation email.`);
                     }
                 }
-
             } catch (err) {
                 if (err.code === '23505') {
                     errorList.push(`Row ${index + 2}: Duplicate Email or Employee ID.`);

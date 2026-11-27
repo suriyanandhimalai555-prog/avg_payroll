@@ -19,12 +19,14 @@ const initializeSAEmployeeModel = async () => {
             department VARCHAR(100) NOT NULL,
             designation VARCHAR(100) NOT NULL,
             manager VARCHAR(100) DEFAULT 'Unassigned',
+            coordinator_head_id INTEGER,
+            coordinator_head_name VARCHAR(200),
+            coordinator_id INTEGER,
+            coordinator_name VARCHAR(200),
             emp_type VARCHAR(50) DEFAULT 'Full-Time',
             location VARCHAR(100) DEFAULT 'Head Office',
             shift VARCHAR(50) DEFAULT 'General Shift',
             status VARCHAR(50) DEFAULT 'Pending Activation',
-            
-            -- Salary Breakdown Columns
             ctc NUMERIC NOT NULL DEFAULT 0,
             monthly_salary NUMERIC NOT NULL DEFAULT 0,
             basic_salary NUMERIC NOT NULL DEFAULT 0,
@@ -34,7 +36,6 @@ const initializeSAEmployeeModel = async () => {
             esi NUMERIC DEFAULT 0,
             pt NUMERIC DEFAULT 0,
             other_deductions NUMERIC DEFAULT 0,
-            
             conveyance NUMERIC NOT NULL DEFAULT 0,
             medical NUMERIC NOT NULL DEFAULT 0,
             special_allowance NUMERIC DEFAULT 0,
@@ -43,9 +44,7 @@ const initializeSAEmployeeModel = async () => {
             health_insurance NUMERIC DEFAULT 0,
             tds NUMERIC DEFAULT 0,
             leaves NUMERIC DEFAULT 0,
-            
             uan_no VARCHAR(100) NOT NULL,
-            
             bank_name VARCHAR(150) NOT NULL,
             account_holder VARCHAR(150) NOT NULL,
             account_number VARCHAR(100) NOT NULL,
@@ -61,7 +60,6 @@ const initializeSAEmployeeModel = async () => {
     `;
 
     const alterQueries = `
-        -- Drop strict NOT NULL constraints from legacy/optional columns to prevent 500 errors
         ALTER TABLE sa_employees ALTER COLUMN allowances DROP NOT NULL;
         ALTER TABLE sa_employees ALTER COLUMN pf DROP NOT NULL;
         ALTER TABLE sa_employees ALTER COLUMN esi DROP NOT NULL;
@@ -71,7 +69,7 @@ const initializeSAEmployeeModel = async () => {
         ALTER TABLE sa_employees ALTER COLUMN emp_type DROP NOT NULL;
         ALTER TABLE sa_employees ALTER COLUMN location DROP NOT NULL;
         ALTER TABLE sa_employees ALTER COLUMN shift DROP NOT NULL;
-        
+
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS blood_group VARCHAR(20);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_name VARCHAR(150);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS emergency_relationship VARCHAR(100);
@@ -80,12 +78,17 @@ const initializeSAEmployeeModel = async () => {
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS company VARCHAR(255);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS branch VARCHAR(255);
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS permissions JSONB;
-        
+
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS coordinator_head_id INTEGER;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS coordinator_head_name VARCHAR(200);
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS coordinator_id INTEGER;
+        ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS coordinator_name VARCHAR(200);
+
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS ctc NUMERIC NOT NULL DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC NOT NULL DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS special_allowance NUMERIC DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS uan_no VARCHAR(100) NOT NULL DEFAULT 'PENDING';
-        
+
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS conveyance NUMERIC NOT NULL DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS medical NUMERIC NOT NULL DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS other_allowances NUMERIC NOT NULL DEFAULT 0;
@@ -93,23 +96,22 @@ const initializeSAEmployeeModel = async () => {
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS health_insurance NUMERIC DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS tds NUMERIC DEFAULT 0;
         ALTER TABLE sa_employees ADD COLUMN IF NOT EXISTS leaves NUMERIC DEFAULT 0;
+
+        CREATE INDEX IF NOT EXISTS idx_sa_employees_coordinators
+        ON sa_employees(coordinator_head_id, coordinator_id);
     `;
 
-    // ============================================================================
-    // CASCADING FOREIGN KEY PATCH
-    // Dynamically upgrades the emp_attendance table to cascade ID updates & deletes
-    // ============================================================================
     const patchFKQuery = `
-        DO $$ 
-        BEGIN 
+        DO $$
+        BEGIN
             IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'emp_attendance') THEN
                 ALTER TABLE emp_attendance DROP CONSTRAINT IF EXISTS emp_attendance_employee_id_fkey;
-                
-                ALTER TABLE emp_attendance 
-                    ADD CONSTRAINT emp_attendance_employee_id_fkey 
-                    FOREIGN KEY (employee_id) 
-                    REFERENCES sa_employees(employee_id) 
-                    ON UPDATE CASCADE 
+
+                ALTER TABLE emp_attendance
+                    ADD CONSTRAINT emp_attendance_employee_id_fkey
+                    FOREIGN KEY (employee_id)
+                    REFERENCES sa_employees(employee_id)
+                    ON UPDATE CASCADE
                     ON DELETE CASCADE;
             END IF;
         END $$;

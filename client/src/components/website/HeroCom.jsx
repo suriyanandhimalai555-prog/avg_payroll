@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaUserShield, FaUserTie, FaUsers, FaUser, FaArrowRight } from 'react-icons/fa';
+import { FaUserShield, FaUserTie, FaUsers, FaUser, FaShieldAlt, FaArrowRight } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 
 const HeroCom = () => {
@@ -12,6 +12,7 @@ const HeroCom = () => {
             if (role === 'superadmin') return navigate('/superadmin');
             if (role === 'manager') return navigate('/manager');
             if (role === 'hr') return navigate('/hr');
+            if (role === 'coordinator') return navigate('/coordinator');
             if (role === 'employee') return navigate('/employee');
         }
 
@@ -43,6 +44,13 @@ const HeroCom = () => {
             tagline: 'People operations',
             icon: FaUsers,
             onClick: () => handleRoleNavigation('hr'),
+        },
+        {
+            id: 'coordinator',
+            label: 'Coordinator Login',
+            tagline: 'Field & team coordination',
+            icon: FaShieldAlt,
+            onClick: () => handleRoleNavigation('coordinator'),
         },
         {
             id: 'employee',
@@ -113,16 +121,18 @@ const HeroCom = () => {
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 w-full max-w-3xl animate-in fade-in slide-in-from-bottom-5 duration-700">
-
-                    {roleCards.map((role) => {
+                    {roleCards.map((role, index) => {
                         const Icon = role.icon;
+                        const isLastOdd = roleCards.length % 2 === 1 && index === roleCards.length - 1;
 
                         return (
                             <button
                                 key={role.id}
                                 type="button"
                                 onClick={role.onClick}
-                                className="group relative flex items-center gap-4 w-full text-left bg-white border border-slate-200 rounded-2xl px-5 py-4 sm:px-6 sm:py-5 transition-all duration-300 hover:border-[#0437cc]/40 hover:shadow-[0_12px_30px_-10px_rgba(4,55,204,0.25)] hover:-translate-y-1 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0437cc]/40 focus-visible:ring-offset-2 overflow-hidden"
+                                className={`group relative flex items-center gap-4 w-full text-left bg-white border border-slate-200 rounded-2xl px-5 py-4 sm:px-6 sm:py-5 transition-all duration-300 hover:border-[#0437cc]/40 hover:shadow-[0_12px_30px_-10px_rgba(4,55,204,0.25)] hover:-translate-y-1 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0437cc]/40 focus-visible:ring-offset-2 overflow-hidden ${
+                                    isLastOdd ? 'sm:col-span-2 sm:max-w-[calc(50%-0.625rem)] sm:mx-auto' : ''
+                                }`}
                             >
                                 <span className="absolute inset-0 bg-gradient-to-br from-[#0437cc]/[0.03] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></span>
 
@@ -145,7 +155,6 @@ const HeroCom = () => {
                             </button>
                         );
                     })}
-
                 </div>
 
                 <div className="flex items-center justify-center gap-3 mt-10 sm:mt-14 animate-in fade-in duration-1000">

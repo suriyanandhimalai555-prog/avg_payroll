@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import {
-    FaUserPlus, FaUser, FaBriefcase, FaMoneyCheckAlt, FaInfoCircle,
+    FaUserPlus, FaUser, FaMoneyCheckAlt, FaInfoCircle,
     FaUniversity, FaTimes, FaCheck, FaEnvelope, FaPhoneAlt,
     FaSearch, FaEye, FaEdit, FaUserEdit, FaTrash, FaPlusCircle, FaMinusCircle,
     FaUpload, FaFileExcel, FaDownload, FaCloudUploadAlt, FaExclamationCircle,
     FaBuilding, FaChevronDown, FaChevronUp, FaExclamationTriangle,
-    FaCodeBranch, FaFilter, FaUsers, FaNetworkWired, FaClock, FaIdBadge
+    FaCodeBranch, FaFilter, FaUsers, FaNetworkWired, FaClock, FaIdBadge,
+    FaCrown, FaUserTie, FaShieldAlt
 } from 'react-icons/fa';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -23,6 +24,52 @@ const FieldWrapper = ({ error, children }) => (
             </span>
         )}
     </div>
+);
+
+const ToggleSwitch = ({ enabled, onToggle, label, sublabel, icon: Icon, accent = 'blue', disabled = false }) => (
+    <button
+        type="button"
+        disabled={disabled}
+        onClick={onToggle}
+        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-left transition-all w-full ${disabled
+                ? 'bg-slate-50 border-slate-200 opacity-55 cursor-not-allowed'
+                : enabled
+                    ? accent === 'orange'
+                        ? 'bg-orange-50/70 border-orange-200 shadow-xs'
+                        : 'bg-blue-50/70 border-blue-200 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+            }`}
+    >
+        <div className="flex items-center gap-2.5 min-w-0">
+            <span
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${enabled
+                        ? accent === 'orange'
+                            ? 'bg-gradient-to-br from-[#f77704] to-orange-500 text-white'
+                            : 'bg-gradient-to-br from-[#0437cc] to-[#1f56d6] text-white'
+                        : 'bg-slate-100 text-slate-400'
+                    }`}
+            >
+                <Icon className="text-xs" />
+            </span>
+            <div className="min-w-0">
+                <p className="text-xs font-bold text-[#010a1f] truncate">{label}</p>
+                <p className="text-[10px] text-slate-500 truncate">{sublabel}</p>
+            </div>
+        </div>
+        <span
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${enabled
+                    ? accent === 'orange'
+                        ? 'bg-[#f77704]'
+                        : 'bg-[#0437cc]'
+                    : 'bg-slate-300'
+                }`}
+        >
+            <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-4.5' : 'translate-x-0.5'
+                    }`}
+            />
+        </span>
+    </button>
 );
 
 const getCleanToken = () => {
@@ -91,6 +138,7 @@ const SuperAdminEmployeeCom = () => {
         firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '', address: '',
         employeeId: '', joiningDate: '',
         company: '', branch: '', department: '', designation: '', manager: '', empType: '', location: '', shift: '', status: 'Pending Activation',
+        coordinatorHeadId: '', coordinatorHeadName: '', coordinatorId: '', coordinatorName: '',
         ctc: '', monthlySalary: '', basic: '', hra: '', conveyance: '', medical: '', specialAllowance: '', otherAllowances: '',
         epf: '', esi: '', healthInsurance: '', pt: '', tds: '', leaves: '',
         uanNo: '', bankName: '', accountHolder: '', accountNumber: '', ifsc: ''
@@ -99,6 +147,11 @@ const SuperAdminEmployeeCom = () => {
     const [formData, setFormData] = useState(INITIAL_FORM_STATE);
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const [assignCoordinatorHead, setAssignCoordinatorHead] = useState(false);
+    const [assignCoordinator, setAssignCoordinator] = useState(false);
+    const [coordinatorsList, setCoordinatorsList] = useState([]);
+    const [isLoadingCoordinators, setIsLoadingCoordinators] = useState(false);
 
     const [companies, setCompanies] = useState([]);
     const [branches, setBranches] = useState([]);
@@ -176,6 +229,19 @@ const SuperAdminEmployeeCom = () => {
         });
     };
 
+    const fetchCoordinatorsData = async () => {
+        setIsLoadingCoordinators(true);
+        try {
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sa-coordinators`, getAuthConfig());
+            setCoordinatorsList(Array.isArray(res.data) ? res.data : []);
+        } catch (error) {
+            console.error('Error fetching coordinators:', error);
+            setCoordinatorsList([]);
+        } finally {
+            setIsLoadingCoordinators(false);
+        }
+    };
+
     const fetchOrgData = async () => {
         try {
             const [compRes, branchRes, deptRes, desigRes, locRes, shiftRes] = await Promise.all([
@@ -227,16 +293,124 @@ const SuperAdminEmployeeCom = () => {
     const filteredDesignations = designations.filter(des => des.department_name === formData.department);
     const availableShifts = shifts.filter(s => s.status === 'Active' && s.company_name === formData.company);
 
+    const selectedCompanyObj = useMemo(
+        () => companies.find(c => c.company_name === formData.company) || null,
+        [companies, formData.company]
+    );
+
+    const selectedBranchObj = useMemo(
+        () => branches.find(b => b.branch_name === formData.branch && (!formData.company || b.company_name === formData.company)) || null,
+        [branches, formData.branch, formData.company]
+    );
+
+    const availableCoordinatorHeads = useMemo(() => {
+        return coordinatorsList.filter(c => {
+            if (c.coordinator_level !== 'Coordinator Head') return false;
+            if (formData.company) {
+                const matchByName = c.company_name?.trim().toLowerCase() === formData.company.trim().toLowerCase();
+                const matchById = selectedCompanyObj && String(c.company_id) === String(selectedCompanyObj.id);
+                if (!matchByName && !matchById) return false;
+            }
+            if (formData.branch) {
+                const matchByName = c.branch_name?.trim().toLowerCase() === formData.branch.trim().toLowerCase();
+                const matchById = selectedBranchObj && String(c.branch_id) === String(selectedBranchObj.id);
+                if (!matchByName && !matchById) return false;
+            }
+            return true;
+        });
+    }, [coordinatorsList, formData.company, formData.branch, selectedCompanyObj, selectedBranchObj]);
+
+    const availableCoordinators = useMemo(() => {
+        return coordinatorsList.filter(c => {
+            if ((c.coordinator_level || 'Coordinator') !== 'Coordinator') return false;
+            if (assignCoordinatorHead && formData.coordinatorHeadId) {
+                return String(c.coordinator_head_id) === String(formData.coordinatorHeadId);
+            }
+            if (formData.company) {
+                const matchByName = c.company_name?.trim().toLowerCase() === formData.company.trim().toLowerCase();
+                const matchById = selectedCompanyObj && String(c.company_id) === String(selectedCompanyObj.id);
+                if (!matchByName && !matchById) return false;
+            }
+            if (formData.branch) {
+                const matchByName = c.branch_name?.trim().toLowerCase() === formData.branch.trim().toLowerCase();
+                const matchById = selectedBranchObj && String(c.branch_id) === String(selectedBranchObj.id);
+                if (!matchByName && !matchById) return false;
+            }
+            return true;
+        });
+    }, [coordinatorsList, assignCoordinatorHead, formData.coordinatorHeadId, formData.company, formData.branch, selectedCompanyObj, selectedBranchObj]);
+
+    const handleToggleCoordinatorHead = async () => {
+        const nextState = !assignCoordinatorHead;
+        setAssignCoordinatorHead(nextState);
+
+        if (nextState) {
+            if (coordinatorsList.length === 0) {
+                await fetchCoordinatorsData();
+            }
+        } else {
+            setAssignCoordinator(false);
+            setFormData(prev => ({
+                ...prev,
+                coordinatorHeadId: '',
+                coordinatorHeadName: '',
+                coordinatorId: '',
+                coordinatorName: ''
+            }));
+            setErrors(prev => ({ ...prev, coordinatorHeadId: '', coordinatorId: '' }));
+        }
+    };
+
+    const handleToggleCoordinator = async () => {
+        const nextState = !assignCoordinator;
+        setAssignCoordinator(nextState);
+
+        if (nextState) {
+            if (coordinatorsList.length === 0) {
+                await fetchCoordinatorsData();
+            }
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                coordinatorId: '',
+                coordinatorName: ''
+            }));
+            setErrors(prev => ({ ...prev, coordinatorId: '' }));
+        }
+    };
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         let updates = { [name]: value };
 
         if (name === 'company') {
-            updates.branch = ''; updates.department = ''; updates.location = ''; updates.designation = ''; updates.shift = '';
+            updates.branch = '';
+            updates.department = '';
+            updates.location = '';
+            updates.designation = '';
+            updates.shift = '';
+            updates.coordinatorHeadId = '';
+            updates.coordinatorHeadName = '';
+            updates.coordinatorId = '';
+            updates.coordinatorName = '';
         } else if (name === 'branch') {
-            updates.department = ''; updates.location = ''; updates.designation = '';
+            updates.department = '';
+            updates.location = '';
+            updates.designation = '';
+            updates.coordinatorHeadId = '';
+            updates.coordinatorHeadName = '';
+            updates.coordinatorId = '';
+            updates.coordinatorName = '';
         } else if (name === 'department') {
             updates.designation = '';
+        } else if (name === 'coordinatorHeadId') {
+            const headObj = coordinatorsList.find(c => String(c.id) === String(value));
+            updates.coordinatorHeadName = headObj ? `${headObj.first_name} ${headObj.last_name}`.trim() : '';
+            updates.coordinatorId = '';
+            updates.coordinatorName = '';
+        } else if (name === 'coordinatorId') {
+            const coordObj = coordinatorsList.find(c => String(c.id) === String(value));
+            updates.coordinatorName = coordObj ? `${coordObj.first_name} ${coordObj.last_name}`.trim() : '';
         }
 
         setFormData(prev => ({ ...prev, ...updates }));
@@ -262,6 +436,14 @@ const SuperAdminEmployeeCom = () => {
             }
         });
 
+        if (assignCoordinatorHead && !formData.coordinatorHeadId) {
+            newErrors.coordinatorHeadId = 'Coordinator Head is required';
+        }
+
+        if (assignCoordinator && !formData.coordinatorId) {
+            newErrors.coordinatorId = 'Coordinator is required';
+        }
+
         if (parseNum(formData.monthlySalary) > 0 && !isGrossMatchingMonthly) {
             newErrors.monthlySalary = 'Sum of Earnings must equal Monthly Salary';
         }
@@ -277,11 +459,17 @@ const SuperAdminEmployeeCom = () => {
         return Object.keys(newErrors).length === 0;
     };
 
+    const resetFormState = () => {
+        setFormData(INITIAL_FORM_STATE);
+        setAssignCoordinatorHead(false);
+        setAssignCoordinator(false);
+        setErrors({});
+    };
+
     const cancelEdit = () => {
         setIsEditing(false);
         setEditEmployeeId(null);
-        setFormData(INITIAL_FORM_STATE);
-        setErrors({});
+        resetFormState();
     };
 
     const handleSubmit = async (e) => {
@@ -294,7 +482,13 @@ const SuperAdminEmployeeCom = () => {
 
         setIsSubmitting(true);
         try {
-            const payload = { ...formData };
+            const payload = {
+                ...formData,
+                coordinatorHeadId: assignCoordinatorHead ? (formData.coordinatorHeadId || null) : null,
+                coordinatorHeadName: assignCoordinatorHead ? (formData.coordinatorHeadName || null) : null,
+                coordinatorId: assignCoordinator ? (formData.coordinatorId || null) : null,
+                coordinatorName: assignCoordinator ? (formData.coordinatorName || null) : null
+            };
 
             if (isEditing) {
                 await axios.put(`${import.meta.env.VITE_API_URL}/api/sa-employees/${editEmployeeId}`, payload, getAuthConfig());
@@ -304,7 +498,7 @@ const SuperAdminEmployeeCom = () => {
                 const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/sa-employees/create`, payload, getAuthConfig());
                 if (response.status === 201 || response.status === 200) {
                     setSuccessMsg(`Employee created successfully with ID: ${response.data.employee?.employee_id}.`);
-                    setFormData(INITIAL_FORM_STATE);
+                    resetFormState();
                 }
             }
             fetchEmployees();
@@ -317,7 +511,17 @@ const SuperAdminEmployeeCom = () => {
         }
     };
 
-    const handleEdit = (emp) => {
+    const handleEdit = async (emp) => {
+        const hasHead = Boolean(emp.coordinator_head_id);
+        const hasCoord = Boolean(emp.coordinator_id);
+
+        if ((hasHead || hasCoord) && coordinatorsList.length === 0) {
+            await fetchCoordinatorsData();
+        }
+
+        setAssignCoordinatorHead(hasHead);
+        setAssignCoordinator(hasCoord);
+
         setFormData({
             firstName: emp.first_name, lastName: emp.last_name, email: emp.email, phone: emp.phone,
             dob: emp.dob ? new Date(emp.dob).toISOString().split('T')[0] : '',
@@ -326,6 +530,10 @@ const SuperAdminEmployeeCom = () => {
             joiningDate: emp.joining_date ? new Date(emp.joining_date).toISOString().split('T')[0] : '',
             company: emp.company, branch: emp.branch, department: emp.department, designation: emp.designation,
             manager: emp.manager || '', empType: emp.emp_type, location: emp.location, shift: emp.shift, status: emp.status,
+            coordinatorHeadId: emp.coordinator_head_id || '',
+            coordinatorHeadName: emp.coordinator_head_name || '',
+            coordinatorId: emp.coordinator_id || '',
+            coordinatorName: emp.coordinator_name || '',
             ctc: emp.ctc, monthlySalary: emp.monthly_salary, basic: emp.basic_salary, hra: emp.hra, conveyance: emp.conveyance || 0, medical: emp.medical || 0, specialAllowance: emp.special_allowance || 0, otherAllowances: emp.other_allowances || 0,
             epf: emp.epf || 0, esi: emp.esi || 0, healthInsurance: emp.health_insurance || 0, pt: emp.pt || 0, tds: emp.tds || 0, leaves: emp.leaves || 0,
             uanNo: emp.uan_no || '', bankName: emp.bank_name, accountHolder: emp.account_holder,
@@ -479,7 +687,7 @@ const SuperAdminEmployeeCom = () => {
     const filteredEmployees = useMemo(() => {
         const q = searchTerm.toLowerCase();
         return employees.filter(emp => {
-            const searchStr = `${emp.first_name} ${emp.last_name} ${emp.employee_id} ${emp.company} ${emp.branch} ${emp.department} ${emp.designation}`.toLowerCase();
+            const searchStr = `${emp.first_name} ${emp.last_name} ${emp.employee_id} ${emp.company} ${emp.branch} ${emp.department} ${emp.designation} ${emp.coordinator_head_name || ''} ${emp.coordinator_name || ''}`.toLowerCase();
             const matchesSearch = searchStr.includes(q);
             const matchesStatus = statusFilter === 'All' || emp.status === statusFilter;
             return matchesSearch && matchesStatus;
@@ -782,6 +990,27 @@ const SuperAdminEmployeeCom = () => {
                                 </div>
                             </div>
 
+                            {(viewEmployee.coordinator_head_name || viewEmployee.coordinator_name) && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="bg-orange-50/60 border border-orange-100 rounded-xl p-3.5">
+                                        <p className="text-[10px] font-bold text-[#f77704] uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                                            <FaCrown className="text-[10px]" /> Coordinator Head
+                                        </p>
+                                        <p className="text-xs font-bold text-[#010a1f] truncate">
+                                            {viewEmployee.coordinator_head_name || 'Not Assigned'}
+                                        </p>
+                                    </div>
+                                    <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3.5">
+                                        <p className="text-[10px] font-bold text-[#0437cc] uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                                            <FaUserTie className="text-[10px]" /> Coordinator
+                                        </p>
+                                        <p className="text-xs font-bold text-[#010a1f] truncate">
+                                            {viewEmployee.coordinator_name || 'Not Assigned'}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="bg-green-50/50 border border-green-100 rounded-2xl p-4 space-y-2">
                                     <p className="text-[11px] font-bold text-green-800 uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-green-100">
@@ -854,7 +1083,7 @@ const SuperAdminEmployeeCom = () => {
                         <Button
                             variant="ghost"
                             icon={FaTimes}
-                            onClick={isEditing ? cancelEdit : () => setFormData(INITIAL_FORM_STATE)}
+                            onClick={isEditing ? cancelEdit : resetFormState}
                             className="w-full sm:w-auto text-slate-500 hover:bg-slate-100 rounded-xl text-xs sm:text-sm py-2"
                         >
                             {isEditing ? 'Cancel' : 'Clear'}
@@ -922,61 +1151,168 @@ const SuperAdminEmployeeCom = () => {
                         </span>
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold text-[#010a1f] truncate">2. Organizational Placement</h2>
-                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Assign company, branch, department, designation, location, and shift</p>
+                            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate">Assign company, branch, department, designation, location, shift, and coordinator hierarchy</p>
                         </div>
                     </div>
-                    <div className="relative p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        <FieldWrapper error={errors.employeeId}>
-                            <Input label={<>Employee ID <span className="text-red-500">*</span></>} name="employeeId" value={formData.employeeId} onChange={handleInputChange} placeholder="e.g. AVG-2026-001" className="font-mono" />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.joiningDate}><Input label={<>Joining Date <span className="text-red-500">*</span></>} type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} /></FieldWrapper>
-                        <FieldWrapper error={errors.company}>
-                            <Select label={<>Company <span className="text-red-500">*</span></>} name="company" value={formData.company} onChange={handleInputChange}
-                                options={[{ value: '', label: 'Select Company' }, ...companies.map(c => ({ value: c.company_name, label: c.company_name }))]}
-                            />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.branch}>
-                            <Select label={<>Branch <span className="text-red-500">*</span></>} name="branch" value={formData.branch} onChange={handleInputChange} disabled={!formData.company}
-                                options={[{ value: '', label: 'Select Branch' }, ...filteredBranches.map(b => ({ value: b.branch_name, label: b.branch_name }))]}
-                            />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.department}>
-                            <Select label={<>Department <span className="text-red-500">*</span></>} name="department" value={formData.department} onChange={handleInputChange} disabled={!formData.branch}
-                                options={[{ value: '', label: 'Select Department' }, ...filteredDepartments.map(d => ({ value: d.department_name, label: d.department_name }))]}
-                            />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.location}>
-                            <Select label={<>Location <span className="text-red-500">*</span></>} name="location" value={formData.location} onChange={handleInputChange} disabled={!formData.branch}
-                                options={[{ value: '', label: 'Select Location' }, ...filteredLocations.map(l => ({ value: l.location_name, label: l.location_name }))]}
-                            />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.designation}>
-                            <Select label={<>Designation <span className="text-red-500">*</span></>} name="designation" value={formData.designation} onChange={handleInputChange} disabled={!formData.department}
-                                options={[{ value: '', label: 'Select Designation' }, ...filteredDesignations.map(d => ({ value: d.designation_name, label: d.designation_name }))]}
-                            />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.shift}>
-                            <Select
-                                label={<>Assigned Work Shift <span className="text-red-500">*</span></>}
-                                name="shift"
-                                value={formData.shift}
-                                onChange={handleInputChange}
-                                disabled={!formData.company}
-                                options={[
-                                    { value: '', label: formData.company ? 'Select Target Shift' : 'Select Company First' },
-                                    ...availableShifts.map(s => ({ value: s.shift_name, label: `${s.shift_name} | ${s.shift_type}` }))
-                                ]}
-                            />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.manager}>
-                            <Input label="Reporting Manager (Optional)" name="manager" placeholder="e.g., John Doe" value={formData.manager} onChange={handleInputChange} />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.empType}>
-                            <Select label={<>Employment Type <span className="text-red-500">*</span></>} name="empType" value={formData.empType} onChange={handleInputChange} options={[{ value: '', label: 'Select' }, { value: 'Full Time', label: 'Full Time' }, { value: 'Contract', label: 'Contract' }]} />
-                        </FieldWrapper>
-                        <FieldWrapper error={errors.status}>
-                            <Select label={<>Account Status <span className="text-red-500">*</span></>} name="status" value={formData.status} onChange={handleInputChange} options={[{ value: 'Pending Activation', label: 'Pending Activation' }, { value: 'Active', label: 'Active' }, { value: 'Suspended', label: 'Suspended' }, { value: 'Inactive', label: 'Inactive' }]} />
-                        </FieldWrapper>
+                    <div className="relative p-5 space-y-5">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                            <FieldWrapper error={errors.employeeId}>
+                                <Input label={<>Employee ID <span className="text-red-500">*</span></>} name="employeeId" value={formData.employeeId} onChange={handleInputChange} placeholder="e.g. AVG-2026-001" className="font-mono" />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.joiningDate}><Input label={<>Joining Date <span className="text-red-500">*</span></>} type="date" name="joiningDate" value={formData.joiningDate} onChange={handleInputChange} /></FieldWrapper>
+                            <FieldWrapper error={errors.company}>
+                                <Select label={<>Company <span className="text-red-500">*</span></>} name="company" value={formData.company} onChange={handleInputChange}
+                                    options={[{ value: '', label: 'Select Company' }, ...companies.map(c => ({ value: c.company_name, label: c.company_name }))]}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.branch}>
+                                <Select label={<>Branch <span className="text-red-500">*</span></>} name="branch" value={formData.branch} onChange={handleInputChange} disabled={!formData.company}
+                                    options={[{ value: '', label: 'Select Branch' }, ...filteredBranches.map(b => ({ value: b.branch_name, label: b.branch_name }))]}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.department}>
+                                <Select label={<>Department <span className="text-red-500">*</span></>} name="department" value={formData.department} onChange={handleInputChange} disabled={!formData.branch}
+                                    options={[{ value: '', label: 'Select Department' }, ...filteredDepartments.map(d => ({ value: d.department_name, label: d.department_name }))]}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.location}>
+                                <Select label={<>Location <span className="text-red-500">*</span></>} name="location" value={formData.location} onChange={handleInputChange} disabled={!formData.branch}
+                                    options={[{ value: '', label: 'Select Location' }, ...filteredLocations.map(l => ({ value: l.location_name, label: l.location_name }))]}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.designation}>
+                                <Select label={<>Designation <span className="text-red-500">*</span></>} name="designation" value={formData.designation} onChange={handleInputChange} disabled={!formData.department}
+                                    options={[{ value: '', label: 'Select Designation' }, ...filteredDesignations.map(d => ({ value: d.designation_name, label: d.designation_name }))]}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.shift}>
+                                <Select
+                                    label={<>Assigned Work Shift <span className="text-red-500">*</span></>}
+                                    name="shift"
+                                    value={formData.shift}
+                                    onChange={handleInputChange}
+                                    disabled={!formData.company}
+                                    options={[
+                                        { value: '', label: formData.company ? 'Select Target Shift' : 'Select Company First' },
+                                        ...availableShifts.map(s => ({ value: s.shift_name, label: `${s.shift_name} | ${s.shift_type}` }))
+                                    ]}
+                                />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.manager}>
+                                <Input label="Reporting Manager (Optional)" name="manager" placeholder="e.g., John Doe" value={formData.manager} onChange={handleInputChange} />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.empType}>
+                                <Select label={<>Employment Type <span className="text-red-500">*</span></>} name="empType" value={formData.empType} onChange={handleInputChange} options={[{ value: '', label: 'Select' }, { value: 'Full Time', label: 'Full Time' }, { value: 'Contract', label: 'Contract' }]} />
+                            </FieldWrapper>
+                            <FieldWrapper error={errors.status}>
+                                <Select label={<>Account Status <span className="text-red-500">*</span></>} name="status" value={formData.status} onChange={handleInputChange} options={[{ value: 'Pending Activation', label: 'Pending Activation' }, { value: 'Active', label: 'Active' }, { value: 'Suspended', label: 'Suspended' }, { value: 'Inactive', label: 'Inactive' }]} />
+                            </FieldWrapper>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-7 h-7 rounded-lg bg-blue-50 text-[#0437cc] border border-blue-100 flex items-center justify-center shrink-0">
+                                        <FaShieldAlt className="text-xs" />
+                                    </span>
+                                    <div>
+                                        <p className="text-xs font-bold text-[#010a1f]">Coordinator Hierarchy Assignment (Optional)</p>
+                                        <p className="text-[10px] text-slate-400">Enable toggles to assign this employee under a Coordinator Head and/or Coordinator</p>
+                                    </div>
+                                </div>
+                                {isLoadingCoordinators && (
+                                    <span className="text-[11px] font-bold text-[#0437cc] inline-flex items-center gap-1.5">
+                                        <span className="w-3 h-3 border-2 border-[#0437cc]/30 border-t-[#0437cc] rounded-full animate-spin"></span>
+                                        Fetching coordinators...
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <ToggleSwitch
+                                    enabled={assignCoordinatorHead}
+                                    onToggle={handleToggleCoordinatorHead}
+                                    label="Assign Coordinator Head"
+                                    sublabel={assignCoordinatorHead ? 'Select Coordinator Head below' : 'Toggle ON to assign under a Head'}
+                                    icon={FaCrown}
+                                    accent="orange"
+                                />
+                                <ToggleSwitch
+                                    enabled={assignCoordinator}
+                                    onToggle={handleToggleCoordinator}
+                                    label="Assign Coordinator"
+                                    sublabel={assignCoordinator ? 'Select Coordinator below' : 'Toggle ON to assign under a Coordinator'}
+                                    icon={FaUserTie}
+                                    accent="blue"
+                                />
+                            </div>
+
+                            {(assignCoordinatorHead || assignCoordinator) && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 animate-in fade-in duration-200">
+                                    {assignCoordinatorHead && (
+                                        <FieldWrapper error={errors.coordinatorHeadId}>
+                                            <Select
+                                                label={<>Coordinator Head <span className="text-red-500">*</span></>}
+                                                name="coordinatorHeadId"
+                                                value={formData.coordinatorHeadId}
+                                                onChange={handleInputChange}
+                                                disabled={isLoadingCoordinators || !formData.branch}
+                                                options={[
+                                                    {
+                                                        value: '',
+                                                        label: !formData.branch
+                                                            ? 'Select Company & Branch First'
+                                                            : isLoadingCoordinators
+                                                                ? 'Loading Coordinator Heads...'
+                                                                : availableCoordinatorHeads.length > 0
+                                                                    ? 'Select Coordinator Head'
+                                                                    : 'No Coordinator Head in this branch'
+                                                    },
+                                                    ...availableCoordinatorHeads.map(h => ({
+                                                        value: h.id,
+                                                        label: `${h.first_name} ${h.last_name} (${h.coordinator_id})`
+                                                    }))
+                                                ]}
+                                            />
+                                        </FieldWrapper>
+                                    )}
+
+                                    {assignCoordinator && (
+                                        <FieldWrapper error={errors.coordinatorId}>
+                                            <Select
+                                                label={<>Coordinator <span className="text-red-500">*</span></>}
+                                                name="coordinatorId"
+                                                value={formData.coordinatorId}
+                                                onChange={handleInputChange}
+                                                disabled={
+                                                    isLoadingCoordinators ||
+                                                    !formData.branch ||
+                                                    (assignCoordinatorHead && !formData.coordinatorHeadId)
+                                                }
+                                                options={[
+                                                    {
+                                                        value: '',
+                                                        label: !formData.branch
+                                                            ? 'Select Company & Branch First'
+                                                            : assignCoordinatorHead && !formData.coordinatorHeadId
+                                                                ? 'Select Coordinator Head First'
+                                                                : isLoadingCoordinators
+                                                                    ? 'Loading Coordinators...'
+                                                                    : availableCoordinators.length > 0
+                                                                        ? 'Select Coordinator'
+                                                                        : 'No Coordinator available'
+                                                    },
+                                                    ...availableCoordinators.map(c => ({
+                                                        value: c.id,
+                                                        label: `${c.first_name} ${c.last_name} (${c.coordinator_id})`
+                                                    }))
+                                                ]}
+                                            />
+                                        </FieldWrapper>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -1076,7 +1412,7 @@ const SuperAdminEmployeeCom = () => {
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                             <input
                                 type="text"
-                                placeholder="Search name, ID, branch…"
+                                placeholder="Search name, ID, coordinator…"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-[#0437cc] focus:ring-2 focus:ring-[#0437cc]/20 bg-white hover:border-slate-300 transition-all"
@@ -1246,7 +1582,7 @@ const SuperAdminEmployeeCom = () => {
                                                                         <tr className="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50/70">
                                                                             <th className="px-4 py-3.5 w-10 text-center"></th>
                                                                             <th className="px-4 py-3.5 font-bold whitespace-nowrap">Employee</th>
-                                                                            <th className="px-4 py-3.5 font-bold whitespace-nowrap">Dept & Shift</th>
+                                                                            <th className="px-4 py-3.5 font-bold whitespace-nowrap">Dept & Hierarchy</th>
                                                                             <th className="px-4 py-3.5 font-bold whitespace-nowrap">Net Pay</th>
                                                                             <th className="px-4 py-3.5 font-bold text-center whitespace-nowrap">Status</th>
                                                                             <th className="px-4 py-3.5 font-bold text-right whitespace-nowrap">Actions</th>
@@ -1285,6 +1621,20 @@ const SuperAdminEmployeeCom = () => {
                                                                                         <FaClock className="text-slate-400 text-[9px] shrink-0" />
                                                                                         <span className="truncate">{emp.shift || 'General Shift'}</span>
                                                                                     </p>
+                                                                                    {(emp.coordinator_head_name || emp.coordinator_name) && (
+                                                                                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                                                            {emp.coordinator_head_name && (
+                                                                                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-[#f77704] bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded">
+                                                                                                    <FaCrown className="text-[8px]" /> {emp.coordinator_head_name}
+                                                                                                </span>
+                                                                                            )}
+                                                                                            {emp.coordinator_name && (
+                                                                                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-[#0437cc] bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                                                                                                    <FaUserTie className="text-[8px]" /> {emp.coordinator_name}
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    )}
                                                                                 </td>
                                                                                 <td className="px-4 py-3.5">
                                                                                     <p className="text-xs sm:text-sm font-bold text-green-700 tabular-nums whitespace-nowrap">{formatCurrency(getEmpNet(emp))}</p>
